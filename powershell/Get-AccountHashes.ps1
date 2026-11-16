@@ -1,73 +1,105 @@
 <#
 .SYNOPSIS
-  Core engine: enumerate in-scope accounts and emit NT hashes as JSON lines on stdout.
+  Core engine: enumerate in-scope accounts and emit NT hashes, tab separated, on stdout.
 .DESCRIPTION
-  Live mode: an LDAP query (SearchBase + userAccountControl bit filters) selects the
-  in-scope accounts first, then ONLY those accounts are replicated with DSInternals
-  Get-ADReplAccount -ObjectGuid. Out-of-scope hashes are never requested from the DC.
-  Offline mode: Get-ADDBAccount over an ntds.dit copy; filters apply after load.
-  Hashes go to stdout only (read by the Python process through a pipe). Never to disk,
-  never to the error stream.
+  Output line: sam <TAB> dn <TAB> type <TAB> nt-hex-or-empty <TAB> lm(0/1) <TAB> reversible(0/1)
+  Hashes go to stdout only (read by Hashslinger.exe through a pipe). Never to disk, never to the
+  error stream.
+
+  Scope is decided first by LDAP (SearchBases + bitwise userAccountControl clauses), which returns
+  account metadata only. Then:
+    -Replication bulk         (default, for millions of accounts) streams one Get-ADReplAccount -All
+                              pass and DROPS every account not in the LDAP scope. Out-of-scope
+                              hashes cross the wire to this host but are discarded immediately.
+    -Replication per-account  replicates ONLY in-scope accounts, one call each (strict, but far too
+                              slow for large scopes).
+  Offline mode reads an ntds.dit copy and filters after loading.
+  Multi-value args are strings: SearchBases separated by '|', the rest by ','. (-File mode does not
+  reliably bind arrays, and DNs contain commas.)
 #>
 [CmdletBinding()]
 param(
   [ValidateSet('live', 'offline')][string]$Mode = 'live',
-  [Parameter(Mandatory)][string]$SearchBase,
+  [ValidateSet('bulk', 'per-account')][string]$Replication = 'bulk',
+  [Parameter(Mandatory)][string]$SearchBases,
   [string]$Server,
-  [string[]]$AccountTypes = @('User', 'Service'),
-  [int[]]$ExcludeUacFlags = @(0x40000, 0x2),
-  [int[]]$RequireUacFlags = @(),
+  [string]$AccountTypes = 'User,Service',
+  [string]$ExcludeUacFlags = '',
+  [string]$RequireUacFlags = '',
   [string]$NtdsPath,
   [string]$SystemHivePath
 )
 $ErrorActionPreference = 'Stop'
 Import-Module DSInternals
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 
-function ToHex([byte[]]$b) { if ($b) { ([BitConverter]::ToString($b)).Replace('-', '') } else { $null } }
+$bases = $SearchBases -split '\|' | Where-Object { $_ }
+$types = $AccountTypes -split ',' | Where-Object { $_ }
+$exFlags = @($ExcludeUacFlags -split ',' | Where-Object { $_ } | ForEach-Object { [int]$_ })
+$reqFlags = @($RequireUacFlags -split ',' | Where-Object { $_ } | ForEach-Object { [int]$_ })
+$out = [Console]::Out
+
+function ToHex($b) { if ($b) { [BitConverter]::ToString([byte[]]$b).Replace('-', '') } else { '' } }
+function Clean([string]$s) { $s -replace '[\t\r\n]', ' ' }
 
 function Emit($acct, [string]$type) {
-  $clear = $null -ne $acct.SupplementalCredentials -and $null -ne $acct.SupplementalCredentials.ClearText
+  $clear = ($null -ne $acct.SupplementalCredentials) -and ($null -ne $acct.SupplementalCredentials.ClearText)
   $uac = [int]$acct.UserAccountControl
-  [pscustomobject]@{
-    sam        = [string]$acct.SamAccountName
-    dn         = [string]$acct.DistinguishedName
-    type       = $type
-    nt         = ToHex $acct.NTHash
-    lm         = [bool]($null -ne $acct.LMHash)
-    reversible = [bool]($clear -or (($uac -band 0x80) -ne 0))
-  } | ConvertTo-Json -Compress
+  $rev = if ($clear -or (($uac -band 0x80) -ne 0)) { '1' } else { '0' }
+  $lm = if ($null -ne $acct.LMHash) { '1' } else { '0' }
+  $out.WriteLine((Clean $acct.SamAccountName) + "`t" + (Clean $acct.DistinguishedName) + "`t" + $type + "`t" +
+                 (ToHex $acct.NTHash) + "`t" + $lm + "`t" + $rev)
 }
 
 # LDAP matching rule 1.2.840.113556.1.4.803 = bitwise AND.
 function UacClause {
   $c = ''
-  foreach ($f in $ExcludeUacFlags) { $c += "(!(userAccountControl:1.2.840.113556.1.4.803:=$f))" }
-  foreach ($f in $RequireUacFlags) { $c += "(userAccountControl:1.2.840.113556.1.4.803:=$f)" }
+  foreach ($f in $exFlags) { $c += "(!(userAccountControl:1.2.840.113556.1.4.803:=$f))" }
+  foreach ($f in $reqFlags) { $c += "(userAccountControl:1.2.840.113556.1.4.803:=$f)" }
   $c
 }
-
-function TypeClauses {
-  $parts = @()
-  if ($AccountTypes -contains 'User')     { $parts += '(&(objectCategory=person)(objectClass=user)(!(servicePrincipalName=*)))' }
-  if ($AccountTypes -contains 'Service')  { $parts += '(&(objectCategory=person)(objectClass=user)(servicePrincipalName=*))' }
-  if ($AccountTypes -contains 'Computer') { $parts += '(objectCategory=computer)' }
-  if ($parts.Count -eq 0) { throw 'No account types selected' }
-  "(|$($parts -join ''))"
+function TypeFilter([string]$t) {
+  switch ($t) {
+    'User'     { '(&(objectCategory=person)(objectClass=user)(!(servicePrincipalName=*)))' }
+    'Service'  { '(&(objectCategory=person)(objectClass=user)(servicePrincipalName=*))' }
+    'Computer' { '(objectCategory=computer)' }
+    default    { throw "Unknown account type $t" }
+  }
 }
-
-function ClassifyType($spn, $isComputer) {
+function ClassifyType($spn, [bool]$isComputer) {
   if ($isComputer) { 'Computer' } elseif ($spn -and @($spn).Count -gt 0) { 'Service' } else { 'User' }
 }
 
 if ($Mode -eq 'live') {
   if (-not $Server) { throw '-Server is required in live mode' }
-  Import-Module ActiveDirectory
-  $filter = "(&$(TypeClauses)$(UacClause))"
-  $objs = Get-ADObject -LDAPFilter $filter -SearchBase $SearchBase -SearchScope Subtree -Server $Server `
-            -Properties objectGUID, servicePrincipalName, objectClass
-  foreach ($o in $objs) {
-    $acct = Get-ADReplAccount -ObjectGuid $o.ObjectGUID -Server $Server
-    Emit $acct (ClassifyType $o.servicePrincipalName ($o.objectClass -eq 'computer'))
+  # objectGuid -> type, built with a paged DirectorySearcher (streams; handles millions of objects).
+  $scope = New-Object 'System.Collections.Generic.Dictionary[Guid,string]'
+  foreach ($b in $bases) {
+    foreach ($t in $types) {
+      $ds = New-Object System.DirectoryServices.DirectorySearcher
+      $ds.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$Server/$b")
+      $ds.Filter = "(&$(TypeFilter $t)$(UacClause))"
+      $ds.PageSize = 1000
+      $ds.SearchScope = 'Subtree'
+      [void]$ds.PropertiesToLoad.Add('objectguid')
+      $res = $ds.FindAll()
+      foreach ($r in $res) {
+        $g = New-Object Guid (, [byte[]]$r.Properties['objectguid'][0])
+        $scope[$g] = $t
+      }
+      $res.Dispose(); $ds.Dispose()
+    }
+  }
+  if ($Replication -eq 'per-account') {
+    foreach ($kv in $scope.GetEnumerator()) {
+      Emit (Get-ADReplAccount -ObjectGuid $kv.Key -Server $Server) $kv.Value
+    }
+  }
+  else {
+    $type = $null
+    Get-ADReplAccount -All -Server $Server | ForEach-Object {
+      if ($scope.TryGetValue($_.Guid, [ref]$type)) { Emit $_ $type }
+    }
   }
 }
 else {
@@ -75,13 +107,14 @@ else {
   $key = Get-BootKey -SystemHivePath $SystemHivePath
   Get-ADDBAccount -All -DatabasePath $NtdsPath -BootKey $key | ForEach-Object {
     $a = $_
-    if (-not $a.DistinguishedName.EndsWith($SearchBase, [StringComparison]::OrdinalIgnoreCase)) { return }
-    $isComp = $a.SamAccountName.EndsWith('$')
-    $type = ClassifyType $a.ServicePrincipalName $isComp
-    if ($AccountTypes -notcontains $type) { return }
+    $inScope = $false
+    foreach ($b in $bases) { if ($a.DistinguishedName.EndsWith($b, [StringComparison]::OrdinalIgnoreCase)) { $inScope = $true; break } }
+    if (-not $inScope) { return }
+    $type = ClassifyType $a.ServicePrincipalName $a.SamAccountName.EndsWith('$')
+    if ($types -notcontains $type) { return }
     $uac = [int]$a.UserAccountControl
-    foreach ($f in $ExcludeUacFlags) { if (($uac -band $f) -ne 0) { return } }
-    foreach ($f in $RequireUacFlags) { if (($uac -band $f) -eq 0) { return } }
+    foreach ($f in $exFlags) { if (($uac -band $f) -ne 0) { return } }
+    foreach ($f in $reqFlags) { if (($uac -band $f) -eq 0) { return } }
     Emit $a $type
   }
 }

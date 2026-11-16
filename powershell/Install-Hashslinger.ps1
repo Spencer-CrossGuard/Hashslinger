@@ -13,9 +13,10 @@ param(
   [Parameter(Mandatory)][string]$AnalystGroup,       # small, named group
   [Parameter(Mandatory)][string]$InstallRoot,        # e.g. D:\Hashslinger
   [string]$Cadence = 'Weekly',                       # Weekly | Monthly handled below
-  [string]$PythonPath = 'C:\Python313\python.exe'
+  [string]$ExePath = ''                              # default: <InstallRoot>\Hashslinger.exe
 )
 $ErrorActionPreference = 'Stop'
+if (-not $ExePath) { $ExePath = Join-Path $InstallRoot 'Hashslinger.exe' }
 Import-Module ActiveDirectory
 $domain = Get-ADDomain
 $dnsRoot = $domain.DNSRoot
@@ -66,7 +67,7 @@ foreach ($d in $dirs) {
 
 # 4. Scheduled tasks under the gMSA (no stored password)
 $cfg = Join-Path $InstallRoot 'config\hashslinger.json'
-$action = New-ScheduledTaskAction -Execute $PythonPath -Argument "-m hashslinger --config `"$cfg`" scan" -WorkingDirectory $InstallRoot
+$action = New-ScheduledTaskAction -Execute $ExePath -Argument "--config `"$cfg`" scan" -WorkingDirectory $InstallRoot
 $principal = New-ScheduledTaskPrincipal -UserId $gmsaSam -LogonType Password -RunLevel Limited
 $trigger = if ($Cadence -eq 'Monthly') { New-ScheduledTaskTrigger -Weekly -WeeksInterval 4 -DaysOfWeek Sunday -At 2am }
            else { New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At 2am }
@@ -76,7 +77,7 @@ if ($PSCmdlet.ShouldProcess('Hashslinger-Scheduled', 'Register task')) {
 # On-demand task: the analyst GUI drops a request file here, then starts this task.
 $reqAction = New-ScheduledTaskAction -Execute 'powershell.exe' -WorkingDirectory $InstallRoot -Argument (
   "-NoProfile -Command `"Get-ChildItem '$InstallRoot\requests\req_*.json' | Sort-Object LastWriteTime | Select-Object -First 1 | " +
-  "ForEach-Object { & '$PythonPath' -m hashslinger --config '$cfg' scan --request `$_.FullName }`"")
+  "ForEach-Object { & '$ExePath' --config '$cfg' scan --request `$_.FullName }`"")
 if ($PSCmdlet.ShouldProcess('Hashslinger-OnDemand', 'Register task')) {
   Register-ScheduledTask -TaskName 'Hashslinger-OnDemand' -Action $reqAction -Principal $principal | Out-Null
   Write-Warning "Grant '$AnalystGroup' the right to START 'Hashslinger-OnDemand' only (task security descriptor)."

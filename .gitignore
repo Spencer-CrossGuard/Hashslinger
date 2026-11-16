@@ -10,3 +10,5 @@ config/hashslinger.json
 *.ntlm
 *.csv
 !tests/**/*.csv
+Hashslinger.exe
+*.exe

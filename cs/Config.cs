@@ -1,0 +1,110 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+
+namespace Hashslinger
+{
+    public class ConfigException : Exception
+    {
+        public ConfigException(string m) : base(m) { }
+    }
+
+    public sealed class Config
+    {
+        public string Mode = "live";                 // live (DRS replication) | offline (ntds.dit)
+        public string Replication = "bulk";          // bulk (stream all, filter) | per-account
+        public string TargetServer = "";
+        public List<string> TargetOus = new List<string>();
+        public List<string> AccountTypes = new List<string> { "User", "Service" };
+        public List<int> UacRequire = new List<int>();
+        public List<int> UacExclude = new List<int> { 0x40000 }; // smart-card-required
+        public string HashStorePath = "store\\master.ntlm";
+        public string StagingPath = "staging";
+        public string LogPath = "logs\\audit.jsonl";
+        public string OutputPath = "output";
+        public List<string> AllowedOutputRoots = new List<string>();
+        public string RequestDir = "requests";
+        public string PatternRulesPath = "config\\pattern_rules.json";
+        public bool RequireEncryptedVolume = false;
+        public int RetentionDays = 0;                // 0 = keep forever
+        public string PowerShellPath = "powershell.exe";
+        public string EngineScript = "powershell\\Get-AccountHashes.ps1";
+        public List<string> EngineCommand = null;    // test hook; {ous} is replaced by the '|' joined OU list
+        public int EngineTimeoutSeconds = 6 * 3600;
+        public string NtdsPath = "";
+        public string SystemHivePath = "";
+        public List<string> AuthorizedEdipis = new List<string>();
+
+        static int Flag(string name)
+        {
+            switch (name)
+            {
+                case "ACCOUNTDISABLE": return 0x2;
+                case "PASSWD_NOTREQD": return 0x20;
+                case "ENCRYPTED_TEXT_PWD_ALLOWED": return 0x80;
+                case "DONT_EXPIRE_PASSWORD": return 0x10000;
+                case "SMARTCARD_REQUIRED": return 0x40000;
+            }
+            int n;
+            if (int.TryParse(name, out n)) return n;
+            throw new ConfigException("Unknown UAC flag " + name);
+        }
+
+        static string Resolve(string baseDir, string p)
+        {
+            return Path.IsPathRooted(p) ? p : Path.Combine(baseDir, p);
+        }
+
+        public static Config Load(string path)
+        {
+            Dictionary<string, object> raw = (Dictionary<string, object>)Json.Parse(File.ReadAllText(path, Encoding.UTF8));
+            string baseDir = Path.GetDirectoryName(Path.GetFullPath(path));
+            Config c = new Config();
+            c.Mode = Json.Str(raw, "mode", c.Mode);
+            c.Replication = Json.Str(raw, "replication", c.Replication);
+            c.TargetServer = Json.Str(raw, "target_server", "");
+            c.TargetOus = Json.StrList(raw, "target_ous");
+            if (raw.ContainsKey("account_types")) c.AccountTypes = Json.StrList(raw, "account_types");
+            object uo;
+            if (raw.TryGetValue("uac", out uo))
+            {
+                Dictionary<string, object> uac = uo as Dictionary<string, object>;
+                if (uac != null)
+                {
+                    if (uac.ContainsKey("require_flags")) { c.UacRequire = new List<int>(); foreach (string s in Json.StrList(uac, "require_flags")) c.UacRequire.Add(Flag(s)); }
+                    if (uac.ContainsKey("exclude_flags")) { c.UacExclude = new List<int>(); foreach (string s in Json.StrList(uac, "exclude_flags")) c.UacExclude.Add(Flag(s)); }
+                }
+            }
+            c.HashStorePath = Resolve(baseDir, Json.Str(raw, "hash_store_path", c.HashStorePath));
+            c.StagingPath = Resolve(baseDir, Json.Str(raw, "staging_path", c.StagingPath));
+            c.LogPath = Resolve(baseDir, Json.Str(raw, "log_path", c.LogPath));
+            c.OutputPath = Resolve(baseDir, Json.Str(raw, "output_path", c.OutputPath));
+            c.RequestDir = Resolve(baseDir, Json.Str(raw, "request_dir", c.RequestDir));
+            c.PatternRulesPath = Resolve(baseDir, Json.Str(raw, "pattern_rules_path", c.PatternRulesPath));
+            c.EngineScript = Resolve(baseDir, Json.Str(raw, "engine_script", c.EngineScript));
+            c.AllowedOutputRoots = Json.StrList(raw, "allowed_output_roots");
+            c.RequireEncryptedVolume = Json.Str(raw, "require_encrypted_volume", "false").ToLowerInvariant() == "true";
+            c.RetentionDays = (int)Convert.ToDouble(Json.Str(raw, "retention_days", "0"), System.Globalization.CultureInfo.InvariantCulture);
+            c.PowerShellPath = Json.Str(raw, "powershell_path", c.PowerShellPath);
+            if (raw.ContainsKey("engine_command")) c.EngineCommand = Json.StrList(raw, "engine_command");
+            c.EngineTimeoutSeconds = (int)Convert.ToDouble(Json.Str(raw, "engine_timeout_seconds", c.EngineTimeoutSeconds.ToString()), System.Globalization.CultureInfo.InvariantCulture);
+            c.NtdsPath = Json.Str(raw, "ntds_path", "");
+            c.SystemHivePath = Json.Str(raw, "system_hive_path", "");
+            c.AuthorizedEdipis = Json.StrList(raw, "authorized_edipis");
+            c.Validate();
+            return c;
+        }
+
+        public void Validate()
+        {
+            if (Mode != "live" && Mode != "offline") throw new ConfigException("mode must be 'live' or 'offline'");
+            if (Replication != "bulk" && Replication != "per-account") throw new ConfigException("replication must be 'bulk' or 'per-account'");
+            if (TargetOus.Count == 0) throw new ConfigException("target_ous must list at least one OU distinguished name");
+            foreach (string t in AccountTypes)
+                if (t != "User" && t != "Service" && t != "Computer") throw new ConfigException("bad account type " + t);
+            if (Mode == "offline" && (NtdsPath.Length == 0 || SystemHivePath.Length == 0))
+                throw new ConfigException("offline mode needs ntds_path and system_hive_path");
+        }
+    }
+}

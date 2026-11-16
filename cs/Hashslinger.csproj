@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Optional: SDK-style build. build.cmd (csc.exe) needs no SDK. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PlatformTarget>x64</PlatformTarget>
+    <LangVersion>5</LangVersion>
+    <AssemblyName>Hashslinger</AssemblyName>
+    <RootNamespace>Hashslinger</RootNamespace>
+  </PropertyGroup>
+</Project>
