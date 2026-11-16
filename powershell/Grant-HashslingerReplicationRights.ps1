@@ -11,11 +11,17 @@
 .EXAMPLE
   .\Grant-HashslingerReplicationRights.ps1 -GmsaName svc-hashslinger -WhatIf
   .\Grant-HashslingerReplicationRights.ps1 -GmsaName svc-hashslinger
+  .\Grant-HashslingerReplicationRights.ps1 -GmsaName svc-hashslinger -AlsoGrant Synchronize,FilteredSet   # diagnosis only
 .NOTES
   To undo: ADSI Edit > domain root > Properties > Security, remove the gMSA's two entries.
 #>
 [CmdletBinding(SupportsShouldProcess)]
-param([Parameter(Mandatory)][string]$GmsaName)
+param(
+  [Parameter(Mandatory)][string]$GmsaName,
+  # Optional extras, ONLY for diagnosing a DC that refuses with just the two standard rights.
+  # Grant one at a time and keep only what is proven necessary.
+  [ValidateSet('Synchronize', 'FilteredSet')][string[]]$AlsoGrant = @()
+)
 $ErrorActionPreference = 'Stop'
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -32,6 +38,9 @@ $rights = [ordered]@{
   'Replicating Directory Changes'     = [Guid]'1131f6aa-9c07-11d1-f79f-00c04fc2dcd2'
   'Replicating Directory Changes All' = [Guid]'1131f6ad-9c07-11d1-f79f-00c04fc2dcd2'
 }
+
+if ($AlsoGrant -contains 'Synchronize') { $rights['Replication Synchronization'] = [Guid]'1131f6ab-9c07-11d1-f79f-00c04fc2dcd2' }
+if ($AlsoGrant -contains 'FilteredSet')  { $rights['Replicating Directory Changes In Filtered Set'] = [Guid]'89e95b76-444d-4c62-991a-0facbeda640c' }
 
 function Has-Right($acl, [Guid]$g) {
   @($acl.Access | Where-Object { $_.IdentityReference.Value -eq $samName -and $_.AccessControlType -eq 'Allow' -and $_.ObjectType -eq $g }).Count -gt 0
