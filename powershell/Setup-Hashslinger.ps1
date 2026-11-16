@@ -358,7 +358,11 @@ function Do-Finish {
     $tg = (Get-ADObject -Identity $svc.DistinguishedName -Properties tokenGroups).tokenGroups
     $sids = New-Object 'System.Collections.Generic.HashSet[string]'
     [void]$sids.Add($svc.SID.Value); [void]$sids.Add('S-1-1-0'); [void]$sids.Add('S-1-5-11')
-    foreach ($b in $tg) { [void]$sids.Add((New-Object Security.Principal.SecurityIdentifier([byte[]]$b, 0)).Value) }
+    foreach ($b in $tg) {
+      # the AD module may hand back SecurityIdentifier objects or raw bytes, depending on version
+      if ($b -is [Security.Principal.SecurityIdentifier]) { [void]$sids.Add($b.Value) }
+      else { [void]$sids.Add((New-Object Security.Principal.SecurityIdentifier([byte[]]$b, 0)).Value) }
+    }
     $rules = (Get-Acl "AD:$domainNC").GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])
     $want = [ordered]@{ '1131f6aa-9c07-11d1-f79f-00c04fc2dcd2' = 'Replicating Directory Changes'; '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2' = 'Replicating Directory Changes All' }
     $problems = @()
@@ -459,7 +463,13 @@ try {
 finally { Stop-Transcript | Out-Null }
 
 Step 'Summary'
-$results | Format-Table -AutoSize -Wrap
+$problemRows = @($results | Where-Object { $_.Status -in 'FAIL', 'WARN' })
+if ($problemRows.Count) {
+  Write-Host 'PROBLEMS AND WARNINGS:' -ForegroundColor Yellow
+  foreach ($r in $problemRows) { Write-Host ''; Write-Host ("[{0}] {1}" -f $r.Status, $r.Check) -ForegroundColor $(if ($r.Status -eq 'FAIL') { 'Red' } else { 'Yellow' }); if ($r.Detail) { Write-Host ("      " + $r.Detail) } }
+  Write-Host ''
+}
+Write-Host ('{0} passed, {1} skipped, {2} warning(s), {3} failed' -f @($results | Where-Object Status -eq 'PASS').Count, @($results | Where-Object Status -eq 'SKIP').Count, @($results | Where-Object Status -eq 'WARN').Count, @($results | Where-Object Status -eq 'FAIL').Count)
 $fail = @($results | Where-Object Status -eq 'FAIL').Count
 $warn = @($results | Where-Object Status -eq 'WARN').Count
 $summary = Join-Path $Dir.root 'SETUP-SUMMARY.txt'

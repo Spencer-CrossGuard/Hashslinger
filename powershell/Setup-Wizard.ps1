@@ -36,7 +36,7 @@ $drives = @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | Sort-Objec
 $needDsOffline = -not (Get-Module -ListAvailable -Name DSInternals)
 
 # ---- form
-$form = New-Object Windows.Forms.Form -Property @{ Text = 'Hashslinger setup'; Width = 720; Height = 780; StartPosition = 'CenterScreen'; Font = New-Object Drawing.Font('Segoe UI', 9) }
+$form = New-Object Windows.Forms.Form -Property @{ Text = 'Hashslinger setup'; Width = 760; Height = 960; MinimumSize = New-Object Drawing.Size(740, 800); StartPosition = 'CenterScreen'; Font = New-Object Drawing.Font('Segoe UI', 9) }
 function Lbl($text, $x, $y, $w = 660, $h = 20, $bold = $false) {
   $l = New-Object Windows.Forms.Label -Property @{ Text = $text; Left = $x; Top = $y; Width = $w; Height = $h }
   if ($bold) { $l.Font = New-Object Drawing.Font('Segoe UI', 10, [Drawing.FontStyle]::Bold) }
@@ -90,9 +90,14 @@ $btnFinish = New-Object Windows.Forms.Button -Property @{ Text = 'Finish (after 
 $btnScan = New-Object Windows.Forms.Button -Property @{ Text = 'Run first scan'; Left = 545; Top = 545; Width = 140; Height = 36; Enabled = $false }
 $form.Controls.AddRange(@($btnGo, $btnSummary, $btnHand, $btnFinish, $btnScan))
 $lblResult = Lbl 'Ready. Pick the options above and click Install.' 15 590 670 24 $true
-$bar = New-Object Windows.Forms.ProgressBar -Property @{ Left = 15; Top = 616; Width = 670; Height = 16 }
-$form.Controls.Add($bar)
-$log = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 640; Width = 670; Height = 90; Multiline = $true; ReadOnly = $true; ScrollBars = 'Vertical'; Font = New-Object Drawing.Font('Consolas', 8) }
+$bar = New-Object Windows.Forms.ProgressBar -Property @{ Left = 15; Top = 616; Width = 540; Height = 16; Anchor = 'Top,Left,Right' }
+$btnLog = New-Object Windows.Forms.Button -Property @{ Text = 'Open full log'; Left = 565; Top = 612; Width = 120; Height = 24; Anchor = 'Top,Right' }
+$form.Controls.AddRange(@($bar, $btnLog))
+$btnLog.Add_Click({
+  $l = Get-ChildItem (Join-Path $env:SystemDrive 'Hashslinger') -Filter 'setup-*.log' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if ($l) { Start-Process notepad.exe $l.FullName } else { [void][Windows.Forms.MessageBox]::Show('No setup log yet. Click Install first.') }
+})
+$log = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 640; Width = 705; Height = 270; Multiline = $true; ReadOnly = $true; ScrollBars = 'Vertical'; WordWrap = $true; Anchor = 'Top,Bottom,Left,Right'; Font = New-Object Drawing.Font('Consolas', 9.5) }
 $form.Controls.Add($log)
 
 $script:summaryPath = $null
