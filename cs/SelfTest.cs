@@ -189,6 +189,7 @@ namespace Hashslinger
             c.LogPath = Path.Combine(d, "log", "a.jsonl");
             c.OutputPath = Path.Combine(d, "out");
             c.PatternRulesPath = Path.Combine(d, "rules.json");
+            c.CheckDuplicates = true;
             return c;
         }
 
@@ -217,6 +218,11 @@ namespace Hashslinger
             Check("audit log has start+end", log.Length == 2 && log[0].Contains("\"start\"") && log[1].Contains("\"wipe_confirmed\":true"));
             RunResult res2 = Runner.Run(cfg, new FakeSource(), new List<string> { Ou }, null, "test", null, null, null, false);
             Check("second run id is 002", res2.RunId.EndsWith("-002"));
+
+            cfg.CheckDuplicates = false;
+            RunResult res3 = Runner.Run(cfg, new FakeSource(), new List<string> { Ou }, null, "test", null, null, null, false);
+            string text3 = File.ReadAllText(res3.Output);
+            Check("duplicates off: no duplicate reasons", !text3.Contains("Duplicate") && text3.Contains("dave"));
 
             bool threw = false;
             try { Runner.Run(cfg, new FakeSource(), new List<string> { "FAIL" }, null, "test", null, null, null, false); }

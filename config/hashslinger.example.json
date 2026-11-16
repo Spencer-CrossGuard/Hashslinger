@@ -1,6 +1,7 @@
 {
   "mode": "live",
   "replication": "bulk",
+  "check_duplicates": false,
   "target_server": "dc01.contoso.com",
   "target_ous": ["OU=Finance,DC=contoso,DC=com", "OU=Service Accounts,DC=contoso,DC=com"],
   "account_types": ["User", "Service"],

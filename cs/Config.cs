@@ -35,6 +35,7 @@ namespace Hashslinger
         public string NtdsPath = "";
         public string SystemHivePath = "";
         public List<string> AuthorizedEdipis = new List<string>();
+        public bool CheckDuplicates = false;         // off unless explicitly enabled
 
         static int Flag(string name)
         {
@@ -92,6 +93,7 @@ namespace Hashslinger
             c.NtdsPath = Json.Str(raw, "ntds_path", "");
             c.SystemHivePath = Json.Str(raw, "system_hive_path", "");
             c.AuthorizedEdipis = Json.StrList(raw, "authorized_edipis");
+            c.CheckDuplicates = Json.Str(raw, "check_duplicates", "false").ToLowerInvariant() == "true";
             c.Validate();
             return c;
         }

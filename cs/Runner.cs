@@ -17,7 +17,7 @@ namespace Hashslinger
     {
         /// <summary>Lookups, pattern matching and duplicate detection run over hashes sorted ascending,
         /// so reads of the mmap'd store move forward through the file instead of jumping around.</summary>
-        static HashIdx[] Analyze(AccountTable t, HashStore store, Dictionary<Hash128, string> patterns)
+        static HashIdx[] Analyze(AccountTable t, HashStore store, Dictionary<Hash128, string> patterns, bool checkDuplicates)
         {
             int n = 0;
             for (int i = 0; i < t.Count; i++)
@@ -41,7 +41,7 @@ namespace Hashslinger
                 while (e < arr.Length && arr[e].H.Equals(arr[s].H)) e++;
                 byte bits = store.Lookup(arr[s].H);
                 if (patterns.ContainsKey(arr[s].H)) bits |= Reason.Pattern;
-                if (e - s > 1) bits |= Reason.Duplicate;
+                if (checkDuplicates && e - s > 1) bits |= Reason.Duplicate;
                 if (bits != 0)
                     for (int j = s; j < e; j++) t.AddReasons(arr[j].Idx, bits);
                 s = e;
@@ -80,7 +80,7 @@ namespace Hashslinger
                 accounts = table.Count;
                 HashIdx[] sorted;
                 using (HashStore store = new HashStore(cfg.HashStorePath, ShouldIndex(cfg)))
-                    sorted = Analyze(table, store, patterns);
+                    sorted = Analyze(table, store, patterns, cfg.CheckDuplicates);
                 outPath = Report.Write(table, runId, outDir, sorted, out flagged);
                 Report.PurgeOld(outDir, cfg.RetentionDays);
                 status = "success";

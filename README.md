@@ -39,6 +39,12 @@ Updating lists: drop a file in `staging/HIBP/` (NTLM hex, `HASH:count` ok), `sta
 (plaintext), or `staging/custom/` (plaintext terms). The next run merges it (linear merge into the
 sorted master, atomic swap). Files ending `.ntlm` are parsed as hex hashes in any folder.
 
+## Duplicate passwords
+
+Off by default. Set `"check_duplicates": true` to flag accounts that share a password with another
+account ("Duplicate password shared with another account", Medium). At millions of accounts a single
+default password can add many rows, so enable it deliberately.
+
 ## Scale (millions of accounts)
 
 - **Bulk replication by default** (`"replication": "bulk"`). One `Get-ADReplAccount -All` stream,
