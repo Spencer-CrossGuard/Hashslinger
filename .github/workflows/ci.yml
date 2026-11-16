@@ -1,0 +1,41 @@
+name: build-and-test
+on:
+  push:
+    branches: ["claude/**"]
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build with the in-box csc.exe (C# 5)
+        shell: cmd
+        run: build.cmd
+
+      - name: Self-test
+        shell: cmd
+        run: Hashslinger.exe selftest
+
+      - name: AD-free smoke test (fake engine)
+        shell: pwsh
+        run: |
+          $t = 'C:\HashslingerTest'
+          New-Item -ItemType Directory -Force "$t\config","$t\staging\rockyou","$t\staging\custom" | Out-Null
+          Copy-Item config\pattern_rules.json "$t\config\"
+          Copy-Item powershell\Fake-Engine.ps1 $t
+          Copy-Item config\test.example.json "$t\config\test.json"
+          Set-Content "$t\staging\rockyou\r.txt" 'password'
+          Set-Content "$t\staging\custom\c.txt" 'SharedSecretXyz!9'
+          .\Hashslinger.exe --config "$t\config\test.json" merge
+          if ($LASTEXITCODE) { throw "merge failed" }
+          .\Hashslinger.exe --config "$t\config\test.json" scan
+          if ($LASTEXITCODE) { throw "scan failed" }
+          Get-Content "$t\output\*.csv"
+          Get-Content "$t\logs\audit.jsonl"
+          $rows = Import-Csv (Get-ChildItem "$t\output\*.csv").FullName
+          $names = ($rows.Username | Sort-Object) -join ','
+          if ($names -ne 'alice,carol,dave,erin,frank,gina') { throw "unexpected flagged set: $names" }
+          if ((Get-Content "$t\output\*.csv" -Raw) -match '[0-9A-Fa-f]{32}') { throw "hash in report" }
+          if (-not ((Get-Content "$t\logs\audit.jsonl" | Select-Object -Last 1) -match '"wipe_confirmed":true')) { throw "wipe not confirmed" }
