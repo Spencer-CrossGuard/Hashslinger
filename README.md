@@ -19,6 +19,11 @@ Two roles, and **Hashslinger never creates or changes anything in Active Directo
 - **Server operator again:** click **Finish**. It checks, read-only, that the AD pieces exist, then sets
   folder permissions and the scheduled tasks on the server. Then **Run first scan**.
 
+**Existing gMSA:** if your Domain Admin already created the account, type its name in the wizard and tick
+"Already created" (or set `security.gmsa_name` and `security.gmsa_precreated: true` in the init config). Setup
+then skips the hand-off and runs the read-only checks and local finish straight away. It still verifies the
+account exists, that this server may retrieve its password, and that it has the two replication rights.
+
 The wizard and Finish step are untested (no Windows host available when written); report anything odd.
 The sections below describe the advanced, scriptable path (`-Phase Check|Local|Handoff|Finish|All`).
 

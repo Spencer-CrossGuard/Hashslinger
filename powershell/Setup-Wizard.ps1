@@ -56,6 +56,10 @@ $cmbDrive = New-Object Windows.Forms.ComboBox -Property @{ Left = 15; Top = 148;
 foreach ($d in $drives) { [void]$cmbDrive.Items.Add($d) }
 if ($cmbDrive.Items.Count) { $cmbDrive.SelectedIndex = 0 }
 $form.Controls.Add($cmbDrive)
+[void](Lbl 'Service account (gMSA) name' 300 126 380)
+$txtGmsa = New-Object Windows.Forms.TextBox -Property @{ Left = 300; Top = 148; Width = 190; Text = 'svc-hashslinger' }
+$chkPre = New-Object Windows.Forms.CheckBox -Property @{ Text = 'Already created (has the rights)'; Left = 500; Top = 147; Width = 190 }
+$form.Controls.AddRange(@($txtGmsa, $chkPre))
 
 [void](Lbl ('3. Which parts of the directory to scan (everything underneath is included). ' + $adNote) 15 182 670 34)
 $lst = New-Object Windows.Forms.CheckedListBox -Property @{ Left = 15; Top = 218; Width = 670; Height = 170; CheckOnClick = $true }
@@ -155,13 +159,14 @@ $btnGo.Add_Click({
     $drive = $driveSel.Substring(0, 2)
     $script:installRoot = Join-Path $env:SystemDrive 'Hashslinger'
     $dataRoot = Join-Path $drive 'Hashslinger'
-    $gmsaName = 'svc-hashslinger'
+    $gmsaName = $txtGmsa.Text.Trim()
+    if (-not $gmsaName) { [void][Windows.Forms.MessageBox]::Show('Enter the service account (gMSA) name.'); return }
     $init = [ordered]@{
       install_root = $script:installRoot
       paths = [ordered]@{ store = "$dataRoot\store"; staging = "$dataRoot\staging"; logs = "$dataRoot\logs"; output = "$dataRoot\output"; status = "$($script:installRoot)\status"; requests = "$($script:installRoot)\requests" }
       ad = [ordered]@{ mode = 'live'; domain_controller = $dc; target_ous = @($ous); account_types = @('User', 'Service'); uac_exclude_flags = @('SMARTCARD_REQUIRED'); replication = 'bulk' }
       scan = [ordered]@{ check_duplicates = $false; cadence = 'Weekly'; retention_days = 90; engine_timeout_seconds = 86400 }
-      security = [ordered]@{ gmsa_name = $gmsaName; run_server = $env:COMPUTERNAME; analyst_group = ''; authorized_edipis = @(); require_encrypted_volume = $false }
+      security = [ordered]@{ gmsa_name = $gmsaName; gmsa_precreated = [bool]$chkPre.Checked; run_server = $env:COMPUTERNAME; analyst_group = ''; authorized_edipis = @(); require_encrypted_volume = $false }
       wordlists = [ordered]@{ hibp = $txtHibp.Text.Trim(); rockyou = $txtRock.Text.Trim(); custom = '' }
       dsinternals_offline_path = $txtDs.Text.Trim()
       min_free_space_gb = @{ store = 60; output = 5 }
@@ -176,10 +181,19 @@ $btnGo.Add_Click({
     $script:summaryPath = Join-Path $script:installRoot 'SETUP-SUMMARY.txt'
     $btnSummary.Enabled = (Test-Path $script:summaryPath)
     if ($rc -ne 0) { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'The install has problems. See the log below and the summary.'; return }
-    [void](Invoke-Setup $initPath 'Handoff')
-    $btnHand.Enabled = $true; $btnFinish.Enabled = $true
-    $lblResult.ForeColor = [Drawing.Color]::SeaGreen
-    $lblResult.Text = 'Installed. Next: give the hand-off folder to a Domain Admin, then click Finish.'
+    if ($chkPre.Checked) {
+      # the gMSA already exists: skip the Domain Admin hand-off and go straight to the read-only checks + local finish
+      $lblResult.Text = 'Installed. Checking the existing service account and finishing...'
+      $rc = Invoke-Setup $initPath 'Finish'
+      $btnFinish.Enabled = $true
+      if ($rc -eq 0) { $lblResult.ForeColor = [Drawing.Color]::SeaGreen; $lblResult.Text = 'All done. You can run the first scan now.'; $btnScan.Enabled = $true }
+      else { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Not finished. See the log: check the service account name, that this server may use it, and its rights.' }
+    } else {
+      [void](Invoke-Setup $initPath 'Handoff')
+      $btnHand.Enabled = $true; $btnFinish.Enabled = $true
+      $lblResult.ForeColor = [Drawing.Color]::SeaGreen
+      $lblResult.Text = 'Installed. Next: give the hand-off folder to a Domain Admin, then click Finish.'
+    }
   }
   catch { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Error: ' + $_.Exception.Message; Log ('ERROR: ' + $_.Exception.Message) }
   finally { $bar.Style = 'Continuous'; $btnGo.Enabled = $true }

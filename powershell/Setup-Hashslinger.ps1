@@ -286,6 +286,7 @@ function Set-FolderAcl([string]$path, [string]$gmsaSam, [string]$analystSam, $an
 }
 
 function Do-Handoff {
+  if ([bool](Opt 'security.gmsa_precreated' $false)) { Result 'Domain Admin hand-off' 'SKIP' "gMSA '$gmsa' is marked as already created"; return }
   Step 'Hand-off package for a Domain Admin (nothing in AD is changed by this tool)'
   $h = Join-Path $Dir.root 'AD-HANDOFF'
   New-Item -ItemType Directory -Force $h | Out-Null
@@ -344,7 +345,7 @@ function Do-Finish {
   $domainNC = $dom.DistinguishedName
   $gmsaSam = "$($dom.NetBIOSName)\${gmsa}$"
   $svc = Get-ADServiceAccount -Filter "Name -eq '$gmsa'" -Properties PrincipalsAllowedToRetrieveManagedPassword -ErrorAction SilentlyContinue
-  if (-not $svc) { Result 'gMSA exists in AD' 'FAIL' "not found. A Domain Admin must complete the request in $($Dir.root)\AD-HANDOFF first."; return }
+  if (-not $svc) { Result 'gMSA exists in AD' 'FAIL' "not found. Check the name in the init config (security.gmsa_name), or have a Domain Admin complete the request in $($Dir.root)\AD-HANDOFF."; return }
   Result 'gMSA exists in AD' 'PASS' $gmsaSam
   $me = Get-ADComputer $env:COMPUTERNAME
   if (@($svc.PrincipalsAllowedToRetrieveManagedPassword) -contains $me.DistinguishedName) { Result 'This server may retrieve the gMSA password' 'PASS' }
