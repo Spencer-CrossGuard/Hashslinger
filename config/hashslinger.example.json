@@ -1,0 +1,22 @@
+{
+  "mode": "live",
+  "target_server": "dc01.contoso.com",
+  "target_ous": ["OU=Finance,DC=contoso,DC=com", "OU=Service Accounts,DC=contoso,DC=com"],
+  "account_types": ["User", "Service"],
+  "uac": {
+    "require_flags": [],
+    "exclude_flags": ["SMARTCARD_REQUIRED", "ACCOUNTDISABLE"]
+  },
+  "hash_store_path": "D:\\Hashslinger\\store\\master.ntlm",
+  "staging_path": "D:\\Hashslinger\\staging",
+  "log_path": "D:\\Hashslinger\\logs\\audit.jsonl",
+  "output_path": "D:\\Hashslinger\\output",
+  "allowed_output_roots": ["D:\\Hashslinger\\output"],
+  "request_dir": "D:\\Hashslinger\\requests",
+  "pattern_rules_path": "D:\\Hashslinger\\config\\pattern_rules.json",
+  "require_encrypted_volume": true,
+  "retention_days": 90,
+  "cadence": "weekly",
+  "powershell_path": "powershell.exe",
+  "engine_script": "D:\\Hashslinger\\powershell\\Get-AccountHashes.ps1"
+}

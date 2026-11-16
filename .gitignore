@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.egg-info/
+store/
+staging/
+logs/
+output/
+requests/
+config/hashslinger.json
+*.ntlm
+*.csv
+!tests/**/*.csv
