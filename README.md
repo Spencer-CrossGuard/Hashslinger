@@ -47,6 +47,9 @@ The setup log is `<root>\setup-<timestamp>.log` and `<root>\SETUP-SUMMARY.txt` l
 Handoff/Finish steps are untested against a live domain. If a scan request arrives while one is running it is
 logged as rejected, so resubmit when the viewer shows the run finished.
 
+**Replication rights only (for the Domain Admin):** `powershell\Grant-HashslingerReplicationRights.ps1 -GmsaName <name>` grants just the two
+rights on the domain root to an existing gMSA (idempotent, `-WhatIf` previews, verifies afterwards).
+
 **gMSA script (for the Domain Admin only):** `powershell\New-HashslingerGmsa.ps1` creates the gMSA
 (`-RunServer <scan server>` is required, `-WhatIf` previews, optional `-GrantReplicationRights`). Setup never
 runs it. Untested against a live domain.
