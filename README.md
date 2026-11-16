@@ -5,7 +5,19 @@ in-scope accounts, matches them against breached and weak-password hash lists, a
 of accounts needing a forced reset. No plaintext passwords or hashes are written to the report.
 Run only with documented, signed authorization for the target network.
 
-## Setup (one command, any location)
+## Easy setup (recommended)
+
+1. Drop the Hashslinger folder anywhere on the scan server and double-click **Setup-Hashslinger.cmd**.
+2. The wizard asks three things: which domain controller, which drive for the data, and which parts of the
+   directory to scan (optionally your password list files). Everything else is chosen for you.
+3. Click **Install**. It installs locally, then shows a plain-language list of the Active Directory changes
+   and asks you to confirm. If you are not a Domain Admin it finishes the local part and tells you to hand
+   the rest to one. Then **Run first scan now**.
+
+The wizard is untested (no Windows host available when written); report anything odd. The sections below
+describe the advanced, scriptable path it drives.
+
+## Setup (advanced, scriptable)
 
 1. Drop the whole Hashslinger folder anywhere.
 2. Double-click `Setup-Hashslinger.cmd`. First run creates `hashslinger.init.json` from
