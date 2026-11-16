@@ -12,6 +12,10 @@ param(
 )
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+if (-not $PSBoundParameters.ContainsKey('StatusPath') -and -not $ConfigPath) {
+  $guess = Join-Path $PSScriptRoot '..\..\config\hashslinger.json'
+  if (Test-Path $guess) { $ConfigPath = $guess }
+}
 if ($ConfigPath) { $StatusPath = (Get-Content $ConfigPath -Raw | ConvertFrom-Json).status_path }
 
 $form = New-Object Windows.Forms.Form -Property @{ Text = 'Hashslinger progress'; Width = 620; Height = 330; StartPosition = 'CenterScreen' }

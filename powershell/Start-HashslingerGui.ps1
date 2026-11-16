@@ -9,7 +9,7 @@
   (OU + output folder) and starts the on-demand scheduled task, which runs under the
   GMSA and re-validates the request against config. No free-text input anywhere.
 #>
-param([string]$ConfigPath = 'D:\Hashslinger\config\hashslinger.json')
+param([string]$ConfigPath = (Join-Path $PSScriptRoot '..\..\config\hashslinger.json'))
 Add-Type -AssemblyName System.Windows.Forms
 $cfg = Get-Content $ConfigPath -Raw | ConvertFrom-Json
 $taskName = 'Hashslinger-OnDemand'

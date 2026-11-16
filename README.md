@@ -5,6 +5,25 @@ in-scope accounts, matches them against breached and weak-password hash lists, a
 of accounts needing a forced reset. No plaintext passwords or hashes are written to the report.
 Run only with documented, signed authorization for the target network.
 
+## Setup (one command, any location)
+
+1. Drop the whole Hashslinger folder anywhere.
+2. Double-click `Setup-Hashslinger.cmd`. First run creates `hashslinger.init.json` from
+   `config/hashslinger.init.example.json` and opens it. Set the install root, **drives/paths** (store,
+   staging, logs, output, status, requests can each be on a different drive), DC, OUs, gMSA/analyst
+   group names, optional wordlist source files, and save.
+3. Run it again. `-Phase Local` (default) does everything except AD changes: folders, install to
+   `<root>\bin`, build the exe, DSInternals + AD tools, unblock, runtime config, then verifies (script
+   syntax parse, exe selftest, AD-free smoke test, DC and OU reachability) and prints a PASS/WARN/FAIL board.
+4. On the scan server, as a domain admin: `Setup-Hashslinger.cmd -Phase Domain -WhatIf`, review, then without
+   `-WhatIf`. It creates the gMSA, grants minimum replication rights on the domain NC, applies least-privilege
+   folder ACLs, registers the scheduled and on-demand tasks, and lets analysts start only the on-demand task.
+   `-CreateKdsRootKey` is for labs only. `-Phase Check` changes nothing.
+
+The setup log is `<root>\setup-<timestamp>.log` and `<root>\SETUP-SUMMARY.txt` lists every path and command.
+Domain-phase steps are untested against a live domain; use `-WhatIf` first. If a scan request arrives while one
+is running it is logged as rejected, so resubmit when the viewer shows the run finished.
+
 ## Build (no SDK, no install)
 
 ```
@@ -25,7 +44,7 @@ pipeline with a fake account source, audit logging, wipe, and request validation
 | Data layer | `cs/HashStore.cs` (mmap + binary search + 2-byte prefix index), `cs/StoreMerge.cs` (external sort, linear merge, atomic swap), `cs/Patterns.cs` |
 | Interface layer | `powershell/Start-HashslingerGui.ps1` |
 | Output layer | `cs/Report.cs`, `cs/Runner.cs` (analysis) |
-| Orchestration / logging | `cs/Runner.cs`, `cs/Audit.cs`, `cs/Wipe.cs`, `cs/Preflight.cs`, `powershell/Install-Hashslinger.ps1` |
+| Orchestration / logging | `cs/Runner.cs`, `cs/Audit.cs`, `cs/Wipe.cs`, `cs/Preflight.cs`, `powershell/Setup-Hashslinger.ps1 -Phase Domain` |
 
 ## Usage
 
@@ -47,7 +66,7 @@ depend on who started the scan: anyone with read access to the status folder can
 Only one scan runs at a time (a second start is refused and logged). `Start-HashslingerRun.ps1`
 (or `Start-HashslingerRun.cmd`) is the one-window admin/dev launcher: setup, start, then the viewer.
 It runs under the launching user and ends at logoff. Unattended or logoff-proof runs use the GMSA
-scheduled tasks from `Install-Hashslinger.ps1`.
+scheduled tasks from `Setup-Hashslinger.ps1 -Phase Domain`.
 
 ## Duplicate passwords
 

@@ -11,7 +11,7 @@ namespace Hashslinger
             "  selftest                              run built-in checks (no AD needed)\n" +
             "  --config <file> merge                 merge staging/<HIBP|rockyou|custom>/* into the hash store\n" +
             "  --config <file> info                  show hash store record count\n" +
-            "  --config <file> scan [--ou <dn>] [--output-dir <dir>] [--trigger <t>] [--request <file>]\n";
+            "  --config <file> scan [--ou <dn>] [--output-dir <dir>] [--trigger <t>] [--request <file> | --request-dir <dir>]\n";
 
         public static int Main(string[] args)
         {
@@ -47,7 +47,7 @@ namespace Hashslinger
             }
             if (cmd != "scan") { Console.Error.Write(Usage); return 1; }
 
-            string ou = null, outDir = null, trigger = "scheduled", requestFile = null;
+            string ou = null, outDir = null, trigger = "scheduled", requestFile = null, requestDir = null;
             for (int i = 3; i < args.Length; i++)
             {
                 if (i + 1 >= args.Length) { Console.Error.Write(Usage); return 1; }
@@ -56,7 +56,16 @@ namespace Hashslinger
                 else if (a == "--output-dir") outDir = args[++i];
                 else if (a == "--trigger") trigger = args[++i];
                 else if (a == "--request") requestFile = args[++i];
+                else if (a == "--request-dir") requestDir = args[++i];
                 else { Console.Error.Write(Usage); return 1; }
+            }
+
+            if (requestDir != null && requestFile == null)
+            {
+                string[] cands = Directory.Exists(requestDir) ? Directory.GetFiles(requestDir, "req_*.json") : new string[0];
+                if (cands.Length == 0) { Console.WriteLine("no pending requests"); return 0; }
+                Array.Sort(cands, delegate(string x, string y) { return File.GetLastWriteTimeUtc(x).CompareTo(File.GetLastWriteTimeUtc(y)); });
+                requestFile = cands[0]; // oldest first
             }
 
             IList<string> ous = ou != null ? new List<string> { ou } : null;
