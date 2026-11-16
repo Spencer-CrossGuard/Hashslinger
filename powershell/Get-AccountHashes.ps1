@@ -73,6 +73,9 @@ function ClassifyType($spn, [bool]$isComputer) {
 if ($Mode -eq 'live') {
   if (-not $Server) { throw '-Server is required in live mode' }
   # objectGuid -> type, built with a paged DirectorySearcher (streams; handles millions of objects).
+  foreach ($b in $bases) {
+    if (-not [DirectoryServices.DirectoryEntry]::Exists("LDAP://$Server/$b")) { throw "Search base not found on ${Server}: $b (the built-in Users container is CN=Users, not OU=Users)" }
+  }
   $scope = New-Object 'System.Collections.Generic.Dictionary[Guid,string]'
   foreach ($b in $bases) {
     foreach ($t in $types) {

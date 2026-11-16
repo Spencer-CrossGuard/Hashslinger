@@ -257,11 +257,9 @@ function Do-Verify {
       $d = Get-ADDomain -Server $dc
       Result 'Domain controller reachable' 'PASS' $d.DNSRoot
       foreach ($o in $ous) {
-        try {
-          $de = New-Object DirectoryServices.DirectoryEntry("LDAP://$dc/$o")
-          $null = $de.distinguishedName
-          Result "Scope exists: $o" 'PASS'
-        } catch { Result "Scope exists: $o" 'FAIL' 'not found on that DC (typo in the DN?)' }
+        # Exists() is reliable. Reading a property on a failed bind can silently return $null.
+        if ([DirectoryServices.DirectoryEntry]::Exists("LDAP://$dc/$o")) { Result "Scope exists: $o" 'PASS' }
+        else { Result "Scope exists: $o" 'FAIL' 'not found on that DC. Note the built-in Users container is CN=Users, not OU=Users.' }
       }
     } catch { Result 'Domain controller reachable' 'FAIL' $_.Exception.Message }
   }
