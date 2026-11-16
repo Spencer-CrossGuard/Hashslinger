@@ -94,7 +94,9 @@ $minFree = @{ store = [double](Opt 'min_free_space_gb.store' 60); output = [doub
 
 # ---------------------------------------------------------------- phase: preflight
 Step 'Preflight'
+$haveExe = Test-Path (Join-Path $srcRoot 'Hashslinger.exe')
 foreach ($need in 'cs', 'powershell', 'config') {
+  if ($need -eq 'cs' -and $haveExe) { Result 'Source folder: cs' 'SKIP' 'not needed, a built Hashslinger.exe is present'; continue }
   if (Test-Path (Join-Path $srcRoot $need)) { Result "Source folder: $need" 'PASS' }
   else { Result "Source folder: $need" 'FAIL' "missing under $srcRoot (is the whole Hashslinger folder here?)" }
 }
