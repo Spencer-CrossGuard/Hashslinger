@@ -351,13 +351,29 @@ function Do-Finish {
   if (@($svc.PrincipalsAllowedToRetrieveManagedPassword) -contains $me.DistinguishedName) { Result 'This server may retrieve the gMSA password' 'PASS' }
   else { Result 'This server may retrieve the gMSA password' 'FAIL' "not allowed. The Domain Admin used a different -RunServer than $env:COMPUTERNAME."; return }
 
+  # Read-only effective-access check: anyone can read the domain root ACL and the gMSA's token groups.
+  # Counts Allow/Deny entries for the gMSA, its groups, Everyone and Authenticated Users. It cannot prove the
+  # DC will honor them; the live test below is authoritative.
   try {
-    $want = '1131f6aa-9c07-11d1-f79f-00c04fc2dcd2', '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2'
-    $aces = @((Get-Acl "AD:$domainNC").Access | Where-Object { $_.IdentityReference.Value -eq $gmsaSam -and $_.AccessControlType -eq 'Allow' })
-    $have = @($want | Where-Object { $g = [Guid]$_; ($aces | Where-Object { $_.ObjectType -eq $g }) })
-    if ($have.Count -eq 2) { Result 'gMSA has both replication rights (domain root)' 'PASS' }
-    else { Result 'gMSA has both replication rights (domain root)' 'WARN' "found $($have.Count) of 2. Scans will fail until a Domain Admin grants them." }
-  } catch { Result 'gMSA replication rights' 'WARN' ('could not read the domain root permissions: ' + $_.Exception.Message) }
+    $tg = (Get-ADObject -Identity $svc.DistinguishedName -Properties tokenGroups).tokenGroups
+    $sids = New-Object 'System.Collections.Generic.HashSet[string]'
+    [void]$sids.Add($svc.SID.Value); [void]$sids.Add('S-1-1-0'); [void]$sids.Add('S-1-5-11')
+    foreach ($b in $tg) { [void]$sids.Add((New-Object Security.Principal.SecurityIdentifier([byte[]]$b, 0)).Value) }
+    $rules = (Get-Acl "AD:$domainNC").GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])
+    $want = [ordered]@{ '1131f6aa-9c07-11d1-f79f-00c04fc2dcd2' = 'Replicating Directory Changes'; '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2' = 'Replicating Directory Changes All' }
+    $problems = @()
+    foreach ($k in $want.Keys) {
+      $g = [Guid]$k
+      $mine = @($rules | Where-Object {
+          $sids.Contains($_.IdentityReference.Value) -and
+          (($_.ActiveDirectoryRights -band [DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0) -and
+          ($_.ObjectType -eq $g -or $_.ObjectType -eq [Guid]::Empty) })
+      if (@($mine | Where-Object { $_.AccessControlType -eq 'Deny' }).Count) { $problems += "$($want[$k]): denied by an entry" }
+      elseif (-not @($mine | Where-Object { $_.AccessControlType -eq 'Allow' }).Count) { $problems += "$($want[$k]): no allow entry for the gMSA or any of its groups" }
+    }
+    if ($problems.Count -eq 0) { Result 'Replication rights on the domain root (effective, read-only)' 'PASS' 'allowed for the gMSA directly or via a group' }
+    else { Result 'Replication rights on the domain root (effective, read-only)' 'WARN' (($problems -join '; ') + '. Scans will fail until a Domain Admin fixes this.') }
+  } catch { Result 'Replication rights on the domain root' 'WARN' ('could not compute: ' + $_.Exception.Message) }
 
   Install-ADServiceAccount -Identity $gmsa -ErrorAction SilentlyContinue
   $ok = Test-ADServiceAccount -Identity $gmsa
