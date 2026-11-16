@@ -13,9 +13,8 @@ Hashslinger.exe selftest
 ```
 
 `selftest` needs no AD. It checks NT/MD4 vectors, store merge and lookup, patterns, the full
-pipeline with a fake account source, audit logging, wipe, and request validation. **The C# has not
-been compiled by me** (no .NET available in my environment), so the first `build.cmd` and
-`selftest` on your test box are the real verification. Send me any compiler errors or FAIL lines.
+pipeline with a fake account source, audit logging, wipe, and request validation. **Verified: built with
+`build.cmd` on the author's Windows PC, 38/38 checks pass.
 `cs/Hashslinger.csproj` is an optional SDK-style build if you prefer one.
 
 ## Layout
@@ -27,7 +26,6 @@ been compiled by me** (no .NET available in my environment), so the first `build
 | Interface layer | `powershell/Start-HashslingerGui.ps1` |
 | Output layer | `cs/Report.cs`, `cs/Runner.cs` (analysis) |
 | Orchestration / logging | `cs/Runner.cs`, `cs/Audit.cs`, `cs/Wipe.cs`, `cs/Preflight.cs`, `powershell/Install-Hashslinger.ps1` |
-| Reference implementation | `python-reference/` (tested, kept until the C# passes selftest, then delete) |
 
 ## Usage
 
@@ -87,8 +85,7 @@ sorted master, atomic swap). Files ending `.ntlm` are parsed as hex hashes in an
 
 ## Verification status
 
-- Python reference: 9 tests pass (`cd python-reference && python3 -m unittest discover -s tests`).
-- **C# and PowerShell: not compiled or run.** Use `build.cmd` + `Hashslinger.exe selftest` for C#.
-  PowerShell needs a lab run: engine, GUI, and installer (`-WhatIf` first). Confirm DSInternals
+- C#: compiled with csc.exe, `selftest` 38/38 PASS (core, store, pipeline with fake source, audit, wipe, requests).
+- **PowerShell: not yet run.** Needs a lab run: engine, GUI, and installer (`-WhatIf` first). Confirm DSInternals
   names (`Get-ADReplAccount -All/-ObjectGuid`, `.Guid`, `SupplementalCredentials.ClearText`) against
   the installed module version.
