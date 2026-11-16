@@ -57,8 +57,24 @@ namespace Hashslinger
                 if (!cfg.TargetOus.Contains(ou)) throw new RequestException("OU not in configured list: " + ou, edipi, reason, requestedBy);
             string outDir = outputDir ?? cfg.OutputPath;
             AuditLog log = new AuditLog(cfg.LogPath);
+
+            // One scan at a time: the lock is held for the whole run and released by the OS if the process dies.
+            string statusDir = Path.GetDirectoryName(Path.GetFullPath(cfg.StatusPath));
+            Directory.CreateDirectory(statusDir);
+            FileStream runLock;
+            try
+            {
+                runLock = new FileStream(Path.Combine(statusDir, "run.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException)
+            {
+                log.Rejected("scan already running", edipi, reason, requestedBy);
+                throw new InvalidOperationException("A scan is already running. Open the progress viewer to watch it.");
+            }
+
             string runId = log.NextRunId();
             log.Start(runId, trigger, ous, requestedBy, edipi, reason);
+            Progress.Begin(cfg.StatusPath, runId, Environment.UserDomainName + "\\" + Environment.UserName, requestedBy, ous);
 
             AccountTable table = new AccountTable();
             string status = "failed", error = null, outPath = null;
@@ -66,9 +82,16 @@ namespace Hashslinger
             bool wipeOk = false;
             try
             {
+                Progress.Stage(1, "Preflight checks (run " + runId + ")");
                 if (!skipPreflight) Preflight.Run(cfg, outDir);
-                StoreMerge.ProcessStaging(cfg.HashStorePath, cfg.StagingPath, null);
+                Progress.Stage(2, "Merging any new wordlists from staging");
+                List<string> mergedFiles = StoreMerge.ProcessStaging(cfg.HashStorePath, cfg.StagingPath, Progress.Info);
+                Progress.Info(mergedFiles.Count + " source file(s) merged");
+                Progress.Stage(3, "Building common-pattern candidates");
                 Dictionary<Hash128, string> patterns = Patterns.Build(cfg.PatternRulesPath, DateTime.Now);
+                Progress.Info(patterns.Count + " pattern candidates");
+                Progress.Stage(4, "Pulling accounts from AD (" + cfg.Mode + ", " + cfg.Replication + " replication)");
+                int received = 0;
                 source.Run(cfg, ous, delegate(AccountRecord a)
                 {
                     int idx = table.Add(a);
@@ -76,11 +99,17 @@ namespace Hashslinger
                     if (a.Rev) r |= Reason.Reversible;
                     if (a.Lm) r |= Reason.Lm;
                     if (r != 0) table.AddReasons(idx, r);
+                    received++;
+                    if (received % 10000 == 0) { Progress.Count(received); Progress.Info(received + " accounts received"); }
                 });
                 accounts = table.Count;
+                Progress.Count(accounts);
+                Progress.Info(accounts + " accounts received in total");
+                Progress.Stage(5, "Matching against the hash store");
                 HashIdx[] sorted;
                 using (HashStore store = new HashStore(cfg.HashStorePath, ShouldIndex(cfg)))
                     sorted = Analyze(table, store, patterns, cfg.CheckDuplicates);
+                Progress.Stage(6, "Writing report");
                 outPath = Report.Write(table, runId, outDir, sorted, out flagged);
                 Report.PurgeOld(outDir, cfg.RetentionDays);
                 status = "success";
@@ -91,6 +120,7 @@ namespace Hashslinger
             }
             finally
             {
+                Progress.Stage(7, "Wiping memory and writing audit entry");
                 accounts = table.Count > accounts ? table.Count : accounts;
                 wipeOk = table.Wipe();
                 bool tmpOk = true;
@@ -100,6 +130,8 @@ namespace Hashslinger
                         tmpOk &= Wipe.SecureDeleteDir(d);
                 log.End(runId, status, accounts, outPath, wipeOk && tmpOk, error);
                 wipeOk = wipeOk && tmpOk;
+                Progress.Finish(status, outPath, error);
+                runLock.Dispose();
             }
             if (status != "success") throw new InvalidOperationException(error);
             RunResult res = new RunResult();

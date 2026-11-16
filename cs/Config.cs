@@ -35,6 +35,7 @@ namespace Hashslinger
         public string NtdsPath = "";
         public string SystemHivePath = "";
         public List<string> AuthorizedEdipis = new List<string>();
+        public string StatusPath = "status\\status.json";
         public bool CheckDuplicates = false;         // off unless explicitly enabled
 
         static int Flag(string name)
@@ -83,6 +84,7 @@ namespace Hashslinger
             c.OutputPath = Resolve(baseDir, Json.Str(raw, "output_path", c.OutputPath));
             c.RequestDir = Resolve(baseDir, Json.Str(raw, "request_dir", c.RequestDir));
             c.PatternRulesPath = Resolve(baseDir, Json.Str(raw, "pattern_rules_path", c.PatternRulesPath));
+            c.StatusPath = Resolve(baseDir, Json.Str(raw, "status_path", c.StatusPath));
             c.EngineScript = Resolve(baseDir, Json.Str(raw, "engine_script", c.EngineScript));
             c.AllowedOutputRoots = Json.StrList(raw, "allowed_output_roots");
             c.RequireEncryptedVolume = Json.Str(raw, "require_encrypted_volume", "false").ToLowerInvariant() == "true";

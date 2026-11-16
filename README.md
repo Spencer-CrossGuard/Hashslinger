@@ -39,6 +39,16 @@ Updating lists: drop a file in `staging/HIBP/` (NTLM hex, `HASH:count` ok), `sta
 (plaintext), or `staging/custom/` (plaintext terms). The next run merges it (linear merge into the
 sorted master, atomic swap). Files ending `.ntlm` are parsed as hex hashes in any folder.
 
+## Progress
+
+Every run writes `status\status.json` (stage, detail, accounts received, who started it, heartbeat every
+~5s). `powershell\Show-HashslingerProgress.ps1` is a read-only live viewer for it, so progress does not
+depend on who started the scan: anyone with read access to the status folder can open it at any time.
+Only one scan runs at a time (a second start is refused and logged). `Start-HashslingerRun.ps1`
+(or `Start-HashslingerRun.cmd`) is the one-window admin/dev launcher: setup, start, then the viewer.
+It runs under the launching user and ends at logoff. Unattended or logoff-proof runs use the GMSA
+scheduled tasks from `Install-Hashslinger.ps1`.
+
 ## Duplicate passwords
 
 Off by default. Set `"check_duplicates": true` to flag accounts that share a password with another

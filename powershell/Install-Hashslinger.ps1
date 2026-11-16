@@ -39,7 +39,7 @@ foreach ($g in $rights) {
 }
 
 # 3. Folder layout + ACLs: only the gMSA, the named analyst group, and local admins
-$dirs = 'store', 'staging', 'logs', 'output', 'requests' | ForEach-Object { Join-Path $InstallRoot $_ }
+$dirs = 'store', 'staging', 'logs', 'output', 'requests', 'status' | ForEach-Object { Join-Path $InstallRoot $_ }
 foreach ($d in $dirs) {
   if ($PSCmdlet.ShouldProcess($d, 'Create + restrict ACL, audit failures')) {
     New-Item -ItemType Directory -Force -Path $d | Out-Null
@@ -50,7 +50,7 @@ foreach ($d in $dirs) {
     $analyst = "$($domain.NetBIOSName)\$AnalystGroup"
     # Analysts: drop requests, maintain custom terms, read reports. No access to the hash store or audit log.
     # requests: create-only (write-only drop box). Analysts cannot list or read request files; only the gMSA can.
-    $analystRights = switch -Wildcard ($d) { '*requests' { 'CreateFiles' } '*staging' { 'Modify' } '*output' { 'ReadAndExecute' } default { $null } }
+    $analystRights = switch -Wildcard ($d) { '*requests' { 'CreateFiles' } '*staging' { 'Modify' } '*output' { 'ReadAndExecute' } '*status' { 'ReadAndExecute' } default { $null } }
     foreach ($who in @($gmsaSam, 'BUILTIN\Administrators')) {
       $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($who, $full, $inh, 'None', 'Allow')))
     }

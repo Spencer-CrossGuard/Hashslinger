@@ -93,6 +93,7 @@ namespace Hashslinger
         public static int Run()
         {
             passed = failed = 0;
+            Progress.Quiet = true;
             string root = NewDir();
             try
             {
@@ -190,6 +191,7 @@ namespace Hashslinger
             c.OutputPath = Path.Combine(d, "out");
             c.PatternRulesPath = Path.Combine(d, "rules.json");
             c.CheckDuplicates = true;
+            c.StatusPath = Path.Combine(d, "status", "status.json");
             return c;
         }
 
@@ -216,9 +218,19 @@ namespace Hashslinger
             Check("no hashes in report", !text.ToLowerInvariant().Contains(Hex(Ntlm.Hash("password")).ToLowerInvariant()));
             string[] log = File.ReadAllLines(cfg.LogPath);
             Check("audit log has start+end", log.Length == 2 && log[0].Contains("\"start\"") && log[1].Contains("\"wipe_confirmed\":true"));
+            Dictionary<string, object> stt = (Dictionary<string, object>)Json.Parse(File.ReadAllText(cfg.StatusPath));
+            Check("status file shows success at stage 7", Json.Str(stt, "state", "") == "success" && Json.Str(stt, "stage", "") == "7" && Json.Str(stt, "output", "") == res.Output);
             RunResult res2 = Runner.Run(cfg, new FakeSource(), new List<string> { Ou }, null, "test", null, null, null, false);
             Check("second run id is 002", res2.RunId.EndsWith("-002"));
 
+            using (FileStream held = new FileStream(Path.Combine(Path.GetDirectoryName(cfg.StatusPath), "run.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+            {
+                bool refused = false;
+                try { Runner.Run(cfg, new FakeSource(), new List<string> { Ou }, null, "test", null, null, null, false); }
+                catch (InvalidOperationException) { refused = true; }
+                string[] lg = File.ReadAllLines(cfg.LogPath);
+                Check("second concurrent scan refused and logged", refused && lg[lg.Length - 1].Contains("scan already running"));
+            }
             cfg.CheckDuplicates = false;
             RunResult res3 = Runner.Run(cfg, new FakeSource(), new List<string> { Ou }, null, "test", null, null, null, false);
             string text3 = File.ReadAllText(res3.Output);

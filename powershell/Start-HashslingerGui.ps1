@@ -14,7 +14,7 @@ Add-Type -AssemblyName System.Windows.Forms
 $cfg = Get-Content $ConfigPath -Raw | ConvertFrom-Json
 $taskName = 'Hashslinger-OnDemand'
 
-$form = New-Object Windows.Forms.Form -Property @{ Text = 'Hashslinger'; Width = 520; Height = 330; FormBorderStyle = 'FixedDialog'; MaximizeBox = $false }
+$form = New-Object Windows.Forms.Form -Property @{ Text = 'Hashslinger'; Width = 520; Height = 350; FormBorderStyle = 'FixedDialog'; MaximizeBox = $false }
 $ouLbl = New-Object Windows.Forms.Label -Property @{ Text = 'Organizational Unit'; Left = 15; Top = 15; Width = 200 }
 $ou = New-Object Windows.Forms.ComboBox -Property @{ Left = 15; Top = 38; Width = 470; DropDownStyle = 'DropDownList' }
 $cfg.target_ous | ForEach-Object { [void]$ou.Items.Add($_) }
@@ -27,6 +27,8 @@ $ed = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 146; Width 
 $rsLbl = New-Object Windows.Forms.Label -Property @{ Text = 'Reason for this run (ticket / justification)'; Left = 15; Top = 178; Width = 300 }
 $rs = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 199; Width = 470; MaxLength = 500 }
 $run = New-Object Windows.Forms.Button -Property @{ Text = 'Run Scan'; Left = 15; Top = 240; Width = 120; Enabled = $false }
+$prog = New-Object Windows.Forms.Button -Property @{ Text = 'View progress'; Left = 15; Top = 275; Width = 120 }
+$prog.Add_Click({ Start-Process powershell.exe -ArgumentList '-NoProfile', '-File', (Join-Path $PSScriptRoot 'Show-HashslingerProgress.ps1'), '-StatusPath', $cfg.status_path })
 $status = New-Object Windows.Forms.Label -Property @{ Left = 150; Top = 245; Width = 340; Text = '' }
 
 function Check { $run.Enabled = ($out.Text -ne '' -and $ed.Text -match '^\d{10}$' -and $rs.Text.Trim().Length -ge 10) }
@@ -48,5 +50,5 @@ $run.Add_Click({
     $status.Text = 'Could not start the scan. Contact the DCO lead.'
   }
 })
-$form.Controls.AddRange(@($ouLbl, $ou, $outLbl, $out, $browse, $edLbl, $ed, $rsLbl, $rs, $run, $status))
+$form.Controls.AddRange(@($ouLbl, $ou, $outLbl, $out, $browse, $edLbl, $ed, $rsLbl, $rs, $run, $prog, $status))
 [void]$form.ShowDialog()
