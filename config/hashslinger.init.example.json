@@ -31,7 +31,7 @@
   "security": {
     "gmsa_name": "svc-hashslinger",
     "run_server": "SCANHOST01",
-    "analyst_group": "HS-Analysts",
+    "analyst_group": "",
     "authorized_edipis": [],
     "require_encrypted_volume": false
   },

@@ -27,6 +27,12 @@ is running it is logged as rejected, so resubmit when the viewer shows the run f
 **gMSA only:** `powershell\New-HashslingerGmsa.ps1` creates just the gMSA (standalone, `-WhatIf`, optional
 `-GrantReplicationRights`). Run it on the scan server, elevated, as a domain admin. Untested against a live domain.
 
+**Access model:** with `security.analyst_group` empty (the example default), only the gMSA, the local
+Administrators group on the scan server, and SYSTEM can read or write any Hashslinger folder or start the
+tasks. Set a group only if you want analysts to use the request GUI (it grants them: start the on-demand task,
+create-only requests, read output/status/config, modify staging). No group is ever given replication rights
+or access to the hash store or audit log.
+
 ## Build (no SDK, no install)
 
 ```

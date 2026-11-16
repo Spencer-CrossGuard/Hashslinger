@@ -288,7 +288,7 @@ function Do-Domain {
     Result 'Running on the run server' 'FAIL' "this is $env:COMPUTERNAME, init says $runServer. Run the Domain phase on the run server."
     return
   }
-  if (-not $analystGroup) { Result 'security.analyst_group set' 'FAIL' 'needed for ACLs'; return }
+  if (-not $analystGroup) { Result 'Analyst group' 'SKIP' 'none set: only the gMSA, local Administrators and SYSTEM get access' }
   Import-Module ActiveDirectory
   $dom = Get-ADDomain
   $domainNC = $dom.DistinguishedName
@@ -325,7 +325,7 @@ function Do-Domain {
   }
 
   # folder ACLs
-  $analystSam = "$($dom.NetBIOSName)\$analystGroup"
+  $analystSam = if ($analystGroup) { "$($dom.NetBIOSName)\$analystGroup" } else { $null }
   $plan = @(
     @($Dir.store, $null, 'ContainerInherit,ObjectInherit'),
     @($Dir.config, 'ReadAndExecute', 'ContainerInherit,ObjectInherit'),   # the analyst GUI reads the scope list
@@ -338,7 +338,7 @@ function Do-Domain {
   foreach ($entry in $plan) {
     if ($PSCmdlet.ShouldProcess($entry[0], 'Restrict ACL')) { Set-FolderAcl $entry[0] $gmsaSam $analystSam $entry[1] $entry[2] }
   }
-  Result 'Folder ACLs (least privilege)' 'PASS' 'analysts: staging modify, output/status read, requests create-only'
+  Result 'Folder ACLs (least privilege)' 'PASS' $(if ($analystGroup) { 'gMSA, Administrators, SYSTEM full; analysts: staging modify, output/status read, requests create-only' } else { 'gMSA, local Administrators and SYSTEM only' })
 
   # scheduled tasks under the gMSA (no stored password)
   $principal = New-ScheduledTaskPrincipal -UserId $gmsaSam -LogonType Password -RunLevel Limited
@@ -351,14 +351,14 @@ function Do-Domain {
     Register-ScheduledTask -TaskName 'Hashslinger-OnDemand' -Force -Principal $principal -Settings $settings `
       -Action (New-ScheduledTaskAction -Execute $exe -Argument "--config `"$runtimeCfg`" scan --request-dir `"$($Dir.requests)`"" -WorkingDirectory $Dir.bin) | Out-Null
     Result 'Scheduled tasks registered' 'PASS' "$cadence scan + on-demand, both as $gmsaSam"
-    # let analysts START the on-demand task only
-    try {
+    # let analysts START the on-demand task only (skipped when no analyst group is set)
+    if ($analystGroup) { try {
       $asid = (Get-ADGroup $analystGroup).SID.Value
       $sddl = "D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;$asid)"
       $svc = New-Object -ComObject Schedule.Service; $svc.Connect()
       $svc.GetFolder('\').GetTask('Hashslinger-OnDemand').SetSecurityDescriptor($sddl, 0)
       Result 'Analysts may start the on-demand task' 'PASS' $analystGroup
-    } catch { Result 'Analysts may start the on-demand task' 'WARN' ($_.Exception.Message + ' (set the task security descriptor manually)') }
+    } catch { Result 'Analysts may start the on-demand task' 'WARN' ($_.Exception.Message + ' (set the task security descriptor manually)') } }
   }
   Result 'gMSA log-on-as-batch right' 'WARN' 'confirm "Log on as a batch job" allows the gMSA (check on the first task run)'
 }
