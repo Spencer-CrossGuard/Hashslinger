@@ -24,6 +24,9 @@ The setup log is `<root>\setup-<timestamp>.log` and `<root>\SETUP-SUMMARY.txt` l
 Domain-phase steps are untested against a live domain; use `-WhatIf` first. If a scan request arrives while one
 is running it is logged as rejected, so resubmit when the viewer shows the run finished.
 
+**gMSA only:** `powershell\New-HashslingerGmsa.ps1` creates just the gMSA (standalone, `-WhatIf`, optional
+`-GrantReplicationRights`). Run it on the scan server, elevated, as a domain admin. Untested against a live domain.
+
 ## Build (no SDK, no install)
 
 ```
