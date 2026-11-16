@@ -2,7 +2,8 @@
 .SYNOPSIS
   Creates (or updates) the Hashslinger group Managed Service Account. Standalone; no init config needed.
 .DESCRIPTION
-  Run ON THE SCAN SERVER, elevated, as a Domain Admin (or an account allowed to create service accounts).
+  FOR A DOMAIN ADMIN to run by hand (Hashslinger setup never changes AD). Run elevated, on any machine with
+  the AD PowerShell module. -RunServer is the SCAN SERVER, which may differ from where this is run.
   It: checks the AD module and KDS root key, creates the gMSA (or updates who may retrieve its password),
   installs it on this server, and verifies it with Test-ADServiceAccount.
   The password can be retrieved ONLY by the computer accounts you list (default: this server).
@@ -18,7 +19,7 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
   [ValidateLength(1, 15)][string]$Name = 'svc-hashslinger',     # gMSA sAMAccountName limit is 15 chars + $
-  [string]$RunServer = $env:COMPUTERNAME,                       # the one server allowed to retrieve the password
+  [Parameter(Mandatory)][string]$RunServer,                     # the scan server: the only computer allowed to retrieve the password
   [string[]]$AdditionalHosts = @(),                             # e.g. a standby scan server
   [switch]$GrantReplicationRights,
   [switch]$CreateKdsRootKey                                     # LAB ONLY: effective immediately

@@ -2,12 +2,12 @@
 .SYNOPSIS
   Guided setup. A few plain questions, everything else is chosen for you.
 .DESCRIPTION
-  Detects the domain, domain controllers and drives, asks you to pick: the domain controller, which
-  drive holds the data, and which OUs to scan (optionally wordlist files). It then writes the init
-  config, runs Setup-Hashslinger (local install, then the AD part after a plain-language confirmation),
-  and shows a clear result. Safe to re-run: finished steps are skipped or refreshed.
-  If you are not a Domain Admin it finishes the local part and tells you what to hand to one.
-  Advanced users can still run Setup-Hashslinger.cmd with -Phase / -InitConfig directly.
+  Runs as a local administrator on the scan server. NO Domain Admin needed, and it NEVER changes Active
+  Directory. Detects the domain, DCs and drives; you pick the DC, the data drive and the OUs to scan
+  (optionally password list files). Install does the local install and writes a hand-off package for a
+  Domain Admin (AD-HANDOFF folder). When the Domain Admin has done their part, click Finish: it checks the
+  AD prerequisites read-only, then sets up folder permissions and scheduled tasks on this server.
+  Safe to re-run. Advanced: Setup-Hashslinger.cmd -Phase ... -InitConfig ...
 #>
 $ErrorActionPreference = 'Stop'
 $srcRoot = Split-Path -Parent $PSScriptRoot
@@ -78,10 +78,13 @@ $lblDs.Visible = $needDsOffline
 $form.Controls.AddRange(@($txtDs, $btnDs))
 $btnDs.Add_Click({ $d = New-Object Windows.Forms.FolderBrowserDialog; if ($d.ShowDialog() -eq 'OK') { $txtDs.Text = $d.SelectedPath } })
 
-$btnGo = New-Object Windows.Forms.Button -Property @{ Text = 'Install'; Left = 15; Top = 545; Width = 160; Height = 36 }
-$btnSummary = New-Object Windows.Forms.Button -Property @{ Text = 'Open summary'; Left = 185; Top = 545; Width = 130; Height = 36; Enabled = $false }
-$btnScan = New-Object Windows.Forms.Button -Property @{ Text = 'Run first scan now'; Left = 325; Top = 545; Width = 160; Height = 36; Enabled = $false }
-$form.Controls.AddRange(@($btnGo, $btnSummary, $btnScan))
+$initFile = Join-Path $srcRoot 'hashslinger.init.json'
+$btnGo = New-Object Windows.Forms.Button -Property @{ Text = 'Install'; Left = 15; Top = 545; Width = 100; Height = 36 }
+$btnSummary = New-Object Windows.Forms.Button -Property @{ Text = 'Summary'; Left = 125; Top = 545; Width = 90; Height = 36; Enabled = $false }
+$btnHand = New-Object Windows.Forms.Button -Property @{ Text = 'Domain Admin hand-off'; Left = 225; Top = 545; Width = 170; Height = 36; Enabled = (Test-Path $initFile) }
+$btnFinish = New-Object Windows.Forms.Button -Property @{ Text = 'Finish (after DA)'; Left = 405; Top = 545; Width = 130; Height = 36; Enabled = (Test-Path $initFile) }
+$btnScan = New-Object Windows.Forms.Button -Property @{ Text = 'Run first scan'; Left = 545; Top = 545; Width = 140; Height = 36; Enabled = $false }
+$form.Controls.AddRange(@($btnGo, $btnSummary, $btnHand, $btnFinish, $btnScan))
 $lblResult = Lbl 'Ready. Pick the options above and click Install.' 15 590 670 24 $true
 $bar = New-Object Windows.Forms.ProgressBar -Property @{ Left = 15; Top = 616; Width = 670; Height = 16 }
 $form.Controls.Add($bar)
@@ -89,22 +92,15 @@ $log = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 640; Width
 $form.Controls.Add($log)
 
 $script:summaryPath = $null
+$script:installRoot = Join-Path $env:SystemDrive 'Hashslinger'
 function Log([string]$m) { $log.AppendText($m + "`r`n") }
 function Pump { [Windows.Forms.Application]::DoEvents() }
 
-function Test-DomainAdmin {
-  foreach ($g in [Security.Principal.WindowsIdentity]::GetCurrent().Groups) {
-    try { if ($g.Translate([Security.Principal.NTAccount]).Value -like '*\Domain Admins') { return $true } } catch { }
-  }
-  return $false
-}
-
 # Run Setup-Hashslinger as a child, streaming its output into the log box. Returns the exit code.
-function Invoke-Setup([string]$initPath, [string]$phase, [bool]$labKey) {
+function Invoke-Setup([string]$initPath, [string]$phase) {
   $psi = New-Object Diagnostics.ProcessStartInfo
   $psi.FileName = 'powershell.exe'
   $a = "-NoProfile -ExecutionPolicy Bypass -File `"$PSScriptRoot\Setup-Hashslinger.ps1`" -InitConfig `"$initPath`" -Phase $phase"
-  if ($labKey) { $a += ' -CreateKdsRootKey' }
   $psi.Arguments = $a
   $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true; $psi.CreateNoWindow = $true
   $q = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]'
@@ -125,6 +121,19 @@ function Invoke-Setup([string]$initPath, [string]$phase, [bool]$labKey) {
   return $proc.ExitCode
 }
 
+$btnHand.Add_Click({ $h = Join-Path $script:installRoot 'AD-HANDOFF'; if (Test-Path $h) { Start-Process explorer.exe $h } else { [void][Windows.Forms.MessageBox]::Show('Click Install first. It creates the hand-off folder.') } })
+$btnFinish.Add_Click({
+  try {
+    $btnFinish.Enabled = $false; $bar.Style = 'Marquee'; $log.Clear()
+    $lblResult.ForeColor = [Drawing.Color]::Black; $lblResult.Text = 'Checking the Active Directory prerequisites and finishing...'
+    $rc = Invoke-Setup $initFile 'Finish'
+    $script:summaryPath = Join-Path $script:installRoot 'SETUP-SUMMARY.txt'; $btnSummary.Enabled = (Test-Path $script:summaryPath)
+    if ($rc -eq 0) { $lblResult.ForeColor = [Drawing.Color]::SeaGreen; $lblResult.Text = 'All done. You can run the first scan now.'; $btnScan.Enabled = $true }
+    else { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Not finished. If the log says the gMSA is missing, the Domain Admin has not completed the hand-off yet.' }
+  }
+  catch { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Error: ' + $_.Exception.Message; Log ('ERROR: ' + $_.Exception.Message) }
+  finally { $bar.Style = 'Continuous'; $btnFinish.Enabled = $true }
+})
 $btnSummary.Add_Click({ if ($script:summaryPath -and (Test-Path $script:summaryPath)) { Start-Process notepad.exe $script:summaryPath } })
 $btnScan.Add_Click({
   try {
@@ -161,44 +170,16 @@ $btnGo.Add_Click({
     $init | ConvertTo-Json -Depth 6 | Set-Content $initPath -Encoding UTF8
     Log "Settings saved to $initPath"
 
-    # ---- part 1: this server
-    $lblResult.Text = 'Step 1 of 2: installing on this server...'
-    $rc = Invoke-Setup $initPath 'Local' $false
+    # ---- install on this server, then write the hand-off for a Domain Admin (no AD changes anywhere)
+    $lblResult.Text = 'Installing on this server...'
+    $rc = Invoke-Setup $initPath 'Local'
     $script:summaryPath = Join-Path $script:installRoot 'SETUP-SUMMARY.txt'
-    if ($rc -ne 0) { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'The local install has problems. See the log below and the summary.'; $btnSummary.Enabled = (Test-Path $script:summaryPath); return }
-
-    # ---- part 2: Active Directory (needs a Domain Admin)
-    if (-not (Test-DomainAdmin)) {
-      $lblResult.ForeColor = [Drawing.Color]::DarkOrange
-      $lblResult.Text = 'This server is ready. A Domain Admin must finish the AD part.'
-      Log 'You are not a Domain Admin. Ask one to run Setup-Hashslinger.cmd -Phase Domain on this server (the settings are already saved).'
-      $btnSummary.Enabled = $true; return
-    }
-    $labKey = $false
-    if (-not (Get-KdsRootKey)) {
-      $ans = [Windows.Forms.MessageBox]::Show("A one-time Active Directory key is missing.`r`n`r`nYES = this is a TEST lab: create it now (usable immediately).`r`nNO = this is PRODUCTION: create it now, but it only becomes usable in about 10 hours; setup will stop here and you run this wizard again later.", 'Active Directory key', 'YesNoCancel', 'Question')
-      if ($ans -eq 'Cancel') { $lblResult.Text = 'Stopped before the AD changes.'; return }
-      if ($ans -eq 'Yes') { $labKey = $true }
-      else {
-        Add-KdsRootKey -EffectiveImmediately | Out-Null
-        $lblResult.ForeColor = [Drawing.Color]::DarkOrange
-        $lblResult.Text = 'Key created. Run this wizard again in about 10 hours to finish.'
-        $btnSummary.Enabled = $true; return
-      }
-    }
-    $msg = "The next step changes Active Directory. It will:`r`n`r`n" +
-      " - create a service account '$gmsaName' that only $env:COMPUTERNAME can use`r`n" +
-      " - let that account read password data from '$domainName' (directory replication permission, domain only)`r`n" +
-      " - lock the Hashslinger folders to that account and local Administrators`r`n" +
-      " - create two scheduled tasks (weekly scan and on-demand scan)`r`n`r`nContinue?"
-    if ([Windows.Forms.MessageBox]::Show($msg, 'Confirm Active Directory changes', 'YesNo', 'Warning') -ne 'Yes') {
-      $lblResult.ForeColor = [Drawing.Color]::DarkOrange; $lblResult.Text = 'Stopped before the AD changes. This server is installed.'; $btnSummary.Enabled = $true; return
-    }
-    $lblResult.ForeColor = [Drawing.Color]::Black; $lblResult.Text = 'Step 2 of 2: Active Directory...'
-    $rc = Invoke-Setup $initPath 'Domain' $labKey
     $btnSummary.Enabled = (Test-Path $script:summaryPath)
-    if ($rc -eq 0) { $lblResult.ForeColor = [Drawing.Color]::SeaGreen; $lblResult.Text = 'All done. You can run the first scan now.'; $btnScan.Enabled = $true }
-    else { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'The AD part has problems. See the log below and the summary.' }
+    if ($rc -ne 0) { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'The install has problems. See the log below and the summary.'; return }
+    [void](Invoke-Setup $initPath 'Handoff')
+    $btnHand.Enabled = $true; $btnFinish.Enabled = $true
+    $lblResult.ForeColor = [Drawing.Color]::SeaGreen
+    $lblResult.Text = 'Installed. Next: give the hand-off folder to a Domain Admin, then click Finish.'
   }
   catch { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Error: ' + $_.Exception.Message; Log ('ERROR: ' + $_.Exception.Message) }
   finally { $bar.Style = 'Continuous'; $btnGo.Enabled = $true }

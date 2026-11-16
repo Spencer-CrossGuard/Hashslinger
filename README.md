@@ -7,15 +7,20 @@ Run only with documented, signed authorization for the target network.
 
 ## Easy setup (recommended)
 
-1. Drop the Hashslinger folder anywhere on the scan server and double-click **Setup-Hashslinger.cmd**.
-2. The wizard asks three things: which domain controller, which drive for the data, and which parts of the
-   directory to scan (optionally your password list files). Everything else is chosen for you.
-3. Click **Install**. It installs locally, then shows a plain-language list of the Active Directory changes
-   and asks you to confirm. If you are not a Domain Admin it finishes the local part and tells you to hand
-   the rest to one. Then **Run first scan now**.
+Two roles, and **Hashslinger never creates or changes anything in Active Directory**:
 
-The wizard is untested (no Windows host available when written); report anything odd. The sections below
-describe the advanced, scriptable path it drives.
+- **Server operator** (local administrator on the scan server, NOT a Domain Admin):
+  1. Drop the Hashslinger folder on the scan server and double-click **Setup-Hashslinger.cmd**.
+  2. Pick the domain controller, the data drive, and the OUs to scan (optionally password list files).
+  3. Click **Install**. It installs locally and writes `<root>\AD-HANDOFF\` for the Domain Admin.
+- **Domain Admin** (once, by hand): follow `README-FOR-DOMAIN-ADMIN.txt` in that folder: a KDS root key, a
+  gMSA that only the scan server can use, and the two directory replication rights on the domain root.
+  `New-HashslingerGmsa.ps1` (in the same folder) does it with a `-WhatIf` preview, or do it in ADUC/ADSI Edit.
+- **Server operator again:** click **Finish**. It checks, read-only, that the AD pieces exist, then sets
+  folder permissions and the scheduled tasks on the server. Then **Run first scan**.
+
+The wizard and Finish step are untested (no Windows host available when written); report anything odd.
+The sections below describe the advanced, scriptable path (`-Phase Check|Local|Handoff|Finish|All`).
 
 ## Setup (advanced, scriptable)
 
@@ -27,17 +32,19 @@ describe the advanced, scriptable path it drives.
 3. Run it again. `-Phase Local` (default) does everything except AD changes: folders, install to
    `<root>\bin`, build the exe, DSInternals + AD tools, unblock, runtime config, then verifies (script
    syntax parse, exe selftest, AD-free smoke test, DC and OU reachability) and prints a PASS/WARN/FAIL board.
-4. On the scan server, as a domain admin: `Setup-Hashslinger.cmd -Phase Domain -WhatIf`, review, then without
-   `-WhatIf`. It creates the gMSA, grants minimum replication rights on the domain NC, applies least-privilege
-   folder ACLs, registers the scheduled and on-demand tasks, and lets analysts start only the on-demand task.
-   `-CreateKdsRootKey` is for labs only. `-Phase Check` changes nothing.
+4. `-Phase Handoff` writes `<root>\AD-HANDOFF\` (a plain-language request plus `New-HashslingerGmsa.ps1`) for a
+   Domain Admin, who does the AD part by hand. Setup itself never creates or edits anything in AD.
+5. After the Domain Admin is done, `-Phase Finish` (on the scan server, local admin is enough): read-only
+   checks that the gMSA and its two replication rights exist, installs the gMSA locally, applies least-privilege
+   folder ACLs, and registers the scheduled and on-demand tasks. `-Phase Check` changes nothing.
 
 The setup log is `<root>\setup-<timestamp>.log` and `<root>\SETUP-SUMMARY.txt` lists every path and command.
-Domain-phase steps are untested against a live domain; use `-WhatIf` first. If a scan request arrives while one
-is running it is logged as rejected, so resubmit when the viewer shows the run finished.
+Handoff/Finish steps are untested against a live domain. If a scan request arrives while one is running it is
+logged as rejected, so resubmit when the viewer shows the run finished.
 
-**gMSA only:** `powershell\New-HashslingerGmsa.ps1` creates just the gMSA (standalone, `-WhatIf`, optional
-`-GrantReplicationRights`). Run it on the scan server, elevated, as a domain admin. Untested against a live domain.
+**gMSA script (for the Domain Admin only):** `powershell\New-HashslingerGmsa.ps1` creates the gMSA
+(`-RunServer <scan server>` is required, `-WhatIf` previews, optional `-GrantReplicationRights`). Setup never
+runs it. Untested against a live domain.
 
 **Access model:** with `security.analyst_group` empty (the example default), only the gMSA, the local
 Administrators group on the scan server, and SYSTEM can read or write any Hashslinger folder or start the
@@ -65,7 +72,7 @@ pipeline with a fake account source, audit logging, wipe, and request validation
 | Data layer | `cs/HashStore.cs` (mmap + binary search + 2-byte prefix index), `cs/StoreMerge.cs` (external sort, linear merge, atomic swap), `cs/Patterns.cs` |
 | Interface layer | `powershell/Start-HashslingerGui.ps1` |
 | Output layer | `cs/Report.cs`, `cs/Runner.cs` (analysis) |
-| Orchestration / logging | `cs/Runner.cs`, `cs/Audit.cs`, `cs/Wipe.cs`, `cs/Preflight.cs`, `powershell/Setup-Hashslinger.ps1 -Phase Domain` |
+| Orchestration / logging | `cs/Runner.cs`, `cs/Audit.cs`, `cs/Wipe.cs`, `cs/Preflight.cs`, `powershell/Setup-Hashslinger.ps1` |
 
 ## Usage
 
@@ -87,7 +94,7 @@ depend on who started the scan: anyone with read access to the status folder can
 Only one scan runs at a time (a second start is refused and logged). `Start-HashslingerRun.ps1`
 (or `Start-HashslingerRun.cmd`) is the one-window admin/dev launcher: setup, start, then the viewer.
 It runs under the launching user and ends at logoff. Unattended or logoff-proof runs use the GMSA
-scheduled tasks from `Setup-Hashslinger.ps1 -Phase Domain`.
+scheduled tasks from `Setup-Hashslinger.cmd -Phase Finish`.
 
 ## Duplicate passwords
 

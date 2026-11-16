@@ -2,24 +2,25 @@
 .SYNOPSIS
   Full setup, driven by an init config. Works from wherever the Hashslinger folder is dropped.
 .DESCRIPTION
-  Reads hashslinger.init.json (drives, paths, AD scope, security names), then:
-    Phase Check   preflight only, no changes
-    Phase Local   folders on the configured drives, install to <root>\bin, build the exe if missing,
-                  DSInternals + AD tools, unblock files, generate the runtime config, verify
-                  (PowerShell syntax parse, exe selftest, AD-free smoke test, AD reachability)
-    Phase Domain  gMSA, minimum replication rights on the domain NC, folder ACLs, scheduled tasks,
-                  analyst permission to start the on-demand task. Must run on the run server, as a
-                  domain admin. Honors -WhatIf.
-    Phase All     Local then Domain
-  Re-running is safe: it rebuilds nothing unnecessarily and backs up the previous runtime config.
+  THIS SCRIPT NEVER CREATES OR CHANGES ANYTHING IN ACTIVE DIRECTORY. It runs fine as a local administrator
+  on the scan server (no Domain Admin needed). Reads init config (drives, paths, AD scope, names), then:
+    Phase Check    preflight only, no changes
+    Phase Local    folders on the configured drives, install to <root>\bin, build the exe if missing,
+                   DSInternals + AD tools, unblock files, generate the runtime config, verify
+                   (PowerShell syntax parse, exe selftest, AD-free smoke test, DC/OU reachability)
+    Phase Handoff  write <root>\AD-HANDOFF\ for a Domain Admin: plain-language request + the gMSA script.
+                   The Domain Admin does the AD part by hand, separately.
+    Phase Finish   after the Domain Admin is done: READ-ONLY checks that the gMSA and its rights exist,
+                   then local-only steps: install the gMSA here, folder permissions, scheduled tasks.
+    Phase All      Local then Handoff
+  Re-running is safe: it backs up the previous runtime config.
 .NOTES
-  Domain-phase steps are UNTESTED against a live domain. Run Phase Domain with -WhatIf first.
+  Finish-phase steps are UNTESTED against a live domain.
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
   [string]$InitConfig,
-  [ValidateSet('Check', 'Local', 'Domain', 'All')][string]$Phase = 'Local',
-  [switch]$CreateKdsRootKey   # lab only: makes the KDS root key effective immediately
+  [ValidateSet('Check', 'Local', 'Handoff', 'Finish', 'All')][string]$Phase = 'Local'
 )
 $ErrorActionPreference = 'Stop'
 $srcRoot = Split-Path -Parent $PSScriptRoot      # the dropped folder (repo root)
@@ -267,7 +268,7 @@ function Do-Verify {
   }
 }
 
-# ---------------------------------------------------------------- phase: Domain
+# ---------------------------------------------------------------- phase: Handoff (writes NO Active Directory changes)
 function Set-FolderAcl([string]$path, [string]$gmsaSam, [string]$analystSam, $analystRights, [string]$analystInherit = 'ContainerInherit,ObjectInherit') {
   $acl = New-Object Security.AccessControl.DirectorySecurity
   $acl.SetAccessRuleProtection($true, $false)
@@ -284,90 +285,128 @@ function Set-FolderAcl([string]$path, [string]$gmsaSam, [string]$analystSam, $an
   Set-Acl -Path $path -AclObject $acl
 }
 
-function Do-Domain {
-  Step 'Domain: gMSA, rights, ACLs, tasks'
+function Do-Handoff {
+  Step 'Hand-off package for a Domain Admin (nothing in AD is changed by this tool)'
+  $h = Join-Path $Dir.root 'AD-HANDOFF'
+  New-Item -ItemType Directory -Force $h | Out-Null
+  Copy-Item (Join-Path $Dir.bin 'powershell\New-HashslingerGmsa.ps1') $h -Force
+  $domName = try { (Get-CimInstance Win32_ComputerSystem).Domain } catch { '(this domain)' }
+  $short = $env:COMPUTERNAME
+  $text = @"
+HASHSLINGER - ACTIVE DIRECTORY REQUEST (for a Domain Admin)
+Generated $(Get-Date)   Domain: $domName   Scan server: $short   Authorization ref: ____________________
+
+WHAT THIS IS
+Hashslinger is an authorized internal tool that checks AD password hashes against breached-password lists
+and reports accounts that need a reset. It never changes Active Directory and never stores or shows plaintext
+passwords. The server operator is NOT a Domain Admin, so these three one-time items need to be done by you.
+
+WHAT WE NEED (about 2 minutes)
+1. A KDS root key must exist (required by any group Managed Service Account).
+     Check:  Get-KdsRootKey
+     If none: Add-KdsRootKey -EffectiveImmediately      (usable in about 10 hours; every DC must have replicated it)
+2. A group Managed Service Account named '$gmsa' whose password only the computer '$short' can retrieve.
+3. That account granted two permissions on the DOMAIN root only (not forest, not schema):
+     Replicating Directory Changes   (1131f6aa-9c07-11d1-f79f-00c04fc2dcd2)
+     Replicating Directory Changes All (1131f6ad-9c07-11d1-f79f-00c04fc2dcd2)
+   These are the directory replication ("DCSync") rights. The tool needs them to read password hashes so it
+   can compare them to the lists. Nothing else is requested.
+
+HOW (run elevated, as a Domain Admin, on any machine with the AD PowerShell module; READ the script first)
+   cd to this folder, then preview and apply:
+     .\New-HashslingerGmsa.ps1 -Name $gmsa -RunServer $short -WhatIf
+     .\New-HashslingerGmsa.ps1 -Name $gmsa -RunServer $short -GrantReplicationRights
+   Or do the same by hand in ADUC / ADSI Edit. The script is a convenience, not a requirement.
+
+BEFORE THE FIRST SCAN
+   * Tell the SOC: the scan server '$short' and account '$gmsa' will trigger DCSync / replication alerts.
+   * Expect replication traffic from '$short' to a domain controller.
+
+TO UNDO
+     Remove-ADServiceAccount $gmsa
+     and remove that account's two permissions from the domain root (ADSI Edit > domain root > Security).
+
+WHEN DONE
+   Tell the server operator. They finish with:  Setup-Hashslinger.cmd -Phase Finish   (or the wizard's Finish button).
+"@
+  Set-Content (Join-Path $h 'README-FOR-DOMAIN-ADMIN.txt') $text -Encoding UTF8
+  Result 'Domain Admin hand-off written' 'PASS' $h
+}
+
+# ---------------------------------------------------------------- phase: Finish (read-only AD checks, local changes only)
+function Do-Finish {
+  Step 'Finish: verify the AD prerequisites (read-only), then install locally'
   if ($env:COMPUTERNAME -ne $runServer.Split('.')[0] -and $env:COMPUTERNAME -ne $runServer) {
-    Result 'Running on the run server' 'FAIL' "this is $env:COMPUTERNAME, init says $runServer. Run the Domain phase on the run server."
-    return
+    Result 'Running on the run server' 'FAIL' "this is $env:COMPUTERNAME, init says $runServer."; return
   }
-  if (-not $analystGroup) { Result 'Analyst group' 'SKIP' 'none set: only the gMSA, local Administrators and SYSTEM get access' }
-  Import-Module ActiveDirectory
+  try { Import-Module ActiveDirectory -ErrorAction Stop } catch { Result 'ActiveDirectory module' 'FAIL' 'install RSAT-AD-PowerShell'; return }
   $dom = Get-ADDomain
   $domainNC = $dom.DistinguishedName
-  $gmsaSam = "$($dom.NetBIOSName)\$gmsa$"
+  $gmsaSam = "$($dom.NetBIOSName)\${gmsa}$"
+  $svc = Get-ADServiceAccount -Filter "Name -eq '$gmsa'" -Properties PrincipalsAllowedToRetrieveManagedPassword -ErrorAction SilentlyContinue
+  if (-not $svc) { Result 'gMSA exists in AD' 'FAIL' "not found. A Domain Admin must complete the request in $($Dir.root)\AD-HANDOFF first."; return }
+  Result 'gMSA exists in AD' 'PASS' $gmsaSam
+  $me = Get-ADComputer $env:COMPUTERNAME
+  if (@($svc.PrincipalsAllowedToRetrieveManagedPassword) -contains $me.DistinguishedName) { Result 'This server may retrieve the gMSA password' 'PASS' }
+  else { Result 'This server may retrieve the gMSA password' 'FAIL' "not allowed. The Domain Admin used a different -RunServer than $env:COMPUTERNAME."; return }
 
-  # KDS root key
-  if (-not (Get-KdsRootKey)) {
-    if ($CreateKdsRootKey) {
-      if ($PSCmdlet.ShouldProcess('KDS root key', 'Create (effective immediately, LAB ONLY)')) { Add-KdsRootKey -EffectiveTime ((Get-Date).AddHours(-10)) | Out-Null; Result 'KDS root key' 'PASS' 'created (lab shortcut)' }
-    } else { Result 'KDS root key' 'FAIL' 'none exists. Create one (production waits 10h) or pass -CreateKdsRootKey in a lab.'; return }
-  } else { Result 'KDS root key' 'PASS' }
+  try {
+    $want = '1131f6aa-9c07-11d1-f79f-00c04fc2dcd2', '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2'
+    $aces = @((Get-Acl "AD:$domainNC").Access | Where-Object { $_.IdentityReference.Value -eq $gmsaSam -and $_.AccessControlType -eq 'Allow' })
+    $have = @($want | Where-Object { $g = [Guid]$_; ($aces | Where-Object { $_.ObjectType -eq $g }) })
+    if ($have.Count -eq 2) { Result 'gMSA has both replication rights (domain root)' 'PASS' }
+    else { Result 'gMSA has both replication rights (domain root)' 'WARN' "found $($have.Count) of 2. Scans will fail until a Domain Admin grants them." }
+  } catch { Result 'gMSA replication rights' 'WARN' ('could not read the domain root permissions: ' + $_.Exception.Message) }
 
-  # gMSA
-  $server = Get-ADComputer ($runServer.Split('.')[0])
-  $existing = Get-ADServiceAccount -Filter "Name -eq '$gmsa'" -ErrorAction SilentlyContinue
-  if ($PSCmdlet.ShouldProcess($gmsa, 'Create or update gMSA (password retrievable only by the run server)')) {
-    if ($existing) { Set-ADServiceAccount -Identity $gmsa -PrincipalsAllowedToRetrieveManagedPassword $server }
-    else { New-ADServiceAccount -Name $gmsa -DNSHostName "$gmsa.$($dom.DNSRoot)" -PrincipalsAllowedToRetrieveManagedPassword $server -KerberosEncryptionType AES256 }
-    Install-ADServiceAccount -Identity $gmsa
-    if (Test-ADServiceAccount -Identity $gmsa) { Result 'gMSA installed and working on this server' 'PASS' $gmsaSam } else { Result 'gMSA installed and working on this server' 'FAIL' 'Test-ADServiceAccount failed' }
-  }
+  Install-ADServiceAccount -Identity $gmsa -ErrorAction SilentlyContinue
+  $ok = Test-ADServiceAccount -Identity $gmsa
+  if (-not $ok) { & klist.exe -li 0x3e7 purge | Out-Null; Start-Sleep -Seconds 5; $ok = Test-ADServiceAccount -Identity $gmsa }
+  if ($ok) { Result 'gMSA works on this server' 'PASS' } else { Result 'gMSA works on this server' 'FAIL' 'Test-ADServiceAccount is False. Wait for AD replication or reboot, then Finish again.'; return }
 
-  # replication rights: domain NC only (never forest/schema)
-  if ($PSCmdlet.ShouldProcess($domainNC, 'Grant Replicating Directory Changes (+All) to the gMSA')) {
-    $sid = (Get-ADServiceAccount $gmsa).SID
-    $acl = Get-Acl "AD:$domainNC"
-    foreach ($g in '1131f6aa-9c07-11d1-f79f-00c04fc2dcd2', '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2') {
-      $rule = New-Object DirectoryServices.ActiveDirectoryAccessRule($sid, [DirectoryServices.ActiveDirectoryRights]::ExtendedRight,
-        [Security.AccessControl.AccessControlType]::Allow, [Guid]$g, [DirectoryServices.ActiveDirectorySecurityInheritance]::None)
-      $acl.AddAccessRule($rule)
-    }
-    Set-Acl "AD:$domainNC" $acl
-    Result 'Replication rights (domain NC only)' 'PASS' $domainNC
-  }
-
-  # folder ACLs
-  $analystSam = if ($analystGroup) { "$($dom.NetBIOSName)\$analystGroup" } else { $null }
+  # folder permissions (local) : gMSA, local Administrators, SYSTEM only unless an analyst group is set
+  $analystSam = $null
+  if ($analystGroup) { try { $analystSam = "$($dom.NetBIOSName)\$analystGroup"; $null = Get-ADGroup $analystGroup } catch { Result 'Analyst group' 'WARN' "group '$analystGroup' not found; ignoring"; $analystSam = $null } }
   $plan = @(
     @($Dir.store, $null, 'ContainerInherit,ObjectInherit'),
-    @($Dir.config, 'ReadAndExecute', 'ContainerInherit,ObjectInherit'),   # the analyst GUI reads the scope list
+    @($Dir.config, 'ReadAndExecute', 'ContainerInherit,ObjectInherit'),
     @($Dir.staging, 'Modify', 'ContainerInherit,ObjectInherit'),
     @($Dir.logs, $null, 'ContainerInherit,ObjectInherit'),
     @($Dir.output, 'ReadAndExecute', 'ContainerInherit,ObjectInherit'),
     @($Dir.status, 'ReadAndExecute', 'ContainerInherit,ObjectInherit'),
-    @($Dir.requests, 'CreateFiles', 'None')          # write-only drop box: this folder only, no read/list
+    @($Dir.requests, 'CreateFiles', 'None')
   )
   foreach ($entry in $plan) {
     if ($PSCmdlet.ShouldProcess($entry[0], 'Restrict ACL')) { Set-FolderAcl $entry[0] $gmsaSam $analystSam $entry[1] $entry[2] }
   }
-  Result 'Folder ACLs (least privilege)' 'PASS' $(if ($analystGroup) { 'gMSA, Administrators, SYSTEM full; analysts: staging modify, output/status read, requests create-only' } else { 'gMSA, local Administrators and SYSTEM only' })
+  Result 'Folder permissions' 'PASS' $(if ($analystSam) { 'gMSA, Administrators, SYSTEM; analyst group limited access' } else { 'gMSA, local Administrators and SYSTEM only' })
 
-  # scheduled tasks under the gMSA (no stored password)
+  # scheduled tasks under the gMSA (local; no stored password)
   $principal = New-ScheduledTaskPrincipal -UserId $gmsaSam -LogonType Password -RunLevel Limited
   $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
   $cadence = Opt 'scan.cadence' 'Weekly'
   $trigger = if ($cadence -eq 'Monthly') { New-ScheduledTaskTrigger -Weekly -WeeksInterval 4 -DaysOfWeek Sunday -At 2am } else { New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At 2am }
-  if ($PSCmdlet.ShouldProcess('Hashslinger-Scheduled', 'Register task')) {
+  if ($PSCmdlet.ShouldProcess('Hashslinger tasks', 'Register')) {
     Register-ScheduledTask -TaskName 'Hashslinger-Scheduled' -Force -Principal $principal -Settings $settings -Trigger $trigger `
       -Action (New-ScheduledTaskAction -Execute $exe -Argument "--config `"$runtimeCfg`" scan" -WorkingDirectory $Dir.bin) | Out-Null
     Register-ScheduledTask -TaskName 'Hashslinger-OnDemand' -Force -Principal $principal -Settings $settings `
       -Action (New-ScheduledTaskAction -Execute $exe -Argument "--config `"$runtimeCfg`" scan --request-dir `"$($Dir.requests)`"" -WorkingDirectory $Dir.bin) | Out-Null
     Result 'Scheduled tasks registered' 'PASS' "$cadence scan + on-demand, both as $gmsaSam"
-    # let analysts START the on-demand task only (skipped when no analyst group is set)
-    if ($analystGroup) { try {
-      $asid = (Get-ADGroup $analystGroup).SID.Value
-      $sddl = "D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;$asid)"
-      $svc = New-Object -ComObject Schedule.Service; $svc.Connect()
-      $svc.GetFolder('\').GetTask('Hashslinger-OnDemand').SetSecurityDescriptor($sddl, 0)
-      Result 'Analysts may start the on-demand task' 'PASS' $analystGroup
-    } catch { Result 'Analysts may start the on-demand task' 'WARN' ($_.Exception.Message + ' (set the task security descriptor manually)') } }
+    if ($analystSam) {
+      try {
+        $asid = (Get-ADGroup $analystGroup).SID.Value
+        $svcCom = New-Object -ComObject Schedule.Service; $svcCom.Connect()
+        $svcCom.GetFolder('\').GetTask('Hashslinger-OnDemand').SetSecurityDescriptor("D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;$asid)", 0)
+        Result 'Analysts may start the on-demand task' 'PASS' $analystGroup
+      } catch { Result 'Analysts may start the on-demand task' 'WARN' $_.Exception.Message }
+    }
   }
-  Result 'gMSA log-on-as-batch right' 'WARN' 'confirm "Log on as a batch job" allows the gMSA (check on the first task run)'
+  Result 'gMSA log-on-as-batch right' 'WARN' 'if a task will not start, allow "Log on as a batch job" for the gMSA (local policy or GPO)'
 }
 
 try {
   if ($Phase -in 'Local', 'All') { Do-Local; Do-Verify }
-  if ($Phase -in 'Domain', 'All') { Do-Domain }
+  if ($Phase -in 'Handoff', 'All') { Do-Handoff }
+  if ($Phase -eq 'Finish') { Do-Finish }
 }
 finally { Stop-Transcript | Out-Null }
 
