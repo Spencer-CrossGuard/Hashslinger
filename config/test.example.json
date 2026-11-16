@@ -1,0 +1,13 @@
+{
+  "mode": "live",
+  "target_server": "unused",
+  "target_ous": ["OU=Finance,DC=contoso,DC=com"],
+  "hash_store_path": "C:\\HashslingerTest\\store\\master.ntlm",
+  "staging_path": "C:\\HashslingerTest\\staging",
+  "log_path": "C:\\HashslingerTest\\logs\\audit.jsonl",
+  "output_path": "C:\\HashslingerTest\\output",
+  "request_dir": "C:\\HashslingerTest\\requests",
+  "pattern_rules_path": "C:\\HashslingerTest\\config\\pattern_rules.json",
+  "require_encrypted_volume": false,
+  "engine_command": ["powershell.exe", "-NoProfile", "-File", "C:\\HashslingerTest\\Fake-Engine.ps1", "-SearchBases", "{ous}"]
+}
