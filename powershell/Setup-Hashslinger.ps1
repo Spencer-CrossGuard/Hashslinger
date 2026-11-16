@@ -401,7 +401,38 @@ function Do-Finish {
       } catch { Result 'Analysts may start the on-demand task' 'WARN' $_.Exception.Message }
     }
   }
-  Result 'gMSA log-on-as-batch right' 'WARN' 'if a task will not start, allow "Log on as a batch job" for the gMSA (local policy or GPO)'
+
+  # ---- live test AS THE gMSA: the only check that proves the logon, the batch right and the replication rights all work
+  Step 'Live test as the gMSA (replicates this server''s own computer object; prints no secrets)'
+  if (-not $dc) { Result 'Live replication test as the gMSA' 'WARN' 'ad.domain_controller is not set, skipped'; return }
+  $probeOut = Join-Path $Dir.status 'gmsa-probe.txt'
+  Remove-Item $probeOut -ErrorAction SilentlyContinue
+  $probeArgs = "-NoProfile -File `"$($Dir.bin)\powershell\Test-GmsaReplication.ps1`" -Server $dc -Sam `"$($env:COMPUTERNAME)`$`" -OutFile `"$probeOut`""
+  Register-ScheduledTask -TaskName 'Hashslinger-Probe' -Force -Principal $principal -Settings $settings `
+    -Action (New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $probeArgs) | Out-Null
+  Start-ScheduledTask -TaskName 'Hashslinger-Probe'
+  $deadline = (Get-Date).AddSeconds(90)
+  while (-not (Test-Path $probeOut) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }
+  $info = Get-ScheduledTaskInfo -TaskName 'Hashslinger-Probe'
+  Unregister-ScheduledTask -TaskName 'Hashslinger-Probe' -Confirm:$false
+  if (Test-Path $probeOut) {
+    $txt = @(Get-Content $probeOut); Remove-Item $probeOut -ErrorAction SilentlyContinue
+    $who = ($txt | Where-Object { $_ -like 'identity:*' } | Select-Object -First 1)
+    if ($txt | Where-Object { $_ -like 'OK*' }) { Result 'Live replication test as the gMSA' 'PASS' "$who; replication works" }
+    else {
+      $err = ($txt | Where-Object { $_ -like 'ERROR*' } | Select-Object -First 1)
+      $hint = if ($err -match 'Replication access was denied') { 'The DC accepted the logon but refused replication: the two permissions are not effective for this gMSA. Check they are on the DOMAIN ROOT (not an OU) as Allow entries; ask the Domain Admin to grant them via a group that contains only the gMSA.' }
+              elseif ($err -match 'RPC server|unavailable') { 'This server cannot reach the DC over RPC (firewall or DC name).' }
+              elseif ($err -match 'DSInternals') { 'DSInternals did not load for this account (module path or policy).' } else { '' }
+      Result 'Live replication test as the gMSA' 'FAIL' "$who | $err | $hint"
+    }
+  } else {
+    $code = '0x{0:X}' -f $info.LastTaskResult
+    $hint = if ($code -in '0x80070569', '0x8007052E', '0x8007052F') { 'LOGON FAILURE: the gMSA lacks "Log on as a batch job" on this server (Local Security Policy > User Rights Assignment, or the GPO).' }
+            elseif ($code -eq '0x1') { 'The probe script ran and failed. Check the script execution policy (unsigned scripts) and that DSInternals is installed for all users.' }
+            else { 'The task did not produce output. Run: Get-ScheduledTaskInfo Hashslinger-Probe, and check Task Scheduler history.' }
+    Result 'Live replication test as the gMSA' 'FAIL' "task result $code | $hint"
+  }
 }
 
 try {

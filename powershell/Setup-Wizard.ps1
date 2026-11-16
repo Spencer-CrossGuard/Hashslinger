@@ -101,7 +101,13 @@ function Log([string]$m) { $log.AppendText($m + "`r`n") }
 function Pump { [Windows.Forms.Application]::DoEvents() }
 
 # Run Setup-Hashslinger as a child, streaming its output into the log box. Returns the exit code.
+$script:fails = @()
+function Fail-Text([string]$default) {
+  if ($script:fails.Count) { $t = ($script:fails[0] -replace '^\[FAIL\]\s*', ''); if ($t.Length -gt 240) { $t = $t.Substring(0, 240) + '...' }; return $t }
+  return $default
+}
 function Invoke-Setup([string]$initPath, [string]$phase) {
+  $script:fails = @()
   $psi = New-Object Diagnostics.ProcessStartInfo
   $psi.FileName = 'powershell.exe'
   $a = "-NoProfile -ExecutionPolicy Bypass -File `"$PSScriptRoot\Setup-Hashslinger.ps1`" -InitConfig `"$initPath`" -Phase $phase"
@@ -116,11 +122,11 @@ function Invoke-Setup([string]$initPath, [string]$phase) {
   [void]$proc.Start(); $proc.BeginOutputReadLine(); $proc.BeginErrorReadLine()
   $line = $null
   while (-not $proc.HasExited -or -not $q.IsEmpty) {
-    while ($q.TryDequeue([ref]$line)) { Log $line }
+    while ($q.TryDequeue([ref]$line)) { Log $line; if ($line -like '`[FAIL`]*') { $script:fails += $line } }
     Pump; Start-Sleep -Milliseconds 100
   }
   $proc.WaitForExit(); Start-Sleep -Milliseconds 300
-  while ($q.TryDequeue([ref]$line)) { Log $line }
+  while ($q.TryDequeue([ref]$line)) { Log $line; if ($line -like '`[FAIL`]*') { $script:fails += $line } }
   Unregister-Event -SourceIdentifier $id1; Unregister-Event -SourceIdentifier $id2
   return $proc.ExitCode
 }
@@ -133,7 +139,7 @@ $btnFinish.Add_Click({
     $rc = Invoke-Setup $initFile 'Finish'
     $script:summaryPath = Join-Path $script:installRoot 'SETUP-SUMMARY.txt'; $btnSummary.Enabled = (Test-Path $script:summaryPath)
     if ($rc -eq 0) { $lblResult.ForeColor = [Drawing.Color]::SeaGreen; $lblResult.Text = 'All done. You can run the first scan now.'; $btnScan.Enabled = $true }
-    else { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Not finished. If the log says the gMSA is missing, the Domain Admin has not completed the hand-off yet.' }
+    else { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Not finished: ' + (Fail-Text 'see the log below.') }
   }
   catch { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Error: ' + $_.Exception.Message; Log ('ERROR: ' + $_.Exception.Message) }
   finally { $bar.Style = 'Continuous'; $btnFinish.Enabled = $true }
@@ -180,14 +186,14 @@ $btnGo.Add_Click({
     $rc = Invoke-Setup $initPath 'Local'
     $script:summaryPath = Join-Path $script:installRoot 'SETUP-SUMMARY.txt'
     $btnSummary.Enabled = (Test-Path $script:summaryPath)
-    if ($rc -ne 0) { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'The install has problems. See the log below and the summary.'; return }
+    if ($rc -ne 0) { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'The install has a problem: ' + (Fail-Text 'see the log below.'); return }
     if ($chkPre.Checked) {
       # the gMSA already exists: skip the Domain Admin hand-off and go straight to the read-only checks + local finish
       $lblResult.Text = 'Installed. Checking the existing service account and finishing...'
       $rc = Invoke-Setup $initPath 'Finish'
       $btnFinish.Enabled = $true
       if ($rc -eq 0) { $lblResult.ForeColor = [Drawing.Color]::SeaGreen; $lblResult.Text = 'All done. You can run the first scan now.'; $btnScan.Enabled = $true }
-      else { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Not finished. See the log: check the service account name, that this server may use it, and its rights.' }
+      else { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Not finished: ' + (Fail-Text 'see the log below.') }
     } else {
       [void](Invoke-Setup $initPath 'Handoff')
       $btnHand.Enabled = $true; $btnFinish.Enabled = $true
