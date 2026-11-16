@@ -366,14 +366,24 @@ function Do-Finish {
     $rules = (Get-Acl "AD:$domainNC").GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])
     $want = [ordered]@{ '1131f6aa-9c07-11d1-f79f-00c04fc2dcd2' = 'Replicating Directory Changes'; '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2' = 'Replicating Directory Changes All' }
     $problems = @()
+    $aceDump = @()
     foreach ($k in $want.Keys) {
       $g = [Guid]$k
-      $mine = @($rules | Where-Object {
+      $cand = @($rules | Where-Object {
           $sids.Contains($_.IdentityReference.Value) -and
           (($_.ActiveDirectoryRights -band [DirectoryServices.ActiveDirectoryRights]::ExtendedRight) -ne 0) -and
           ($_.ObjectType -eq $g -or $_.ObjectType -eq [Guid]::Empty) })
+      foreach ($c in $cand) {
+        $who = try { $c.IdentityReference.Translate([Security.Principal.NTAccount]).Value } catch { $c.IdentityReference.Value }
+        $aceDump += ('{0} | {1} | {2} | applies to: {3}' -f $who, $want[$k], $c.AccessControlType, $c.InheritanceType)
+      }
+      # an entry only counts if it applies to the domain root object itself (not descendants-only)
+      $mine = @($cand | Where-Object { $_.InheritanceType -in 'None', 'All', 'SelfAndChildren' })
       if (@($mine | Where-Object { $_.AccessControlType -eq 'Deny' }).Count) { $problems += "$($want[$k]): denied by an entry" }
-      elseif (-not @($mine | Where-Object { $_.AccessControlType -eq 'Allow' }).Count) { $problems += "$($want[$k]): no allow entry for the gMSA or any of its groups" }
+      elseif (-not @($mine | Where-Object { $_.AccessControlType -eq 'Allow' }).Count) {
+        if ($cand.Count) { $problems += "$($want[$k]): entry exists but does NOT apply to the domain root itself (it is descendants-only); it must apply to 'this object'" }
+        else { $problems += "$($want[$k]): no allow entry for the gMSA or any of its groups" }
+      }
     }
     if ($problems.Count -eq 0) { Result 'Replication rights on the domain root (effective, read-only)' 'PASS' 'allowed for the gMSA directly or via a group' }
     else { Result 'Replication rights on the domain root (effective, read-only)' 'WARN' (($problems -join '; ') + '. Scans will fail until a Domain Admin fixes this.') }
@@ -444,7 +454,8 @@ function Do-Finish {
       $hint = if ($err -match 'Replication access was denied') { 'The DC accepted the logon but refused replication: the two permissions are not effective for this gMSA. Check they are on the DOMAIN ROOT (not an OU) as Allow entries; ask the Domain Admin to grant them via a group that contains only the gMSA.' }
               elseif ($err -match 'RPC server|unavailable') { 'This server cannot reach the DC over RPC (firewall or DC name).' }
               elseif ($err -match 'DSInternals') { 'DSInternals did not load for this account (module path or policy).' } else { '' }
-      Result 'Live replication test as the gMSA' 'FAIL' "$who | $err | $hint"
+      $dumpText = if ($aceDump) { "`n      Permission entries found for this gMSA:`n        " + ($aceDump -join "`n        ") } else { '' }
+      Result 'Live replication test as the gMSA' 'FAIL' "$who | $err | $hint$dumpText"
     }
   } else {
     $code = '0x{0:X}' -f $info.LastTaskResult
