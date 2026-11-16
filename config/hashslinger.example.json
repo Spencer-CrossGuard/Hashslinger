@@ -5,7 +5,7 @@
   "account_types": ["User", "Service"],
   "uac": {
     "require_flags": [],
-    "exclude_flags": ["SMARTCARD_REQUIRED", "ACCOUNTDISABLE"]
+    "exclude_flags": ["SMARTCARD_REQUIRED"]
   },
   "hash_store_path": "D:\\Hashslinger\\store\\master.ntlm",
   "staging_path": "D:\\Hashslinger\\staging",
@@ -14,7 +14,8 @@
   "allowed_output_roots": ["D:\\Hashslinger\\output"],
   "request_dir": "D:\\Hashslinger\\requests",
   "pattern_rules_path": "D:\\Hashslinger\\config\\pattern_rules.json",
-  "require_encrypted_volume": true,
+  "require_encrypted_volume": false,
+  "authorized_edipis": [],
   "retention_days": 90,
   "cadence": "weekly",
   "powershell_path": "powershell.exe",

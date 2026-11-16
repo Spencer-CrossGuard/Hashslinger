@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -30,14 +31,41 @@ class ScanRequestError(Exception):
     pass
 
 
-def load_request(cfg: Config, path: Path) -> tuple[str, Path, str | None]:
-    """Validate an analyst request (from the GUI). Only config-listed OUs are accepted."""
+@dataclass
+class ScanRequest:
+    ou: str
+    output_dir: Path
+    edipi: str
+    reason: str
+    requested_by: str | None
+
+
+def load_request(cfg: Config, path: Path) -> ScanRequest:
+    """Validate an analyst request. Raises ScanRequestError (carrying raw fields) on any problem."""
     req = json.loads(Path(path).read_text(encoding="utf-8"))
+    edipi = str(req.get("edipi", "")).strip()
+    reason = str(req.get("reason", "")).strip()
+    who = req.get("requested_by")
+
+    def bad(msg: str) -> ScanRequestError:
+        e = ScanRequestError(msg)
+        e.meta = (edipi, reason, who)  # type: ignore[attr-defined]
+        return e
+
+    if not re.fullmatch(r"\d{10}", edipi):
+        raise bad("EDIPI must be exactly 10 digits")
+    if cfg.authorized_edipis and edipi not in cfg.authorized_edipis:
+        raise bad("EDIPI is not authorized to request scans")
+    if not (10 <= len(reason) <= 500):
+        raise bad("a reason of 10 to 500 characters is required")
     ou = req.get("ou")
     if ou not in cfg.target_ous:
-        raise ScanRequestError("requested OU is not in the configured list")
-    out = check_output_allowed(cfg, Path(req["output_dir"]))
-    return ou, out, req.get("requested_by")
+        raise bad("requested OU is not in the configured list")
+    try:
+        out = check_output_allowed(cfg, Path(req["output_dir"]))
+    except Exception as e:
+        raise bad(str(e))
+    return ScanRequest(ou, out, edipi, reason, who)
 
 
 def run_scan(
@@ -46,6 +74,8 @@ def run_scan(
     output_dir: Path | None = None,
     trigger: str = "scheduled",
     requested_by: str | None = None,
+    edipi: str | None = None,
+    reason: str | None = None,
     skip_preflight: bool = False,
 ) -> RunResult:
     ous = ous or list(cfg.target_ous)
@@ -55,7 +85,7 @@ def run_scan(
     out_dir = Path(output_dir) if output_dir else cfg.output_path
     log = AuditLog(cfg.log_path)
     run_id = log.next_run_id()
-    log.start(run_id, trigger, ous, requested_by)
+    log.start(run_id, trigger, ous, requested_by, edipi, reason)
 
     vault = HashVault()
     hex_seen: set[str] = set()

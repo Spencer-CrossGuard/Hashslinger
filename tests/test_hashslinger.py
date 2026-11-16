@@ -135,14 +135,37 @@ class Pipeline(unittest.TestCase):
         with self.assertRaises(ScanRequestError):
             run_scan(cfg, ["OU=Everything,DC=contoso,DC=com"])
         req = d / "req.json"
-        req.write_text(json.dumps({"ou": "OU=Other,DC=x", "output_dir": str(d / "out")}))
+        good = {"ou": OU, "output_dir": str(d / "out" / "sub"), "edipi": "1234567890",
+                "reason": "Quarterly audit ticket 4411"}
+
+        def attempt(**over):
+            req.write_text(json.dumps({**good, **over}))
+            return load_request(cfg, req)
+
+        self.assertEqual(attempt().ou, OU)
+        for over in ({"ou": "OU=Other,DC=x"}, {"output_dir": str(d.parent)}, {"edipi": "12345"},
+                     {"edipi": "12345678ab"}, {"reason": "short"}, {"reason": ""}):
+            with self.assertRaises(ScanRequestError, msg=str(over)):
+                attempt(**over)
+        cfg.authorized_edipis = ["1111111111"]
         with self.assertRaises(ScanRequestError):
-            load_request(cfg, req)
-        req.write_text(json.dumps({"ou": OU, "output_dir": str(d.parent)}))
-        with self.assertRaises(Exception):
-            load_request(cfg, req)
-        req.write_text(json.dumps({"ou": OU, "output_dir": str(d / "out" / "sub")}))
-        self.assertEqual(load_request(cfg, req)[0], OU)
+            attempt()
+
+    def test_edipi_and_reason_logged_and_rejection_logged(self):
+        from hashslinger.cli import main
+        d, cfg = self.make_cfg()
+        req = d / "r.json"
+        req.write_text(json.dumps({"ou": OU, "output_dir": str(d / "out"), "edipi": "1234567890",
+                                   "reason": "Weekly review ticket 77", "requested_by": "CORP\\a"}))
+        self.assertEqual(main(["--config", str(d / "c.json"), "scan", "--request", str(req)]), 0)
+        self.assertFalse(req.exists())
+        start = json.loads((d / "log" / "a.jsonl").read_text().splitlines()[0])
+        self.assertEqual((start["edipi"], start["reason"]), ("1234567890", "Weekly review ticket 77"))
+        req.write_text(json.dumps({"ou": OU, "output_dir": str(d / "out"), "edipi": "bad", "reason": "x"}))
+        self.assertEqual(main(["--config", str(d / "c.json"), "scan", "--request", str(req)]), 2)
+        last = json.loads((d / "log" / "a.jsonl").read_text().splitlines()[-1])
+        self.assertEqual((last["event"], last["edipi"]), ("rejected", "bad"))
+        self.assertFalse(req.exists())
 
 
 if __name__ == "__main__":

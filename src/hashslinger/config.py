@@ -37,7 +37,7 @@ class Config:
     target_ous: list[str] = field(default_factory=list)
     account_types: list[str] = field(default_factory=lambda: ["User", "Service"])
     uac_require: list[int] = field(default_factory=list)
-    uac_exclude: list[int] = field(default_factory=lambda: [0x40000, 0x2])
+    uac_exclude: list[int] = field(default_factory=lambda: [0x40000])  # smart-card-required accounts have no usable password
     hash_store_path: Path = Path("store/master.ntlm")
     staging_path: Path = Path("staging")
     log_path: Path = Path("logs/audit.jsonl")
@@ -45,7 +45,7 @@ class Config:
     allowed_output_roots: list[Path] = field(default_factory=list)
     request_dir: Path = Path("requests")
     pattern_rules_path: Path = Path("config/pattern_rules.json")
-    require_encrypted_volume: bool = True
+    require_encrypted_volume: bool = False
     retention_days: int | None = None
     powershell_path: str = "powershell.exe"
     engine_script: Path = Path("powershell/Get-AccountHashes.ps1")
@@ -53,6 +53,7 @@ class Config:
     engine_timeout_seconds: int = 3600
     ntds_path: str = ""
     system_hive_path: str = ""
+    authorized_edipis: list[str] = field(default_factory=list)  # empty = any valid EDIPI
 
     @classmethod
     def load(cls, path: Path) -> "Config":
@@ -74,7 +75,8 @@ class Config:
                 p = Path(raw[key])
                 setattr(c, key, p if p.is_absolute() else base / p)
         c.allowed_output_roots = [Path(p) for p in raw.get("allowed_output_roots", [])]
-        c.require_encrypted_volume = raw.get("require_encrypted_volume", True)
+        c.require_encrypted_volume = raw.get("require_encrypted_volume", False)
+        c.authorized_edipis = [str(e) for e in raw.get("authorized_edipis", [])]
         c.retention_days = raw.get("retention_days")
         c.powershell_path = raw.get("powershell_path", c.powershell_path)
         c.engine_command = raw.get("engine_command")

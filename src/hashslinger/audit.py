@@ -37,11 +37,19 @@ class AuditLog:
                     n += 1
         return f"{today}-{n + 1:03d}"
 
-    def start(self, run_id: str, trigger: str, scope: list[str], requested_by: str | None = None) -> None:
+    def start(self, run_id: str, trigger: str, scope: list[str], requested_by: str | None = None,
+              edipi: str | None = None, reason: str | None = None) -> None:
         self._append({
             "event": "start", "run_id": run_id, "time": _now(), "trigger": trigger,
             "run_as": getpass.getuser(), "host": socket.gethostname(),
-            "requested_by": requested_by, "scope": scope,
+            "requested_by": requested_by, "edipi": edipi, "reason": reason, "scope": scope,
+        })
+
+    def rejected(self, why: str, edipi: str | None, reason: str | None, requested_by: str | None) -> None:
+        self._append({
+            "event": "rejected", "time": _now(), "run_as": getpass.getuser(),
+            "host": socket.gethostname(), "why": why, "edipi": edipi, "reason": reason,
+            "requested_by": requested_by,
         })
 
     def end(self, run_id: str, status: str, accounts_processed: int, output: str | None,

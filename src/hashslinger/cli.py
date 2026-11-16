@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from .config import Config
+from .audit import AuditLog
 from .runner import ScanRequestError, load_request, run_scan
 from .store import HashStore, process_staging
 
@@ -33,9 +34,14 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     try:
         if args.request:
-            ou, out, who = load_request(cfg, args.request)
-            args.request.unlink(missing_ok=True)
-            res = run_scan(cfg, [ou], out, "on-demand", who)
+            try:
+                rq = load_request(cfg, args.request)
+            except ScanRequestError as e:
+                AuditLog(cfg.log_path).rejected(str(e), *getattr(e, "meta", (None, None, None)))
+                raise
+            finally:
+                args.request.unlink(missing_ok=True)  # request content now lives only in the audit log
+            res = run_scan(cfg, [rq.ou], rq.output_dir, "on-demand", rq.requested_by, rq.edipi, rq.reason)
         else:
             res = run_scan(cfg, [args.ou] if args.ou else None, args.output_dir, args.trigger)
     except (ScanRequestError, RuntimeError) as e:

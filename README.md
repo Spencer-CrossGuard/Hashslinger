@@ -33,11 +33,14 @@ sorted master, atomic swap). Files ending `.ntlm` are parsed as hex hashes in an
 1. **Filtering before hashes leave the DC.** DRS replication cannot filter by OU or UAC server side.
    The engine first runs an LDAP query (SearchBase + bitwise UAC clauses), then replicates only the
    matching accounts by ObjectGuid. Offline `ntds.dit` mode can only filter after loading.
-2. **On-demand scans.** Analysts lack replication rights, so the GUI only writes a validated request
+2. **On-demand scans.** Analysts must enter a 10-digit EDIPI and a reason (10-500 chars). Both go into the
+   request file and the audit log (`start` entry; invalid or unauthorized requests are logged as `rejected`).
+   Optional `authorized_edipis` allowlist in config. The request folder is a write-only drop box for analysts;
+   only the GMSA can read the file, and it is deleted after being read. Analysts lack replication rights, so the GUI only writes a validated request
    file and starts a scheduled task that runs as the GMSA. The task re-validates OU against config and
    output folder against `allowed_output_roots`.
-3. **Encryption at rest** is enforced as a preflight check that the hash store, staging and output
-   paths sit on BitLocker-protected volumes (`require_encrypted_volume`), not app-level crypto.
+3. **Encryption at rest** is an optional preflight check (`require_encrypted_volume`, default off)
+   that the hash store, staging and output paths sit on BitLocker volumes. Turn it on once BitLocker is set up.
 4. **Wiping is best effort.** Account hashes live in one zeroed buffer, temp files are overwritten then
    deleted, but Python strings and SSD/CoW filesystems can retain remnants. Volume encryption is the
    real control. The audit log records `wipe_confirmed`.
@@ -47,8 +50,8 @@ sorted master, atomic swap). Files ending `.ntlm` are parsed as hex hashes in an
 - Live replication by default, offline ntds.dit as `mode: "offline"`.
 - Cadence weekly (`Install-Hashslinger.ps1 -Cadence Monthly` for monthly); per-engagement via config.
 - CSV lands in `output_path`; retention is `retention_days` (unset = keep forever).
-- "Password-enabled" is interpreted as excluding `ACCOUNTDISABLE` plus the configurable smart-card
-  flag. Both are in `uac.exclude_flags`/`require_flags`. Confirm this reading.
+- "Password-enabled" means smart-card-required is NOT set. Default `uac.exclude_flags` is
+  `["SMARTCARD_REQUIRED"]` only; disabled accounts are still audited.
 - Starter pattern rules are in `config/pattern_rules.json`; the analyst owns them.
 - Multiple findings for one account are merged into one row (reasons joined with `; `, highest severity).
 

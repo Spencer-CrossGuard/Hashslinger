@@ -48,12 +48,14 @@ foreach ($d in $dirs) {
     $inh = 'ContainerInherit,ObjectInherit'
     $analyst = "$($domain.NetBIOSName)\$AnalystGroup"
     # Analysts: drop requests, maintain custom terms, read reports. No access to the hash store or audit log.
-    $analystRights = switch -Wildcard ($d) { '*requests' { 'Modify' } '*staging' { 'Modify' } '*output' { 'ReadAndExecute' } default { $null } }
+    # requests: create-only (write-only drop box). Analysts cannot list or read request files; only the gMSA can.
+    $analystRights = switch -Wildcard ($d) { '*requests' { 'CreateFiles' } '*staging' { 'Modify' } '*output' { 'ReadAndExecute' } default { $null } }
     foreach ($who in @($gmsaSam, 'BUILTIN\Administrators')) {
       $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($who, $full, $inh, 'None', 'Allow')))
     }
     if ($analystRights) {
-      $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($analyst, $analystRights, $inh, 'None', 'Allow')))
+      $aInh = if ($d -like '*requests') { 'None' } else { $inh }   # drop box: this folder only, nothing inherited by files
+      $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($analyst, $analystRights, $aInh, 'None', 'Allow')))
     }
     # Failed access attempts by anyone else are audited (needs 'Audit File System' policy
     # and a forwarder/alert rule on event 4656/4663 failures to meet the alerting requirement).
