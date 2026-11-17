@@ -41,6 +41,9 @@ $types = $AccountTypes -split ',' | Where-Object { $_ }
 $exFlags = @($ExcludeUacFlags -split ',' | Where-Object { $_ } | ForEach-Object { [int]$_ })
 $reqFlags = @($RequireUacFlags -split ',' | Where-Object { $_ } | ForEach-Object { [int]$_ })
 $out = [Console]::Out
+# Progress lines for the exe (it shows them in the console and the progress viewer). Marker chosen so it can never
+# be mistaken for an account line (account lines have 6 tab-separated fields and never start with this).
+function Status([string]$m) { $out.WriteLine('##HS## ' + $m) }
 
 function ToHex($b) { if ($b) { [BitConverter]::ToString([byte[]]$b).Replace('-', '') } else { '' } }
 function Clean([string]$s) { $s -replace '[\t\r\n]', ' ' }
@@ -92,6 +95,7 @@ if ($Mode -eq 'live') {
     if (-not [DirectoryServices.DirectoryEntry]::Exists("LDAP://$Server/$b")) { throw "Search base not found on ${Server}: $b (the built-in Users container is CN=Users, not OU=Users)" }
   }
   $scope = New-Object 'System.Collections.Generic.Dictionary[Guid,string]'
+  $script:found = 0
   foreach ($b in $bases) {
     foreach ($t in $types) {
       $ds = New-Object System.DirectoryServices.DirectorySearcher
@@ -100,27 +104,37 @@ if ($Mode -eq 'live') {
       $ds.PageSize = 1000
       $ds.SearchScope = 'Subtree'
       [void]$ds.PropertiesToLoad.Add('objectguid')
+      Status "scope search: looking for $t accounts under $b"
       $res = $ds.FindAll()
       foreach ($r in $res) {
         $g = New-Object Guid (, [byte[]]$r.Properties['objectguid'][0])
         $scope[$g] = $t
+        $script:found++
+        if (($script:found % 50000) -eq 0) { Status "scope search: $($script:found) accounts found so far" }
       }
       $res.Dispose(); $ds.Dispose()
     }
   }
+  Status "scope ready: $($scope.Count) accounts in scope. Starting replication from the DC (the first batch can take a while)..."
   $props = $null
   foreach ($k in $scope.Keys) { $props = Resolve-ReplProperties $k; break }
   $propArgs = @{}
   if ($props) { $propArgs['Properties'] = $props }
   if ($Replication -eq 'per-account') {
+    $script:done = 0
     foreach ($kv in $scope.GetEnumerator()) {
       Emit (Get-ADReplAccount -ObjectGuid $kv.Key -Server $Server @propArgs) $kv.Value
+      $script:done++
+      if (($script:done % 1000) -eq 0) { Status "replicated $($script:done) of $($scope.Count) accounts" }
     }
   }
   else {
     $type = $null
+    $script:seen = 0; $script:kept = 0
     Get-ADReplAccount -All -Server $Server @propArgs | ForEach-Object {
-      if ($scope.TryGetValue($_.Guid, [ref]$type)) { Emit $_ $type }
+      $script:seen++
+      if ($scope.TryGetValue($_.Guid, [ref]$type)) { $script:kept++; Emit $_ $type }
+      if (($script:seen % 100000) -eq 0) { Status "replicated $($script:seen) objects from the DC, $($script:kept) in scope" }
     }
   }
 }

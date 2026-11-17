@@ -104,6 +104,7 @@ namespace Hashslinger
                     while ((line = p.StandardOutput.ReadLine()) != null)
                     {
                         if (line.Length == 0) continue;
+                        if (line.StartsWith("##HS## ", StringComparison.Ordinal)) { Progress.Info(line.Substring(7)); continue; }
                         sink(Parse(line));
                     }
                     p.WaitForExit();
