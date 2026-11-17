@@ -30,6 +30,9 @@ param(
   [string]$SystemHivePath,
   # Explicit property sets. DSInternals 6.3+ otherwise also fetches the Schema NC (for LAPS), which needs replication
   # rights on the Schema partition and fails with 'Replication access was denied' for a domain-root-only account.
+  # Bulk mode pulls the WHOLE domain and drops everything out of scope, so a small scope would cost as much as a full
+  # scan (and would receive out-of-scope hashes). At or below this many in-scope accounts, per-account is used instead.
+  [int]$PerAccountThreshold = 5000,
   [string]$ReplProperties = 'GenericAccountInfo,NTHash,LMHash,SupplementalCredentials'
 )
 $ErrorActionPreference = 'Stop'
@@ -120,7 +123,12 @@ if ($Mode -eq 'live') {
   foreach ($k in $scope.Keys) { $props = Resolve-ReplProperties $k; break }
   $propArgs = @{}
   if ($props) { $propArgs['Properties'] = $props }
-  if ($Replication -eq 'per-account') {
+  $mode = $Replication
+  if ($Replication -eq 'bulk' -and $scope.Count -le $PerAccountThreshold) {
+    $mode = 'per-account'
+    Status "only $($scope.Count) accounts in scope (threshold $PerAccountThreshold): replicating just those accounts instead of pulling the whole domain"
+  }
+  if ($mode -eq 'per-account') {
     $script:done = 0
     foreach ($kv in $scope.GetEnumerator()) {
       Emit (Get-ADReplAccount -ObjectGuid $kv.Key -Server $Server @propArgs) $kv.Value

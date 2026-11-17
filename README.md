@@ -157,6 +157,12 @@ default password can add many rows, so enable it deliberately.
 - `Hashslinger.exe bench 5000000 100000000` times the C# side (ingest, sort + lookup, report) with synthetic
   data and no AD. It does NOT measure the AD pull, which is expected to dominate (PowerShell loop + DC).
 
+## Small scopes use per-account replication automatically
+
+Bulk replication pulls the whole domain and discards everything out of scope, so it costs the same for 2 accounts as for
+all of them, and sends out-of-scope hashes to the scan server. The engine therefore counts the in-scope accounts first and,
+at or below `per_account_threshold` (default 5000), replicates only those accounts. Larger scopes use the single bulk pull.
+
 ## Scale (millions of accounts)
 
 - **Bulk replication by default** (`"replication": "bulk"`). One `Get-ADReplAccount -All` stream,

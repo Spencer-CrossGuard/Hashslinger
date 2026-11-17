@@ -23,6 +23,7 @@
 
   "scan": {
     "check_duplicates": false,
+    "per_account_threshold": 5000,
     "cadence": "Weekly",
     "retention_days": 90,
     "engine_timeout_seconds": 86400

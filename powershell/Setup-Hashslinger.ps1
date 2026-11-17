@@ -198,6 +198,7 @@ function Do-Local {
   if (Test-Path $runtimeCfg) { Copy-Item $runtimeCfg ("$runtimeCfg.bak-{0:yyyyMMddHHmmss}" -f (Get-Date)) }
   $cfg = [ordered]@{
     mode = Opt 'ad.mode' 'live'; replication = Opt 'ad.replication' 'bulk'
+    per_account_threshold = [int](Opt 'scan.per_account_threshold' 5000)
     check_duplicates = [bool](Opt 'scan.check_duplicates' $false)
     target_server = $dc; target_ous = @($ous); account_types = @(Opt 'ad.account_types' @('User', 'Service'))
     uac = @{ exclude_flags = @(Opt 'ad.uac_exclude_flags' @('SMARTCARD_REQUIRED')) }
