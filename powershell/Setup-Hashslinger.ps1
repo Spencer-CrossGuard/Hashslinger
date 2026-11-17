@@ -319,10 +319,19 @@ function Do-Finish {
   $dom = Get-ADDomain
   $domainNC = $dom.DistinguishedName
   $gmsaSam = "$($dom.NetBIOSName)\${gmsa}$"
-  $svc = Get-ADServiceAccount -Filter "Name -eq '$gmsa'" -Properties PrincipalsAllowedToRetrieveManagedPassword -ErrorAction SilentlyContinue
+  $svc = Get-ADServiceAccount -Filter "Name -eq '$gmsa' -or SamAccountName -eq '$gmsa' -or SamAccountName -eq '${gmsa}$'" -Properties PrincipalsAllowedToRetrieveManagedPassword -ErrorAction SilentlyContinue
   if (-not $svc) { Result 'gMSA exists in AD' 'FAIL' "not found. Check the name in the init config (security.gmsa_name), or have a Domain Admin complete the request in $($Dir.root)\AD-HANDOFF."; return }
-  Result 'gMSA exists in AD' 'PASS' $gmsaSam
+  Result 'gMSA exists in AD' 'PASS' "$($svc.SamAccountName) ($($svc.SID))"
   $gmsaSid = $svc.SID
+  # use the REAL account name AD reports, and prove this server can resolve it (task scheduler and ACLs need that)
+  $gmsaSam = "$($dom.NetBIOSName)\$($svc.SamAccountName)"
+  try {
+    $gmsaSam = $gmsaSid.Translate([Security.Principal.NTAccount]).Value
+    Result 'This server can resolve the gMSA account name' 'PASS' $gmsaSam
+  } catch {
+    Result 'This server can resolve the gMSA account name' 'FAIL' "Windows on this server cannot translate the gMSA SID $gmsaSid to a name ($($_.Exception.Message)). Scheduled tasks and folder permissions need this. Typical causes: this server cannot reach a domain controller over SMB/RPC (TCP 445 and 135) for account lookups (AD reads over LDAP can still work), DNS problems, or a broken secure channel. Check: Test-ComputerSecureChannel ; and that TCP 445/135 to the DC are open."
+    return
+  }
   $me = Get-ADComputer $env:COMPUTERNAME
   if (@($svc.PrincipalsAllowedToRetrieveManagedPassword) -contains $me.DistinguishedName) { Result 'This server may retrieve the gMSA password' 'PASS' }
   else { Result 'This server may retrieve the gMSA password' 'FAIL' "not allowed. The Domain Admin used a different -RunServer than $env:COMPUTERNAME."; return }
