@@ -24,6 +24,14 @@ Run only with documented, signed authorization for the target network.
   `Install-ADServiceAccount <gMSA name>` on the scan server yourself, elevated, then click Finish again. Setup does not
   run it, so that nothing in the tool is even arguably an AD write.
 
+## DSInternals needs explicit -Properties (Schema NC)
+
+Recent DSInternals versions (reported 6.3 and later) make a default `Get-ADReplAccount` also read the Schema partition
+(for LAPS attributes), which fails with "Replication access was denied" for an account that, as designed, only has
+replication rights on the domain root. The engine and the setup probe therefore pass explicit `-Properties` sets
+(widest first, with fallbacks) that exclude LAPS, so domain-root-only rights are enough. The probe's output names the
+DSInternals version and which property set worked. An upstream fix was proposed; not confirmed released.
+
 ## FIPS mode
 
 Reading password hashes over AD replication needs MD5 and RC4 to decrypt the data. DSInternals therefore refuses to
