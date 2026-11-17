@@ -61,10 +61,43 @@ $txtGmsa = New-Object Windows.Forms.TextBox -Property @{ Left = 300; Top = 148; 
 $chkPre = New-Object Windows.Forms.CheckBox -Property @{ Text = 'Already created (has the rights)'; Left = 500; Top = 147; Width = 190 }
 $form.Controls.AddRange(@($txtGmsa, $chkPre))
 
-[void](Lbl ('3. Which parts of the directory to scan (everything underneath is included). ' + $adNote) 15 182 670 34)
-$lst = New-Object Windows.Forms.CheckedListBox -Property @{ Left = 15; Top = 218; Width = 670; Height = 170; CheckOnClick = $true }
-foreach ($o in $ouList) { [void]$lst.Items.Add($o) }
-$form.Controls.Add($lst)
+[void](Lbl ('3. Which parts of the directory to scan (everything underneath is included). Type to search. ' + $adNote) 15 182 670 34)
+$txtSearch = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 216; Width = 400 }
+$lblSel = Lbl '' 425 219 160
+$btnClearSel = New-Object Windows.Forms.Button -Property @{ Text = 'Clear selection'; Left = 590; Top = 214; Width = 95; Height = 24 }
+$lst = New-Object Windows.Forms.CheckedListBox -Property @{ Left = 15; Top = 244; Width = 670; Height = 144; CheckOnClick = $true }
+$form.Controls.AddRange(@($txtSearch, $btnClearSel, $lst))
+
+# The list can be filtered, so the ticked OUs live in $script:picked (not in the list control).
+$script:allOus = @($ouList)
+$script:picked = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+$script:rebuilding = $false
+function Update-SelLabel { $lblSel.Text = '{0} selected | {1}/{2} shown' -f $script:picked.Count, $lst.Items.Count, $script:allOus.Count }
+function Refresh-OuList {
+  $script:rebuilding = $true
+  $lst.BeginUpdate()
+  $lst.Items.Clear()
+  $q = $txtSearch.Text.Trim()
+  foreach ($o in $script:allOus) {
+    if ($q -eq '' -or $o.IndexOf($q, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+      $i = $lst.Items.Add($o)
+      if ($script:picked.Contains($o)) { $lst.SetItemChecked($i, $true) }
+    }
+  }
+  $lst.EndUpdate()
+  $script:rebuilding = $false
+  Update-SelLabel
+}
+$lst.Add_ItemCheck({
+  param($sender, $e)
+  if ($script:rebuilding) { return }
+  $dn = [string]$lst.Items[$e.Index]
+  if ($e.NewValue -eq [Windows.Forms.CheckState]::Checked) { [void]$script:picked.Add($dn) } else { [void]$script:picked.Remove($dn) }
+  Update-SelLabel
+})
+$txtSearch.Add_TextChanged({ Refresh-OuList })
+$btnClearSel.Add_Click({ $script:picked.Clear(); Refresh-OuList })
+Refresh-OuList
 
 [void](Lbl '4. Password lists (optional, you can add them later in the staging folder)' 15 400)
 $txtRock = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 424; Width = 560 }
@@ -162,7 +195,7 @@ $btnGo.Add_Click({
   try {
     $dc = $cmbDc.Text.Trim()
     $driveSel = [string]$cmbDrive.SelectedItem
-    $ous = @(); foreach ($i in $lst.CheckedItems) { $ous += [string]$i }
+    $ous = @(); foreach ($d in $script:picked) { $ous += [string]$d }
     if (-not $dc -or -not $driveSel -or $ous.Count -eq 0) { [void][Windows.Forms.MessageBox]::Show('Please choose a domain controller, a drive, and at least one scan location.'); return }
     $btnGo.Enabled = $false; $bar.Style = 'Marquee'; $log.Clear()
     $lblResult.ForeColor = [Drawing.Color]::Black; $lblResult.Text = 'Working...'
