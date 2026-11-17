@@ -24,6 +24,19 @@ Run only with documented, signed authorization for the target network.
   `Install-ADServiceAccount <gMSA name>` on the scan server yourself, elevated, then click Finish again. Setup does not
   run it, so that nothing in the tool is even arguably an AD write.
 
+## FIPS mode
+
+Reading password hashes over AD replication needs MD5 and RC4 to decrypt the data. DSInternals therefore refuses to
+run when .NET is FIPS-only ("Only FIPS certified cryptographic algorithms are enabled in .NET ... MD5"). Our own
+code is unaffected (its MD4 is hand-written), but the DSInternals pull is blocked on a FIPS-enforced server. Setup,
+permissions and scheduled tasks are all fine; the Finish live test reports it as `FIPS MODE`.
+Check: `Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\FipsAlgorithmPolicy -Name Enabled` (1 = on).
+Options (each needs your security / ISSO approval, none is applied by this tool):
+1. A policy exception for the scan server only: "System cryptography: Use FIPS compliant algorithms" = Disabled.
+2. Run the scan from a dedicated, approved host that is not FIPS-enforced.
+3. A native engine whose `Hashslinger.exe.config` opts only that process out of .NET FIPS enforcement
+   (`enforceFIPSPolicy`). Not built; unverified with DSInternals' replication code.
+
 ## Easy setup (recommended)
 
 Two roles, and **Hashslinger never creates or changes anything in Active Directory**:
