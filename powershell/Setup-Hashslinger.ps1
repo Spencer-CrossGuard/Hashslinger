@@ -188,10 +188,10 @@ function Do-Local {
     if (-not (Test-Path $src)) { Result "Wordlist $($pair[0])" 'WARN' "not found: $src"; continue }
     $dest = Join-Path "$($Dir.staging)\$($pair[1])" (Split-Path $src -Leaf)
     if (Test-Path $dest) { Result "Wordlist $($pair[0])" 'SKIP' 'already staged'; continue }
-    if ((Split-Path $src -Qualifier) -eq (Split-Path $dest -Qualifier)) {
-      try { New-Item -ItemType HardLink -Path $dest -Value $src | Out-Null; Result "Wordlist $($pair[0])" 'PASS' 'hard-linked (no copy)' }
-      catch { Copy-Item $src $dest; Result "Wordlist $($pair[0])" 'PASS' 'copied' }
-    } else { Copy-Item $src $dest; Result "Wordlist $($pair[0])" 'PASS' 'copied to staging' }
+    # always COPY: a copy inherits the staging folder permissions (so the gMSA can read it). A hard link would keep
+    # the original file's permissions and the scan, which runs as the gMSA, would be denied.
+    Copy-Item $src $dest
+    Result "Wordlist $($pair[0])" 'PASS' 'copied to staging (inherits the folder permissions)'
   }
 
   Step 'Runtime config'
@@ -393,6 +393,13 @@ function Do-Finish {
   foreach ($entry in $plan) {
     if ($PSCmdlet.ShouldProcess($entry[0], 'Restrict ACL')) { Set-FolderAcl $entry[0] $gmsaSid $analystSid $entry[1] $entry[2] }
   }
+  # Files that were moved/linked in earlier keep their old permissions and the gMSA could not read them.
+  # Reset them to the permissions inherited from their (now locked-down) folder.
+  $fixed = 0
+  foreach ($d in $Dir.staging, $Dir.store) {
+    Get-ChildItem $d -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { & icacls.exe $_.FullName /reset 2>&1 | Out-Null; $fixed++ }
+  }
+  Result 'Existing files in staging and store readable by the gMSA' 'PASS' "$fixed file(s) reset to inherited permissions"
   Result 'Folder permissions' 'PASS' $(if ($analystSam) { 'gMSA, Administrators, SYSTEM; analyst group limited access' } else { 'gMSA, local Administrators and SYSTEM only' })
 
   # scheduled tasks under the gMSA (local; no stored password)
