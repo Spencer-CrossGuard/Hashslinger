@@ -272,19 +272,26 @@ function Do-Verify {
 }
 
 # ---------------------------------------------------------------- phase: Handoff (writes NO Active Directory changes)
-function Set-FolderAcl([string]$path, [string]$gmsaSam, [string]$analystSam, $analystRights, [string]$analystInherit = 'ContainerInherit,ObjectInherit') {
+function Set-FolderAcl([string]$path, $gmsaSid, $analystSid, $analystRights, [string]$analystInherit = 'ContainerInherit,ObjectInherit') {
   $acl = New-Object Security.AccessControl.DirectorySecurity
   $acl.SetAccessRuleProtection($true, $false)
   $full = [Security.AccessControl.FileSystemRights]::FullControl
   $inh = 'ContainerInherit,ObjectInherit'
-  foreach ($who in @($gmsaSam, 'BUILTIN\Administrators', 'NT AUTHORITY\SYSTEM')) {
-    $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($who, $full, $inh, 'None', 'Allow')))
+  # Identities are SIDs, never names: no name lookup is needed, so this works on any Windows language and even
+  # when the server cannot resolve account names. The gMSA / group SIDs come from the (read-only) AD queries.
+  $admins = New-Object Security.Principal.SecurityIdentifier('S-1-5-32-544')   # BUILTIN\Administrators
+  $system = New-Object Security.Principal.SecurityIdentifier('S-1-5-18')       # NT AUTHORITY\SYSTEM
+  $everyone = New-Object Security.Principal.SecurityIdentifier('S-1-1-0')      # Everyone
+  foreach ($who in @($gmsaSid, $admins, $system)) {
+    try { $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($who, $full, $inh, 'None', 'Allow'))) }
+    catch { throw "Could not add identity $who to the permissions of ${path}: $($_.Exception.Message)" }
   }
-  if ($analystSam -and $analystRights) {
-    $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($analystSam, $analystRights, $analystInherit, 'None', 'Allow')))
+  if ($analystSid -and $analystRights) {
+    try { $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($analystSid, $analystRights, $analystInherit, 'None', 'Allow'))) }
+    catch { throw "Could not add the analyst group $analystSid to the permissions of ${path}: $($_.Exception.Message)" }
   }
   # failed access attempts are audited (needs the 'Audit File System' policy plus alerting on events 4656/4663 failures)
-  $acl.AddAuditRule((New-Object Security.AccessControl.FileSystemAuditRule('Everyone', $full, $inh, 'None', 'Failure')))
+  $acl.AddAuditRule((New-Object Security.AccessControl.FileSystemAuditRule($everyone, $full, $inh, 'None', 'Failure')))
   Set-Acl -Path $path -AclObject $acl
 }
 
@@ -315,6 +322,7 @@ function Do-Finish {
   $svc = Get-ADServiceAccount -Filter "Name -eq '$gmsa'" -Properties PrincipalsAllowedToRetrieveManagedPassword -ErrorAction SilentlyContinue
   if (-not $svc) { Result 'gMSA exists in AD' 'FAIL' "not found. Check the name in the init config (security.gmsa_name), or have a Domain Admin complete the request in $($Dir.root)\AD-HANDOFF."; return }
   Result 'gMSA exists in AD' 'PASS' $gmsaSam
+  $gmsaSid = $svc.SID
   $me = Get-ADComputer $env:COMPUTERNAME
   if (@($svc.PrincipalsAllowedToRetrieveManagedPassword) -contains $me.DistinguishedName) { Result 'This server may retrieve the gMSA password' 'PASS' }
   else { Result 'This server may retrieve the gMSA password' 'FAIL' "not allowed. The Domain Admin used a different -RunServer than $env:COMPUTERNAME."; return }
@@ -362,8 +370,8 @@ function Do-Finish {
   if ($ok) { Result 'gMSA works on this server' 'PASS' } else { Result 'gMSA works on this server' 'FAIL' "Test-ADServiceAccount is False. This tool never changes AD. If the gMSA is not installed on this server yet, install it here yourself (see the README section 'gMSA not installed on this server'), or wait for AD replication / reboot, then Finish again."; return }
 
   # folder permissions (local) : gMSA, local Administrators, SYSTEM only unless an analyst group is set
-  $analystSam = $null
-  if ($analystGroup) { try { $analystSam = "$($dom.NetBIOSName)\$analystGroup"; $null = Get-ADGroup $analystGroup } catch { Result 'Analyst group' 'WARN' "group '$analystGroup' not found; ignoring"; $analystSam = $null } }
+  $analystSam = $null; $analystSid = $null
+  if ($analystGroup) { try { $grp = Get-ADGroup $analystGroup; $analystSid = $grp.SID; $analystSam = "$($dom.NetBIOSName)\$analystGroup" } catch { Result 'Analyst group' 'WARN' "group '$analystGroup' not found; ignoring"; $analystSam = $null; $analystSid = $null } }
   $plan = @(
     @($Dir.store, $null, 'ContainerInherit,ObjectInherit'),
     @($Dir.config, 'ReadAndExecute', 'ContainerInherit,ObjectInherit'),
@@ -374,7 +382,7 @@ function Do-Finish {
     @($Dir.requests, 'CreateFiles', 'None')
   )
   foreach ($entry in $plan) {
-    if ($PSCmdlet.ShouldProcess($entry[0], 'Restrict ACL')) { Set-FolderAcl $entry[0] $gmsaSam $analystSam $entry[1] $entry[2] }
+    if ($PSCmdlet.ShouldProcess($entry[0], 'Restrict ACL')) { Set-FolderAcl $entry[0] $gmsaSid $analystSid $entry[1] $entry[2] }
   }
   Result 'Folder permissions' 'PASS' $(if ($analystSam) { 'gMSA, Administrators, SYSTEM; analyst group limited access' } else { 'gMSA, local Administrators and SYSTEM only' })
 
