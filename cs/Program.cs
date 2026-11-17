@@ -98,7 +98,7 @@ namespace Hashslinger
                 ous = new List<string> { rq.Ou };
                 outDir = rq.OutputDir;
                 trigger = "on-demand";
-                by = rq.RequestedBy; edipi = rq.Edipi; reason = rq.Reason;
+                by = (rq.RequestedBy ?? "(not given)") + " | request file created by: " + (rq.FileOwner ?? "unknown"); edipi = rq.Edipi; reason = rq.Reason;
             }
 
             try

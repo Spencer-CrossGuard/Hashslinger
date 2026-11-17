@@ -402,6 +402,7 @@ function Do-Finish {
   # ---- live test AS THE gMSA: the only check that proves the logon, the batch right and the replication rights all work
   Step 'Live test as the gMSA (replicates this server''s own computer object; prints no secrets)'
   if (-not $dc) { Result 'Live replication test as the gMSA' 'WARN' 'ad.domain_controller is not set, skipped'; return }
+  if ($WhatIfPreference) { Result 'Live replication test as the gMSA' 'SKIP' 'preview (-WhatIf): nothing was registered, so nothing to test'; return }
   $probeOut = Join-Path $Dir.status 'gmsa-probe.txt'
   Remove-Item $probeOut -ErrorAction SilentlyContinue
   $probeArgs = "-NoProfile -File `"$($Dir.bin)\powershell\Test-GmsaReplication.ps1`" -Server $dc -Sam `"$($env:COMPUTERNAME)`$`" -OutFile `"$probeOut`""

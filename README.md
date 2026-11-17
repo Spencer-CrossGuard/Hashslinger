@@ -12,6 +12,9 @@ Run only with documented, signed authorization for the target network.
   isolated in `ad-admin\` (a Domain Admin runs it by hand, `-WhatIf` first) and `diagnostics\` (lab only). Setup never
   calls those. `Hashslinger.exe selftest` scans the shipped `powershell\` scripts and FAILS if it finds any AD-write
   command (New/Set/Add/Remove-AD*, Add-KdsRootKey, Set-Acl on AD:, ldifde, dsacls, ...) or any network command.
+- **Who requested a scan.** The EDIPI and reason are typed by the requester, so they are self-asserted. The audit log
+  also records the Windows account that actually created the request file (`request file created by:`), which the
+  requester cannot choose. If the creator is a member of Administrators, Windows may show the Administrators group.
 - **Everything stays on the machine.** Account hashes exist only in memory and the pipe from the engine, and are wiped
   after the run. Written to disk: the breach-hash store, staging lists, the audit log, status file, runtime config, and the
   CSV report (no hashes in it). Nothing is sent anywhere. The only network traffic is to the domain controller (LDAP and

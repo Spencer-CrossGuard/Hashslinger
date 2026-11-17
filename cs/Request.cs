@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Security.Principal;
 
 namespace Hashslinger
 {
@@ -13,6 +14,7 @@ namespace Hashslinger
         public string Edipi;
         public string Reason;
         public string RequestedBy;
+        public string FileOwner; // NTFS owner of the request file = the account that really created it
     }
 
     public class RequestException : Exception
@@ -57,7 +59,10 @@ namespace Hashslinger
                     throw new RequestException(e.Message, edipi, reason, by);
                 throw;
             }
+            string owner = null;
+            try { owner = File.GetAccessControl(path).GetOwner(typeof(NTAccount)).Value; } catch (Exception) { }
             ScanRequest r = new ScanRequest();
+            r.FileOwner = owner;
             r.Ou = ou; r.OutputDir = outDir; r.Edipi = edipi; r.Reason = reason; r.RequestedBy = by;
             return r;
         }
