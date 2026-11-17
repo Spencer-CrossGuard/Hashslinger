@@ -12,3 +12,4 @@ config/hashslinger.json
 !tests/**/*.csv
 Hashslinger.exe
 *.exe
+dist/
