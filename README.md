@@ -5,6 +5,22 @@ in-scope accounts, matches them against breached and weak-password hash lists, a
 of accounts needing a forced reset. No plaintext passwords or hashes are written to the report.
 Run only with documented, signed authorization for the target network.
 
+## Safety guarantees (read-only AD, everything local)
+
+- **The tool never changes Active Directory.** The scripts in `powershell\` only read AD: LDAP searches, directory
+  replication reads (`Get-ADReplAccount`), and read-only `Get-AD*` / `Get-Acl` queries. Everything that changes AD is
+  isolated in `ad-admin\` (a Domain Admin runs it by hand, `-WhatIf` first) and `diagnostics\` (lab only). Setup never
+  calls those. `Hashslinger.exe selftest` scans the shipped `powershell\` scripts and FAILS if it finds any AD-write
+  command (New/Set/Add/Remove-AD*, Add-KdsRootKey, Set-Acl on AD:, ldifde, dsacls, ...) or any network command.
+- **Everything stays on the machine.** Account hashes exist only in memory and the pipe from the engine, and are wiped
+  after the run. Written to disk: the breach-hash store, staging lists, the audit log, status file, runtime config, and the
+  CSV report (no hashes in it). Nothing is sent anywhere. The only network traffic is to the domain controller (LDAP and
+  directory replication RPC). Setup may download the DSInternals module from the PowerShell Gallery unless you set
+  `dsinternals_offline_path`.
+- **gMSA not installed on this server:** if Finish reports `Test-ADServiceAccount` is False, run
+  `Install-ADServiceAccount <gMSA name>` on the scan server yourself, elevated, then click Finish again. Setup does not
+  run it, so that nothing in the tool is even arguably an AD write.
+
 ## Easy setup (recommended)
 
 Two roles, and **Hashslinger never creates or changes anything in Active Directory**:
@@ -15,7 +31,7 @@ Two roles, and **Hashslinger never creates or changes anything in Active Directo
   3. Click **Install**. It installs locally and writes `<root>\AD-HANDOFF\` for the Domain Admin.
 - **Domain Admin** (once, by hand): follow `README-FOR-DOMAIN-ADMIN.txt` in that folder: a KDS root key, a
   gMSA that only the scan server can use, and the two directory replication rights on the domain root.
-  `New-HashslingerGmsa.ps1` (in the same folder) does it with a `-WhatIf` preview, or do it in ADUC/ADSI Edit.
+  `New-HashslingerGmsa.ps1` (in the same folder, copied from `ad-admin\`) does it with a `-WhatIf` preview, or do it in ADUC/ADSI Edit.
 - **Server operator again:** click **Finish**. It checks, read-only, that the AD pieces exist, then sets
   folder permissions and the scheduled tasks on the server. Then **Run first scan**.
 
@@ -37,7 +53,7 @@ The sections below describe the advanced, scriptable path (`-Phase Check|Local|H
 3. Run it again. `-Phase Local` (default) does everything except AD changes: folders, install to
    `<root>\bin`, build the exe, DSInternals + AD tools, unblock, runtime config, then verifies (script
    syntax parse, exe selftest, AD-free smoke test, DC and OU reachability) and prints a PASS/WARN/FAIL board.
-4. `-Phase Handoff` writes `<root>\AD-HANDOFF\` (a plain-language request plus `New-HashslingerGmsa.ps1`) for a
+4. `-Phase Handoff` writes `<root>\AD-HANDOFF\` (a plain-language request plus the `ad-admin` scripts) for a
    Domain Admin, who does the AD part by hand. Setup itself never creates or edits anything in AD.
 5. After the Domain Admin is done, `-Phase Finish` (on the scan server, local admin is enough): read-only
    checks that the gMSA and its two replication rights exist, installs the gMSA locally, applies least-privilege
@@ -47,10 +63,10 @@ The setup log is `<root>\setup-<timestamp>.log` and `<root>\SETUP-SUMMARY.txt` l
 Handoff/Finish steps are untested against a live domain. If a scan request arrives while one is running it is
 logged as rejected, so resubmit when the viewer shows the run finished.
 
-**Replication rights only (for the Domain Admin):** `powershell\Grant-HashslingerReplicationRights.ps1 -GmsaName <name>` grants just the two
+**Replication rights only (for the Domain Admin):** `ad-admin\Grant-HashslingerReplicationRights.ps1 -GmsaName <name>` grants just the two
 rights on the domain root to an existing gMSA (idempotent, `-WhatIf` previews, verifies afterwards).
 
-**gMSA script (for the Domain Admin only):** `powershell\New-HashslingerGmsa.ps1` creates the gMSA
+**gMSA script (for the Domain Admin only):** `ad-admin\New-HashslingerGmsa.ps1` creates the gMSA
 (`-RunServer <scan server>` is required, `-WhatIf` previews, optional `-GrantReplicationRights`). Setup never
 runs it. Untested against a live domain.
 

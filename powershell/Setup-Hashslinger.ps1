@@ -14,6 +14,8 @@
                    then local-only steps: install the gMSA here, folder permissions, scheduled tasks.
     Phase All      Local then Handoff
   Re-running is safe: it backs up the previous runtime config.
+  AD SAFETY: the scripts in powershell\ only READ AD. Anything that changes AD lives in ad-admin\ (for a Domain
+  Admin to run by hand) and diagnostics\ (lab only). 'Hashslinger.exe selftest' re-verifies this on your machine.
 .NOTES
   Finish-phase steps are UNTESTED against a live domain.
 #>
@@ -145,7 +147,8 @@ function Do-Local {
   } else { Result 'Build exe' 'SKIP' 'Hashslinger.exe already present' }
   if ((Resolve-Path $srcRoot).Path -ne (Resolve-Path $Dir.bin).Path) {
     Copy-Item $srcExe $Dir.bin -Force
-    New-Item -ItemType Directory -Force "$($Dir.bin)\powershell", "$($Dir.bin)\config", "$($Dir.bin)\docs" | Out-Null
+    New-Item -ItemType Directory -Force "$($Dir.bin)\powershell", "$($Dir.bin)\config", "$($Dir.bin)\docs", "$($Dir.bin)\ad-admin" | Out-Null
+    Copy-Item "$srcRoot\ad-admin\*" "$($Dir.bin)\ad-admin" -Force -ErrorAction SilentlyContinue
     Copy-Item "$srcRoot\powershell\*.ps1" "$($Dir.bin)\powershell" -Force
     Copy-Item "$srcRoot\config\*" "$($Dir.bin)\config" -Force
     Copy-Item "$srcRoot\docs\*" "$($Dir.bin)\docs" -Force -ErrorAction SilentlyContinue
@@ -290,46 +293,11 @@ function Do-Handoff {
   Step 'Hand-off package for a Domain Admin (nothing in AD is changed by this tool)'
   $h = Join-Path $Dir.root 'AD-HANDOFF'
   New-Item -ItemType Directory -Force $h | Out-Null
-  Copy-Item (Join-Path $Dir.bin 'powershell\New-HashslingerGmsa.ps1') $h -Force
+  Copy-Item "$($Dir.bin)\ad-admin\*.ps1" $h -Force
   $domName = try { (Get-CimInstance Win32_ComputerSystem).Domain } catch { '(this domain)' }
   $short = $env:COMPUTERNAME
-  $text = @"
-HASHSLINGER - ACTIVE DIRECTORY REQUEST (for a Domain Admin)
-Generated $(Get-Date)   Domain: $domName   Scan server: $short   Authorization ref: ____________________
-
-WHAT THIS IS
-Hashslinger is an authorized internal tool that checks AD password hashes against breached-password lists
-and reports accounts that need a reset. It never changes Active Directory and never stores or shows plaintext
-passwords. The server operator is NOT a Domain Admin, so these three one-time items need to be done by you.
-
-WHAT WE NEED (about 2 minutes)
-1. A KDS root key must exist (required by any group Managed Service Account).
-     Check:  Get-KdsRootKey
-     If none: Add-KdsRootKey -EffectiveImmediately      (usable in about 10 hours; every DC must have replicated it)
-2. A group Managed Service Account named '$gmsa' whose password only the computer '$short' can retrieve.
-3. That account granted two permissions on the DOMAIN root only (not forest, not schema):
-     Replicating Directory Changes   (1131f6aa-9c07-11d1-f79f-00c04fc2dcd2)
-     Replicating Directory Changes All (1131f6ad-9c07-11d1-f79f-00c04fc2dcd2)
-   These are the directory replication ("DCSync") rights. The tool needs them to read password hashes so it
-   can compare them to the lists. Nothing else is requested.
-
-HOW (run elevated, as a Domain Admin, on any machine with the AD PowerShell module; READ the script first)
-   cd to this folder, then preview and apply:
-     .\New-HashslingerGmsa.ps1 -Name $gmsa -RunServer $short -WhatIf
-     .\New-HashslingerGmsa.ps1 -Name $gmsa -RunServer $short -GrantReplicationRights
-   Or do the same by hand in ADUC / ADSI Edit. The script is a convenience, not a requirement.
-
-BEFORE THE FIRST SCAN
-   * Tell the SOC: the scan server '$short' and account '$gmsa' will trigger DCSync / replication alerts.
-   * Expect replication traffic from '$short' to a domain controller.
-
-TO UNDO
-     Remove-ADServiceAccount $gmsa
-     and remove that account's two permissions from the domain root (ADSI Edit > domain root > Security).
-
-WHEN DONE
-   Tell the server operator. They finish with:  Setup-Hashslinger.cmd -Phase Finish   (or the wizard's Finish button).
-"@
+  $tplPath = Join-Path $Dir.bin 'ad-admin\README-FOR-DOMAIN-ADMIN.template.txt'
+  $text = (Get-Content $tplPath -Raw).Replace('{{DATE}}', (Get-Date).ToString()).Replace('{{DOMAIN}}', $domName).Replace('{{SERVER}}', $short).Replace('{{GMSA}}', $gmsa)
   Set-Content (Join-Path $h 'README-FOR-DOMAIN-ADMIN.txt') $text -Encoding UTF8
   Result 'Domain Admin hand-off written' 'PASS' $h
 }
@@ -389,10 +357,9 @@ function Do-Finish {
     else { Result 'Replication rights on the domain root (effective, read-only)' 'WARN' (($problems -join '; ') + '. Scans will fail until a Domain Admin fixes this.') }
   } catch { Result 'Replication rights on the domain root' 'WARN' ('could not compute: ' + $_.Exception.Message) }
 
-  Install-ADServiceAccount -Identity $gmsa -ErrorAction SilentlyContinue
   $ok = Test-ADServiceAccount -Identity $gmsa
   if (-not $ok) { & klist.exe -li 0x3e7 purge | Out-Null; Start-Sleep -Seconds 5; $ok = Test-ADServiceAccount -Identity $gmsa }
-  if ($ok) { Result 'gMSA works on this server' 'PASS' } else { Result 'gMSA works on this server' 'FAIL' 'Test-ADServiceAccount is False. Wait for AD replication or reboot, then Finish again.'; return }
+  if ($ok) { Result 'gMSA works on this server' 'PASS' } else { Result 'gMSA works on this server' 'FAIL' "Test-ADServiceAccount is False. This tool never changes AD. If the gMSA is not installed on this server yet, install it here yourself (see the README section 'gMSA not installed on this server'), or wait for AD replication / reboot, then Finish again."; return }
 
   # folder permissions (local) : gMSA, local Administrators, SYSTEM only unless an analyst group is set
   $analystSam = $null

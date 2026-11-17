@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Hashslinger
 {
@@ -102,6 +103,7 @@ namespace Hashslinger
                 TestPatterns(root);
                 TestPipeline(root);
                 TestRequests(root);
+                TestScriptsAreReadOnly();
             }
             catch (Exception ex)
             {
@@ -113,6 +115,50 @@ namespace Hashslinger
             }
             Console.WriteLine(passed + " passed, " + failed + " failed");
             return failed == 0 ? 0 : 1;
+        }
+
+        /// <summary>Static check of the shipped tool scripts (powershell\\ next to the exe): no Active Directory write
+        /// commands, no network commands. Scripts that change AD live in ad-admin\\ (not scanned, for a Domain Admin).</summary>
+        static void TestScriptsAreReadOnly()
+        {
+            string dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "powershell");
+            if (!Directory.Exists(dir))
+            {
+                Console.WriteLine("SKIP  tool scripts not found next to the exe (powershell\\), AD read-only scan skipped");
+                return;
+            }
+            string[] adWrite =
+            {
+                @"\b(New|Set|Add|Remove|Move|Rename|Unlock|Disable|Enable|Reset|Restore|Grant|Revoke|Install|Uninstall)-AD\w+",
+                @"Add-KdsRootKey", @"Set-Acl\s+[""']?AD:", @"\bldifde\b", @"\bcsvde\b", @"\bdsacls\b", @"\bdsmod\b",
+                @"Set-ADDB\w*", @"New-ADDB\w*", @"Set-ADReplAccount", @"\.CommitChanges\s*\(", @"\.DeleteTree\s*\("
+            };
+            string[] network =
+            {
+                @"Invoke-WebRequest", @"Invoke-RestMethod", @"Start-BitsTransfer", @"Net\.WebClient", @"HttpClient", @"Net\.Sockets",
+                @"Send-MailMessage", @"\bwget\b", @"\bcurl\b", @"Install-PackageProvider", @"Install-Package\b"
+            };
+            List<string> adHits = new List<string>(), netHits = new List<string>();
+            int files = 0;
+            foreach (string f in Directory.GetFiles(dir, "*.ps1"))
+            {
+                files++;
+                string text = Regex.Replace(File.ReadAllText(f), @"(?s)<#.*?#>", "");
+                foreach (string line in text.Split('\n'))
+                {
+                    string t = line.Trim();
+                    if (t.Length == 0 || t[0] == '#') continue;
+                    foreach (string p in adWrite) { Match m = Regex.Match(t, p, RegexOptions.IgnoreCase); if (m.Success) adHits.Add(Path.GetFileName(f) + ": " + m.Value); }
+                    foreach (string p in network) { Match m = Regex.Match(t, p, RegexOptions.IgnoreCase); if (m.Success) netHits.Add(Path.GetFileName(f) + ": " + m.Value); }
+                    // the only permitted download: the DSInternals module (offline copy supported via dsinternals_offline_path)
+                    foreach (Match m in Regex.Matches(t, @"Install-Module\s+(\S+)", RegexOptions.IgnoreCase))
+                        if (!string.Equals(m.Groups[1].Value.Trim('\'', '"'), "DSInternals", StringComparison.OrdinalIgnoreCase)) netHits.Add(Path.GetFileName(f) + ": " + m.Value);
+                }
+            }
+            foreach (string h in adHits) Console.WriteLine("      AD-write command found: " + h);
+            foreach (string h in netHits) Console.WriteLine("      network command found: " + h);
+            Check("Scanned " + files + " tool scripts: no Active Directory write commands", files > 0 && adHits.Count == 0);
+            Check("Tool scripts: no network commands (only Install-Module DSInternals, optional)", netHits.Count == 0);
         }
 
         static void TestNtlm()
