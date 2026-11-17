@@ -207,6 +207,23 @@ namespace Hashslinger
             Check("staging skips unchanged file", StoreMerge.ProcessStaging(m2, stg, null).Count == 0);
             using (HashStore s = new HashStore(m2, false))
                 Check("custom term has custom bit", s.Lookup(Ntlm.Hash("acmecorp")) == 4);
+
+            // table files: TSV with a hash column + password column, several files merged in ONE pass
+            string stg2 = Path.Combine(d, "stg2");
+            Directory.CreateDirectory(Path.Combine(stg2, "custom"));
+            File.WriteAllText(Path.Combine(stg2, "custom", "a.tsv"), "hash\tpassword\n" + Hex(Ntlm.Hash("tsvpass1")) + "\ttsvpass1\n" +
+                Hex(Ntlm.Hash("tsvpass1b")).ToLowerInvariant() + "\ttsvpass1b\n");
+            File.WriteAllText(Path.Combine(stg2, "custom", "b.tsv"), "00112233445566778899AABBCCDDEEFF\ttsvpass2\n");
+            File.WriteAllText(Path.Combine(stg2, "custom", "c.csv"), "tsvpass3," + Hex(Ntlm.Hash("tsvpass3")) + "\n");
+            string m3 = Path.Combine(d, "m3.ntlm");
+            Check("three table files merged in one pass", StoreMerge.ProcessStaging(m3, stg2, null).Count == 3);
+            using (HashStore s = new HashStore(m3, false))
+            {
+                Check("TSV with header, NT hash column verified and used", s.Lookup(Ntlm.Hash("tsvpass1")) == 4 && s.Lookup(Ntlm.Hash("tsvpass1b")) == 4);
+                Check("TSV with a non-NT hash column: NT computed from the password", s.Lookup(Ntlm.Hash("tsvpass2")) == 4);
+                Check("non-NT hash column value is not stored", s.Lookup(Hash128.FromHex("00112233445566778899AABBCCDDEEFF")) == 0);
+                Check("CSV with the hash in the last column", s.Lookup(Ntlm.Hash("tsvpass3")) == 4);
+            }
         }
 
         static void TestPatterns(string root)

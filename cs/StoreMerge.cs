@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace Hashslinger
 {
@@ -252,6 +254,18 @@ namespace Hashslinger
         /// fmt 'plaintext': one candidate password per line, hashed here.</summary>
         public static IEnumerable<Hash128> IterSource(string path, string fmt)
         {
+            return IterSource(path, fmt, null);
+        }
+
+        /// <summary>fmt 'table' = TSV/CSV-style file with a hash column and a password column (see IterTable).</summary>
+        public static IEnumerable<Hash128> IterSource(string path, string fmt, Action<string> log)
+        {
+            if (fmt == "table") return IterTable(path, log);
+            return IterLines(path, fmt);
+        }
+
+        static IEnumerable<Hash128> IterLines(string path, string fmt)
+        {
             using (StreamReader sr = new StreamReader(path, new UTF8Encoding(false), true, 1 << 20))
             {
                 string line;
@@ -282,6 +296,11 @@ namespace Hashslinger
         {
             byte bit = Sources.Bit(tag);
             if (fmt == null) fmt = Sources.DefaultFormat(tag);
+            return MergeStream(master, IterSource(source, fmt, null), bit, chunk);
+        }
+
+        public static long MergeStream(string master, IEnumerable<Hash128> input, byte bit, int chunk)
+        {
             string dir = Path.GetDirectoryName(Path.GetFullPath(master));
             Directory.CreateDirectory(dir);
             string work = Path.Combine(dir, "merge-" + Guid.NewGuid().ToString("N"));
@@ -290,7 +309,7 @@ namespace Hashslinger
             long count = 0;
             try
             {
-                using (SortedUniqueStream ns = new SortedUniqueStream(IterSource(source, fmt), work, chunk))
+                using (SortedUniqueStream ns = new SortedUniqueStream(input, work, chunk))
                 using (MasterReader mr = new MasterReader(master))
                 using (FileStream outFs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16))
                 {
@@ -340,6 +359,199 @@ namespace Hashslinger
             return count;
         }
 
+
+        // ---------------------------------------------------------------- table files (hash column + password column)
+
+        static bool IsHex32(string s)
+        {
+            Hash128 h;
+            return s.Length == 32 && Hash128.TryParseHex(s, 0, out h);
+        }
+
+        /// <summary>Split one row into its hash and password pieces. Tab files use the first two columns (extra columns
+        /// are ignored). For ':' and ',' files the password is the remainder (it may contain the delimiter).</summary>
+        static bool Pieces(string line, char delim, bool hashFirst, out string hash, out string pw)
+        {
+            hash = null;
+            pw = null;
+            if (hashFirst)
+            {
+                int i = line.IndexOf(delim);
+                if (i < 0) return false;
+                hash = line.Substring(0, i);
+                int j = delim == '\t' ? line.IndexOf('\t', i + 1) : -1;
+                pw = j < 0 ? line.Substring(i + 1) : line.Substring(i + 1, j - i - 1);
+                return true;
+            }
+            if (delim == '\t')
+            {
+                int i = line.IndexOf('\t');
+                if (i < 0) return false;
+                int j = line.IndexOf('\t', i + 1);
+                pw = line.Substring(0, i);
+                hash = j < 0 ? line.Substring(i + 1) : line.Substring(i + 1, j - i - 1);
+                return true;
+            }
+            int k = line.LastIndexOf(delim);
+            if (k < 0) return false;
+            pw = line.Substring(0, k);
+            hash = line.Substring(k + 1);
+            return true;
+        }
+
+        /// <summary>Read a file with a hash column next to a password column (TSV, or ':' / ',' separated).
+        /// Detects the layout from a sample: delimiter, which column holds the hash, and an optional header row.
+        /// Then it TESTS the first rows: if NT(password) equals the hash column, the hash column is NT and is used
+        /// directly. Otherwise the hash column is some other algorithm (it would never match AD), so the NT hash is
+        /// computed from the password column instead. Passwords exist only transiently in memory and are never stored.
+        /// A file with a single column is treated as a list of NT hashes.</summary>
+        static IEnumerable<Hash128> IterTable(string path, Action<string> log)
+        {
+            string name = Path.GetFileName(path);
+            List<string> sample = new List<string>();
+            using (StreamReader sr = new StreamReader(path, new UTF8Encoding(false), true, 1 << 20))
+            {
+                string l;
+                while (sample.Count < 2000 && (l = sr.ReadLine()) != null)
+                    if (l.Length > 0) sample.Add(l);
+            }
+            if (sample.Count == 0)
+            {
+                if (log != null) log(name + ": empty file, skipped");
+                yield break;
+            }
+
+            char delim = sample[0].IndexOf('\t') >= 0 ? '\t' : (sample[0].IndexOf(':') >= 0 ? ':' : (sample[0].IndexOf(',') >= 0 ? ',' : '\0'));
+            if (delim == '\0')
+            {
+                if (log != null) log(name + ": single column, treated as a list of NT hashes");
+                foreach (Hash128 one in IterLines(path, "ntlm")) yield return one;
+                yield break;
+            }
+
+            int first = 0, last = 0;
+            foreach (string l in sample)
+            {
+                string h, p;
+                if (Pieces(l, delim, true, out h, out p) && IsHex32(h.Trim())) first++;
+                if (Pieces(l, delim, false, out h, out p) && IsHex32(h.Trim())) last++;
+            }
+            if (first == 0 && last == 0)
+            {
+                if (log != null) log(name + ": no 32-character hex hash column found, skipped");
+                yield break;
+            }
+            bool hashFirst = first >= last;
+
+            string h0, p0;
+            bool hasHeader = !(Pieces(sample[0], delim, hashFirst, out h0, out p0) && IsHex32(h0.Trim()));
+
+            int tested = 0, matched = 0;
+            for (int i = hasHeader ? 1 : 0; i < sample.Count && tested < 1000; i++)
+            {
+                string h, p;
+                if (!Pieces(sample[i], delim, hashFirst, out h, out p)) continue;
+                h = h.Trim();
+                Hash128 hh;
+                if (h.Length != 32 || !Hash128.TryParseHex(h, 0, out hh)) continue;
+                tested++;
+                if (p.Length > 0 && Ntlm.Hash(p).Equals(hh)) matched++;
+            }
+            bool useHashColumn = tested > 0 && matched >= tested * 0.9;
+            if (log != null)
+            {
+                string layout = (delim == '\t' ? "tab" : delim.ToString()) + " separated, hash in " + (hashFirst ? "first" : "last") + " column" + (hasHeader ? ", header row" : "");
+                if (useHashColumn) log(name + ": " + layout + "; hash column verified as NT (" + matched + "/" + tested + " sample rows match); using the hash column");
+                else log(name + ": " + layout + "; hash column is NOT NT (" + matched + "/" + tested + " sample rows match); computing NT from the password column and ignoring the hash column");
+            }
+
+            long used = 0, skipped = 0;
+            using (StreamReader sr = new StreamReader(path, new UTF8Encoding(false), true, 1 << 20))
+            {
+                string line;
+                bool firstLine = true;
+                while ((line = sr.ReadLine()) != null)
+                {
+                    if (line.Length == 0) continue;
+                    if (firstLine) { firstLine = false; if (hasHeader) continue; }
+                    string h, p;
+                    if (!Pieces(line, delim, hashFirst, out h, out p)) { skipped++; continue; }
+                    if (useHashColumn)
+                    {
+                        h = h.Trim();
+                        Hash128 hh;
+                        if (h.Length == 32 && Hash128.TryParseHex(h, 0, out hh)) { used++; yield return hh; }
+                        else skipped++;
+                    }
+                    else
+                    {
+                        if (p.Length == 0) { skipped++; continue; }
+                        used++;
+                        yield return Ntlm.Hash(p);
+                    }
+                }
+            }
+            if (log != null) log(name + ": " + used + " rows used, " + skipped + " skipped");
+        }
+
+        static string FormatFor(string tag, string file)
+        {
+            string ext = Path.GetExtension(file).ToLowerInvariant();
+            if (ext == ".ntlm") return "ntlm";
+            if (ext == ".tsv" || ext == ".csv") return "table";
+            return Sources.DefaultFormat(tag);
+        }
+
+        /// <summary>Parse several source files at the same time (one producer per core, up to half the cores) into
+        /// batches that the single sorter/merger consumes. Fewer than two files: plain sequential read.</summary>
+        static IEnumerable<Hash128> ParallelSources(IList<string> files, string tag, Action<string> log)
+        {
+            if (files.Count == 1)
+            {
+                foreach (Hash128 h in IterSource(files[0], FormatFor(tag, files[0]), log)) yield return h;
+                yield break;
+            }
+            BlockingCollection<Hash128[]> q = new BlockingCollection<Hash128[]>(64);
+            Exception error = null;
+            ParallelOptions opts = new ParallelOptions();
+            opts.MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount / 2);
+            Task producer = Task.Factory.StartNew(delegate
+            {
+                try
+                {
+                    Parallel.ForEach(files, opts, delegate(string f)
+                    {
+                        Hash128[] batch = new Hash128[65536];
+                        int n = 0;
+                        foreach (Hash128 h in IterSource(f, FormatFor(tag, f), log))
+                        {
+                            batch[n++] = h;
+                            if (n == batch.Length) { q.Add(batch); batch = new Hash128[65536]; n = 0; }
+                        }
+                        if (n > 0)
+                        {
+                            Hash128[] tail = new Hash128[n];
+                            Array.Copy(batch, tail, n);
+                            q.Add(tail);
+                        }
+                    });
+                }
+                catch (Exception ex) { error = ex; }
+                finally { q.CompleteAdding(); }
+            }, TaskCreationOptions.LongRunning);
+            foreach (Hash128[] b in q.GetConsumingEnumerable())
+                foreach (Hash128 h in b) yield return h;
+            producer.Wait();
+            if (error != null) throw new StoreException("reading the source files failed: " + error.Message);
+        }
+
+        /// <summary>Merge several files of one source tag into the master in ONE pass (one rewrite of the master,
+        /// however many files).</summary>
+        public static long MergeFiles(string master, string tag, IList<string> files, int chunk, Action<string> log)
+        {
+            return MergeStream(master, ParallelSources(files, tag, log), Sources.Bit(tag), chunk);
+        }
+
         // ------------------------------------------------------------ staging pipeline
 
         static string FingerPrint(string p)
@@ -364,19 +576,32 @@ namespace Hashslinger
                 if (!Directory.Exists(d)) continue;
                 string[] files = Directory.GetFiles(d);
                 Array.Sort(files, StringComparer.Ordinal);
+                List<string> changed = new List<string>();
+                Dictionary<string, string> prints = new Dictionary<string, string>();
                 foreach (string f in files)
                 {
                     string key = tag + "/" + Path.GetFileName(f);
                     string fp = FingerPrint(f);
                     object old;
                     if (manifest.TryGetValue(key, out old) && (old as string) == fp) continue;
-                    string fmt = f.EndsWith(".ntlm", StringComparison.OrdinalIgnoreCase) ? "ntlm" : Sources.DefaultFormat(tag);
-                    if (log != null) log("merging " + key + " (" + fmt + ")");
-                    MergeSource(master, f, tag, fmt, 16000000);
-                    manifest[key] = fp;
-                    File.WriteAllText(manPath, Json.Write(manifest), Encoding.UTF8);
+                    changed.Add(f);
+                    prints[f] = fp;
+                }
+                if (changed.Count == 0) continue;
+                if (log != null)
+                {
+                    List<string> names = new List<string>();
+                    foreach (string f in changed) names.Add(Path.GetFileName(f) + " (" + FormatFor(tag, f) + ")");
+                    log("merging " + changed.Count + " file(s) into " + tag + " in one pass: " + string.Join(", ", names.ToArray()));
+                }
+                MergeFiles(master, tag, changed, 16000000, log);
+                foreach (string f in changed)
+                {
+                    string key = tag + "/" + Path.GetFileName(f);
+                    manifest[key] = prints[f];
                     merged.Add(key);
                 }
+                File.WriteAllText(manPath, Json.Write(manifest), Encoding.UTF8);
             }
             return merged;
         }

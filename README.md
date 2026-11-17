@@ -144,6 +144,18 @@ Only one scan runs at a time (a second start is refused and logged). `Start-Hash
 It runs under the launching user and ends at logoff. Unattended or logoff-proof runs use the GMSA
 scheduled tasks from `Setup-Hashslinger.cmd -Phase Finish`.
 
+## Table files in `custom\` (hash column + password column)
+
+Drop `.tsv` or `.csv` files (any size, any number) into `staging\custom\` (or `HIBP`, `rockyou`). Layout is detected from a
+sample: tab, `:` or `,` separated, the hash in the first or the last column, an optional header row. Then the first rows are
+TESTED: if NT(password) equals the hash column, the hash column is NT and is used as is. If not, the hash column is some other
+algorithm and would never match AD, so the NT hash is computed from the password column and the hash column is ignored. The log
+says which happened. **Passwords are never stored.** Only the 16-byte NT hash is kept (17 bytes per unique hash including the
+source tag, roughly a third of the size of the TSV, sorted for fast lookup, duplicates across files collapse). All new files for
+a folder are merged in ONE pass (one rewrite of the store however many files), parsed in parallel. Single-column files are
+treated as NT hash lists; `.ntlm` files as `HASH` or `HASH:count`. Keep the originals somewhere protected or delete them; they
+are plaintext password lists.
+
 ## Duplicate passwords
 
 Off by default. Set `"check_duplicates": true` to flag accounts that share a password with another
