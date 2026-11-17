@@ -27,7 +27,10 @@ param(
   [string]$ExcludeUacFlags = '',
   [string]$RequireUacFlags = '',
   [string]$NtdsPath,
-  [string]$SystemHivePath
+  [string]$SystemHivePath,
+  # Explicit property sets. DSInternals 6.3+ otherwise also fetches the Schema NC (for LAPS), which needs replication
+  # rights on the Schema partition and fails with 'Replication access was denied' for a domain-root-only account.
+  [string]$ReplProperties = 'GenericAccountInfo,NTHash,LMHash,SupplementalCredentials'
 )
 $ErrorActionPreference = 'Stop'
 Import-Module DSInternals
@@ -70,6 +73,18 @@ function ClassifyType($spn, [bool]$isComputer) {
   if ($isComputer) { 'Computer' } elseif ($spn -and @($spn).Count -gt 0) { 'Service' } else { 'User' }
 }
 
+# Pick the widest property set this DSInternals version accepts (names differ between versions). Access-denied errors
+# are NOT swallowed here: they propagate so the real error is visible.
+function Resolve-ReplProperties($guid) {
+  $ladder = @($ReplProperties, 'GenericAccountInfo,NTHash,LMHash', 'GenericAccountInfo,NTHash') | Select-Object -Unique
+  foreach ($set in $ladder) {
+    try { $null = Get-ADReplAccount -ObjectGuid $guid -Server $Server -Properties ($set -split ','); return ($set -split ',') }
+    catch [System.Management.Automation.ParameterBindingException] { continue }
+    catch [System.ArgumentException] { continue }
+  }
+  return $null   # no explicit set accepted: fall back to the module default
+}
+
 if ($Mode -eq 'live') {
   if (-not $Server) { throw '-Server is required in live mode' }
   # objectGuid -> type, built with a paged DirectorySearcher (streams; handles millions of objects).
@@ -93,14 +108,18 @@ if ($Mode -eq 'live') {
       $res.Dispose(); $ds.Dispose()
     }
   }
+  $props = $null
+  foreach ($k in $scope.Keys) { $props = Resolve-ReplProperties $k; break }
+  $propArgs = @{}
+  if ($props) { $propArgs['Properties'] = $props }
   if ($Replication -eq 'per-account') {
     foreach ($kv in $scope.GetEnumerator()) {
-      Emit (Get-ADReplAccount -ObjectGuid $kv.Key -Server $Server) $kv.Value
+      Emit (Get-ADReplAccount -ObjectGuid $kv.Key -Server $Server @propArgs) $kv.Value
     }
   }
   else {
     $type = $null
-    Get-ADReplAccount -All -Server $Server | ForEach-Object {
+    Get-ADReplAccount -All -Server $Server @propArgs | ForEach-Object {
       if ($scope.TryGetValue($_.Guid, [ref]$type)) { Emit $_ $type }
     }
   }

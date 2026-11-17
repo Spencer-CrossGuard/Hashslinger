@@ -438,6 +438,7 @@ function Do-Finish {
       $err = ($txt | Where-Object { $_ -like 'ERROR*' } | Select-Object -First 1)
       $hint = if ($err -match 'Replication access was denied') { 'The DC accepted the logon but refused replication: the two permissions are not effective for this gMSA. Check they are on the DOMAIN ROOT (not an OU) as Allow entries; ask the Domain Admin to grant them via a group that contains only the gMSA.' }
               elseif ($err -match 'RPC server|unavailable') { 'This server cannot reach the DC over RPC (firewall or DC name).' }
+              elseif ($err -match 'Schema') { 'DSInternals is asking for Schema partition replication rights. This tool normally avoids that with explicit -Properties sets; check the DSInternals version and send the note lines above.' }
               elseif ($err -match 'FIPS') { 'FIPS MODE: this server enforces FIPS-only cryptography in .NET. DSInternals needs MD5 (and RC4) to decrypt the data AD replicates, so it refuses to run. Setup, permissions and tasks are fine; only the scan is blocked. See the README section FIPS mode for the options (all need your security approval).' }
               elseif ($err -match 'DSInternals') { 'DSInternals did not load for this account (module path or policy).' } else { '' }
       $dumpText = if ($aceDump) { "`n      Permission entries found for this gMSA:`n        " + ($aceDump -join "`n        ") } else { '' }
