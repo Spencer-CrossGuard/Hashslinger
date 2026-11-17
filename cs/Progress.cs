@@ -19,6 +19,9 @@ namespace Hashslinger
         static string statusPath;
         static Dictionary<string, object> st;
         static Timer heartbeat;
+        static System.Diagnostics.Stopwatch stageClock = new System.Diagnostics.Stopwatch();
+        static int curStage;
+        static long[] stageMs = new long[Stages + 1];
 
         static string Now()
         {
@@ -30,6 +33,9 @@ namespace Hashslinger
             lock (gate)
             {
                 statusPath = path;
+                stageMs = new long[Stages + 1];
+                curStage = 0;
+                stageClock.Restart();
                 st = new Dictionary<string, object>();
                 st["state"] = "running";
                 st["run_id"] = runId;
@@ -82,6 +88,9 @@ namespace Hashslinger
         {
             lock (gate)
             {
+                stageMs[curStage] += stageClock.ElapsedMilliseconds;
+                stageClock.Restart();
+                curStage = n;
                 if (st != null) { st["stage"] = n; st["message"] = msg; st["detail"] = ""; WriteLocked(); }
             }
             if (Quiet) return;
@@ -98,6 +107,19 @@ namespace Hashslinger
             if (Quiet) return;
             Console.WriteLine("      " + msg);
             Console.Out.Flush();
+        }
+
+        /// <summary>Milliseconds spent per stage so far (the current stage included).</summary>
+        public static Dictionary<string, object> Timings()
+        {
+            lock (gate)
+            {
+                long[] copy = (long[])stageMs.Clone();
+                copy[curStage] += stageClock.ElapsedMilliseconds;
+                Dictionary<string, object> d = new Dictionary<string, object>();
+                for (int i = 1; i <= Stages; i++) d["stage" + i] = copy[i];
+                return d;
+            }
         }
 
         public static void Count(int accounts)

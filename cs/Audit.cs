@@ -91,7 +91,7 @@ namespace Hashslinger
             Append(e);
         }
 
-        public void End(string runId, string status, int accounts, string output, bool wipeConfirmed, string error)
+        public void End(string runId, string status, int accounts, string output, bool wipeConfirmed, string error, Dictionary<string, object> timingsMs)
         {
             Dictionary<string, object> e = new Dictionary<string, object>();
             e["event"] = "end";
@@ -102,6 +102,7 @@ namespace Hashslinger
             e["output"] = output;
             e["wipe_confirmed"] = wipeConfirmed;
             e["error"] = error;
+            e["timings_ms"] = timingsMs;
             Append(e);
         }
     }

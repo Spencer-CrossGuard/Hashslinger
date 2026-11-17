@@ -9,6 +9,7 @@ namespace Hashslinger
         const string Usage =
             "Hashslinger <command>\n" +
             "  selftest                              run built-in checks (no AD needed)\n" +
+            "  bench [accounts] [storeRecords]       time the C# side at scale with synthetic data (no AD)\n" +
             "  --config <file> merge                 merge staging/<HIBP|rockyou|custom>/* into the hash store\n" +
             "  --config <file> info                  show hash store record count\n" +
             "  --config <file> scan [--ou <dn>] [--output-dir <dir>] [--trigger <t>] [--request <file> | --request-dir <dir>]\n";
@@ -29,6 +30,7 @@ namespace Hashslinger
         static int Dispatch(string[] args)
         {
             if (args.Length == 1 && args[0] == "selftest") return SelfTest.Run();
+            if (args.Length >= 1 && args[0] == "bench") return Bench.Run(args);
             if (args.Length < 3 || args[0] != "--config") { Console.Error.Write(Usage); return 1; }
             Config cfg = Config.Load(args[1]);
             string cmd = args[2];

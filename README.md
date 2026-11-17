@@ -110,6 +110,13 @@ Off by default. Set `"check_duplicates": true` to flag accounts that share a pas
 account ("Duplicate password shared with another account", Medium). At millions of accounts a single
 default password can add many rows, so enable it deliberately.
 
+## Performance: measure first
+
+- Every run records milliseconds per stage in the audit log (`timings_ms`) and an accounts/sec rate during the
+  pull, so a real scan shows where the time goes.
+- `Hashslinger.exe bench 5000000 100000000` times the C# side (ingest, sort + lookup, report) with synthetic
+  data and no AD. It does NOT measure the AD pull, which is expected to dominate (PowerShell loop + DC).
+
 ## Scale (millions of accounts)
 
 - **Bulk replication by default** (`"replication": "bulk"`). One `Get-ADReplAccount -All` stream,

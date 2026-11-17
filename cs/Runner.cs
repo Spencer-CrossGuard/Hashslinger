@@ -17,7 +17,7 @@ namespace Hashslinger
     {
         /// <summary>Lookups, pattern matching and duplicate detection run over hashes sorted ascending,
         /// so reads of the mmap'd store move forward through the file instead of jumping around.</summary>
-        static HashIdx[] Analyze(AccountTable t, HashStore store, Dictionary<Hash128, string> patterns, bool checkDuplicates)
+        internal static HashIdx[] Analyze(AccountTable t, HashStore store, Dictionary<Hash128, string> patterns, bool checkDuplicates)
         {
             int n = 0;
             for (int i = 0; i < t.Count; i++)
@@ -92,6 +92,7 @@ namespace Hashslinger
                 Progress.Info(patterns.Count + " pattern candidates");
                 Progress.Stage(4, "Pulling accounts from AD (" + cfg.Mode + ", " + cfg.Replication + " replication)");
                 int received = 0;
+                System.Diagnostics.Stopwatch ingestClock = System.Diagnostics.Stopwatch.StartNew();
                 source.Run(cfg, ous, delegate(AccountRecord a)
                 {
                     int idx = table.Add(a);
@@ -100,7 +101,7 @@ namespace Hashslinger
                     if (a.Lm) r |= Reason.Lm;
                     if (r != 0) table.AddReasons(idx, r);
                     received++;
-                    if (received % 10000 == 0) { Progress.Count(received); Progress.Info(received + " accounts received"); }
+                    if (received % 10000 == 0) { Progress.Count(received); Progress.Info(received + " accounts received (" + (long)(received / Math.Max(0.001, ingestClock.Elapsed.TotalSeconds)) + "/s)"); }
                 });
                 accounts = table.Count;
                 Progress.Count(accounts);
@@ -128,7 +129,7 @@ namespace Hashslinger
                 if (Directory.Exists(dir))
                     foreach (string d in Directory.GetDirectories(dir, "merge-*"))
                         tmpOk &= Wipe.SecureDeleteDir(d);
-                log.End(runId, status, accounts, outPath, wipeOk && tmpOk, error);
+                log.End(runId, status, accounts, outPath, wipeOk && tmpOk, error, Progress.Timings());
                 wipeOk = wipeOk && tmpOk;
                 Progress.Finish(status, outPath, error);
                 runLock.Dispose();
