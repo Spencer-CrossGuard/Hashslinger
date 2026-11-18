@@ -47,6 +47,9 @@ $logs = Split-Path -Parent (Cfg 'log_path' "$root\logs\audit.jsonl")
 $status = Split-Path -Parent (Cfg 'status_path' "$root\status\status.json")
 $dataRoot = "$root\data"
 
+if ($RemoveAll -and (($root.TrimEnd('\') -match '^[A-Za-z]:$') -or -not (Test-Path "$root\config\hashslinger.json"))) {
+  Write-Host "Refusing -RemoveAll: $root does not look like a Hashslinger install folder (no config\hashslinger.json inside)." -ForegroundColor Red; exit 1
+}
 if ($RemoveAll) { $RemoveData = $RemoveReports = $RemoveLogs = $RemoveApp = $true }
 $plan = New-Object System.Collections.ArrayList
 [void]$plan.Add('Stop any running scan; remove the scheduled tasks (Hashslinger-Scheduled, Hashslinger-OnDemand)')
@@ -65,6 +68,11 @@ if (-not $Force) {
 
 function Remove-Tree([string]$path) {
   if (-not (Test-Path $path)) { return }
+  # never delete a drive root or a system folder, whatever the settings file says
+  $full = [IO.Path]::GetFullPath($path).TrimEnd('\')
+  if ($full -match '^[A-Za-z]:$' -or $full -ieq $env:windir -or $full -ieq $env:ProgramFiles -or $full -ieq ${env:ProgramFiles(x86)} -or $full -ieq $env:SystemDrive) {
+    Write-Host "  refusing to remove $path (drive root or system folder). Fix the path in the settings." -ForegroundColor Red; return
+  }
   if ($SecureWipe) {
     foreach ($f in Get-ChildItem $path -Recurse -File -Force -ErrorAction SilentlyContinue) {
       try {

@@ -172,6 +172,8 @@ namespace Hashslinger
         {
             string d = Path.Combine(root, "s");
             Directory.CreateDirectory(d);
+            using (HashStore none = new HashStore(Path.Combine(d, "does-not-exist.ntlm"), false))
+                Check("A missing store file reads as an empty store", none.Count == 0 && none.Lookup(Ntlm.Hash("x")) == 0);
             string master = Path.Combine(d, "m.ntlm");
             string rock = Path.Combine(d, "rock.txt");
             File.WriteAllText(rock, "password\nletmein\nqwerty\npassword\n");

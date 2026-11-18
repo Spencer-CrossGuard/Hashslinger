@@ -100,6 +100,7 @@ namespace Hashslinger
             c.Workers = Math.Max(1, Math.Min(16, (int)Convert.ToDouble(Json.Str(raw, "workers", "4"), System.Globalization.CultureInfo.InvariantCulture)));
             c.PerAccountThreshold = (int)Convert.ToDouble(Json.Str(raw, "per_account_threshold", "5000"), System.Globalization.CultureInfo.InvariantCulture);
             c.CheckDuplicates = Json.Str(raw, "check_duplicates", "false").ToLowerInvariant() == "true";
+            if (c.EngineTimeoutSeconds < 60) c.EngineTimeoutSeconds = 60;
             c.Validate();
             return c;
         }

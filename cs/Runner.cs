@@ -113,7 +113,8 @@ namespace Hashslinger
                     sorted = Analyze(table, store, patterns, cfg.CheckDuplicates);
                 Progress.Stage(6, "Writing report");
                 outPath = Report.Write(table, runId, outDir, sorted, out flagged);
-                Report.PurgeOld(outDir, cfg.RetentionDays);
+                try { Report.PurgeOld(outDir, cfg.RetentionDays); }
+                catch (Exception pe) { Progress.Info("old reports could not be cleaned up: " + pe.Message); }   // never fail a finished scan over housekeeping
                 status = "success";
             }
             catch (Exception ex)
@@ -143,7 +144,7 @@ namespace Hashslinger
 
         static bool ShouldIndex(Config cfg)
         {
-            return new FileInfo(cfg.HashStorePath).Length / HashStore.Record > 1000000;
+            return File.Exists(cfg.HashStorePath) && new FileInfo(cfg.HashStorePath).Length / HashStore.Record > 1000000;
         }
     }
 }

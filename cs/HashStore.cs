@@ -25,7 +25,7 @@ namespace Hashslinger
 
         public HashStore(string path, bool buildIndex)
         {
-            long size = new FileInfo(path).Length;
+            long size = File.Exists(path) ? new FileInfo(path).Length : 0;   // no store yet (no wordlists merged) = empty store
             if (size % Record != 0) throw new StoreException(path + ": size is not a multiple of 17");
             count = size / Record;
             if (count == 0) return;

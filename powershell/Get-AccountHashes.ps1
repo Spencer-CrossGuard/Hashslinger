@@ -70,6 +70,7 @@ $sharedBlock = {
     return ''
   }
   function FormatLine($acct, [string]$type) {
+    if ($null -eq $acct) { return $null }   # object vanished between the scope search and replication
     $sam = [string]$acct.SamAccountName
     if (-not $sam) { $sam = Get-SamFromLdap $acct.Guid }
     if (-not $sam) { $sam = '(unknown)' }
@@ -81,7 +82,7 @@ $sharedBlock = {
   }
 }
 . $sharedBlock
-function Emit($acct, [string]$type) { $out.WriteLine((FormatLine $acct $type)) }
+function Emit($acct, [string]$type) { $l = FormatLine $acct $type; if ($l) { $out.WriteLine($l) } }
 
 # Time-based progress (every ~5s): what is done, how fast, how long so far, and a rough time left.
 $script:clock = [Diagnostics.Stopwatch]::StartNew()
@@ -205,7 +206,8 @@ if ($Mode -eq 'live') {
           while (-not $flag.stop -and $queue.TryDequeue([ref]$item)) {
             $f = $item -split "`t"
             $acct = Get-ADReplAccount -ObjectGuid ([Guid]$f[0]) -Server $server @pa
-            $outQ.Enqueue((FormatLine $acct $f[1]))
+            $fl = FormatLine $acct $f[1]
+            if ($fl) { $outQ.Enqueue($fl) }
           }
         }
         catch { $flag.stop = $true; $errQ.Enqueue([string]$_.Exception.Message) }

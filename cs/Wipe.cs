@@ -40,6 +40,8 @@ namespace Hashslinger
             }
             catch (FileNotFoundException) { }
             catch (DirectoryNotFoundException) { }
+            catch (IOException) { }                  // open in another program (for example a report open in Excel)
+            catch (UnauthorizedAccessException) { }  // read-only or no permission
             return !File.Exists(path);
         }
 

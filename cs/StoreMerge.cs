@@ -372,6 +372,17 @@ namespace Hashslinger
         /// are ignored). For ':' and ',' files the password is the remainder (it may contain the delimiter).</summary>
         static bool Pieces(string line, char delim, bool hashFirst, out string hash, out string pw)
         {
+            bool ok = PiecesRaw(line, delim, hashFirst, out hash, out pw);
+            if (ok && delim == ',')
+            {
+                hash = hash.Trim().Trim('"');
+                if (pw.Length >= 2 && pw[0] == '"' && pw[pw.Length - 1] == '"') pw = pw.Substring(1, pw.Length - 2).Replace("\"\"", "\"");
+            }
+            return ok;
+        }
+
+        static bool PiecesRaw(string line, char delim, bool hashFirst, out string hash, out string pw)
+        {
             hash = null;
             pw = null;
             if (hashFirst)
@@ -421,7 +432,22 @@ namespace Hashslinger
                 yield break;
             }
 
-            char delim = sample[0].IndexOf('\t') >= 0 ? '\t' : (sample[0].IndexOf(':') >= 0 ? ':' : (sample[0].IndexOf(',') >= 0 ? ',' : '\0'));
+            // try each delimiter present in the sample and keep the one that yields the most 32-hex hash columns
+            char delim = '\0';
+            int bestHits = 0;
+            foreach (char cand in new[] { '\t', ':', ',' })
+            {
+                int hits = 0;
+                foreach (string l in sample)
+                {
+                    string ch, cp;
+                    if (Pieces(l, cand, true, out ch, out cp) && IsHex32(ch.Trim())) hits++;
+                    else if (Pieces(l, cand, false, out ch, out cp) && IsHex32(ch.Trim())) hits++;
+                }
+                if (hits > bestHits) { bestHits = hits; delim = cand; }
+            }
+            if (delim == '\0' && (sample[0].IndexOf('\t') >= 0 || sample[0].IndexOf(':') >= 0 || sample[0].IndexOf(',') >= 0))
+                delim = sample[0].IndexOf('\t') >= 0 ? '\t' : (sample[0].IndexOf(':') >= 0 ? ':' : ',');   // no hash column found: report below
             if (delim == '\0')
             {
                 if (log != null) log(name + ": single column, treated as a list of NT hashes");
@@ -568,7 +594,7 @@ namespace Hashslinger
             List<string> merged = new List<string>();
             string manPath = master + ".manifest.json";
             Dictionary<string, object> manifest = new Dictionary<string, object>();
-            if (File.Exists(manPath))
+            if (File.Exists(manPath) && File.Exists(master))   // a manifest without its store would wrongly skip every file
                 manifest = (Dictionary<string, object>)Json.Parse(File.ReadAllText(manPath, Encoding.UTF8));
             foreach (string tag in Sources.Tags)
             {

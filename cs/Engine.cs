@@ -87,6 +87,7 @@ namespace Hashslinger
             psi.StandardOutputEncoding = Encoding.UTF8;
 
             StringBuilder err = new StringBuilder();
+            bool timedOut = false;
             using (Process p = new Process())
             {
                 p.StartInfo = psi;
@@ -98,6 +99,7 @@ namespace Hashslinger
                 p.BeginErrorReadLine();
                 Timer killer = new Timer(delegate(object o)
                 {
+                    timedOut = true;
                     try { p.Kill(); } catch (InvalidOperationException) { }
                 }, null, cfg.EngineTimeoutSeconds * 1000, Timeout.Infinite);
                 try
@@ -116,6 +118,7 @@ namespace Hashslinger
                     killer.Dispose();
                     try { if (!p.HasExited) p.Kill(); } catch (InvalidOperationException) { }
                 }
+                if (timedOut) throw new EngineException("the engine ran longer than engine_timeout_seconds (" + cfg.EngineTimeoutSeconds + ") and was stopped");
                 if (p.ExitCode != 0)
                 {
                     string msg = err.ToString().Trim();
