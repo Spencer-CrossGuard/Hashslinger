@@ -273,7 +273,7 @@ Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
       <tr><td class="k">Not in a privileged group</td><td>Warning: remove it from Domain, Enterprise or Schema Admins or Administrators.</td></tr>
       <tr><td class="k">Replication rights (effective, read-only)</td><td>Warning: one of the two rights is missing, denied, or does not apply to the domain root itself. Computed from the ACL and the account's token groups, so group-granted rights count.</td></tr>
       <tr><td class="k"><code>Test-ADServiceAccount</code></td><td>Account not installed on this server (section 3, last step).</td></tr>
-      <tr><td class="k">Folder permissions</td><td>Applied by SID to the service account, local Administrators and SYSTEM. The service account can only READ the program (<code>app\</code>) and settings (<code>config\</code>) folders and write to data, reports, logs and status, so nobody who can edit program files can run code as it. The install folder itself is locked to Administrators too; existing files in staging and store are reset to inherit. An analyst group gets limited access only if one is set.</td></tr>
+      <tr><td class="k">Folder permissions</td><td>Applied by SID to the service account, local Administrators and SYSTEM. The service account can only READ the program (<code>app\</code>) and settings (<code>config\</code>) folders and write to data, reports, logs and status, so nobody who can edit program files can run code as it. The install folder itself is locked to Administrators too. Only folders inside the install folder are locked down; if a setting points a folder elsewhere (for example a shared logs folder) the service account is only <b>granted</b> access there and the other permissions are left alone, with a warning; existing files in staging and store are reset to inherit. An analyst group gets limited access only if one is set.</td></tr>
       <tr><td class="k">Scheduled tasks</td><td>Registered under the service account, no stored password.</td></tr>
       <tr><td class="k">Live test as the service account</td><td>Replicates this server's own computer object as the service account. Reports the exact error and a likely cause (denied, FIPS, RPC, batch right, Schema).</td></tr>
     </tbody>
@@ -440,7 +440,7 @@ Exit codes: 0 ok, 1 usage, 2 failed (also logged)</code></pre>
   <h3>Whole package</h3>
   <ol class="steps">
     <li>Wait for any running scan to finish, or stop it. Setup refuses to run during a scan.</li>
-    <li>Unzip the new package somewhere else, not inside the install folder. If it has no <code>Hashslinger.exe</code>, run <code>build.cmd</code> in it, or setup builds one with the in-box compiler.</li>
+    <li>Unzip the new package somewhere else, not inside the install folder. If it has no <code>Hashslinger.exe</code>, or the exe is older than the source in <code>cs\</code>, setup rebuilds it with the in-box compiler (an old build left in the folder is never installed over newer scripts).</li>
     <li>Run its <code>Setup-Hashslinger.cmd</code>, pick the <b>same install folder</b> (settings load automatically), and click Install.</li>
   </ol>
   <div class="two">

@@ -70,7 +70,15 @@ namespace Hashslinger
 
         public static Config Load(string path)
         {
-            Dictionary<string, object> raw = (Dictionary<string, object>)Json.Parse(File.ReadAllText(path, Encoding.UTF8));
+            // the Admin tool may be replacing the file at this very moment: retry briefly on a sharing violation
+            string text = null;
+            for (int attempt = 0; ; attempt++)
+            {
+                try { text = File.ReadAllText(path, Encoding.UTF8); break; }
+                catch (IOException) { if (attempt >= 10) throw; System.Threading.Thread.Sleep(300); }
+            }
+            Dictionary<string, object> raw = Json.Parse(text) as Dictionary<string, object>;
+            if (raw == null) throw new ConfigException("the settings file must be a JSON object");
             string baseDir = Path.GetDirectoryName(Path.GetFullPath(path));
             Config c = new Config();
             c.Mode = Json.Str(raw, "mode", c.Mode);
@@ -110,6 +118,7 @@ namespace Hashslinger
             c.PerAccountThreshold = (int)Convert.ToDouble(Json.Str(raw, "per_account_threshold", "5000"), System.Globalization.CultureInfo.InvariantCulture);
             c.CheckDuplicates = Json.Str(raw, "check_duplicates", "false").ToLowerInvariant() == "true";
             if (c.EngineTimeoutSeconds < 60) c.EngineTimeoutSeconds = 60;
+            if (c.EngineTimeoutSeconds > 4000000) c.EngineTimeoutSeconds = 4000000;   // about 46 days
             c.Validate();
             return c;
         }

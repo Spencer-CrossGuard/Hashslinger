@@ -95,7 +95,19 @@ function Save-HsConfig($cfg, [string]$Path) {
     Copy-Item $Path ("$Path.bak-{0:yyyyMMddHHmmss}" -f (Get-Date))
     Get-ChildItem "$Path.bak-*" | Sort-Object LastWriteTime -Descending | Select-Object -Skip 10 | Remove-Item -ErrorAction SilentlyContinue
   }
-  $cfg | ConvertTo-Json -Depth 8 | Set-Content $Path -Encoding UTF8
+  # Write to a temp file, check that it reads back, then swap it in. A scan that starts during the save sees the old
+  # complete file or the new complete file, never a half-written one.
+  $json = $cfg | ConvertTo-Json -Depth 8
+  $tmp = "$Path.tmp"
+  [IO.File]::WriteAllText($tmp, $json, (New-Object Text.UTF8Encoding($true)))
+  $null = Get-Content $tmp -Raw | ConvertFrom-Json
+  for ($try = 0; $try -lt 15; $try++) {
+    try {
+      if (Test-Path $Path) { [IO.File]::Replace($tmp, $Path, $null) } else { [IO.File]::Move($tmp, $Path) }
+      return
+    } catch [System.IO.IOException] { Start-Sleep -Milliseconds 300 }
+  }
+  throw "Could not replace $Path (it stayed locked). The new settings are saved in $tmp."
 }
 
 function Get-HsCfgValue($cfg, [string]$dotted) {

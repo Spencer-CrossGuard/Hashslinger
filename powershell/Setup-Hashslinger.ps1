@@ -114,7 +114,11 @@ foreach ($k in 'store', 'staging', 'logs', 'output', 'status', 'requests') {
     Result "Drive for $k ($drive)" $(if ($freeGb -ge $want) { 'PASS' } else { 'WARN' }) "$freeGb GB free, wants $want GB"
   } catch { Result "Drive for $k ($drive)" 'FAIL' 'drive not found' }
 }
-if ($Phase -eq 'Check') { Step 'Check only. No changes made.'; $results | Format-Table -AutoSize; exit 0 }
+if ($Phase -eq 'Check') {
+  Step 'Check only. No changes made.'; $results | Format-Table -AutoSize
+  if (@($results | Where-Object Status -eq 'FAIL').Count) { Write-Host 'There are FAIL items above.' -ForegroundColor Red; exit 1 }
+  exit 0
+}
 if (($results | Where-Object Status -eq 'FAIL')) { Write-Host 'Fix the FAIL items above, then re-run.' -ForegroundColor Red; exit 1 }
 
 New-Item -ItemType Directory -Force $Dir.logs | Out-Null
@@ -134,14 +138,25 @@ function Do-Local {
 
   Step 'Program files'
   $srcExe = Join-Path $srcRoot 'Hashslinger.exe'
-  if (-not (Test-Path $srcExe)) {
+  # rebuild when there is no exe, or when the source in cs\ is NEWER than the exe (an old build left in the folder must
+  # never be installed next to newer scripts)
+  $needBuild = -not (Test-Path $srcExe)
+  $csDir = Join-Path $srcRoot 'cs'
+  if (-not $needBuild -and (Test-Path $csDir)) {
+    $newestSrc = (Get-ChildItem $csDir -Filter *.cs | Measure-Object -Property LastWriteTimeUtc -Maximum).Maximum
+    if ($newestSrc -gt (Get-Item $srcExe).LastWriteTimeUtc) {
+      if (Test-Path $csc) { $needBuild = $true; Write-Host 'Hashslinger.exe is older than the source in cs\: rebuilding it.' -ForegroundColor Yellow }
+      else { Result 'Hashslinger.exe is current' 'WARN' 'the exe is older than the source in cs\ and there is no compiler here to rebuild it. It may be an old build. Build a fresh one (build.cmd) and run setup again.' }
+    }
+  }
+  if ($needBuild) {
     if (-not (Test-Path $csc)) { Result 'Build exe' 'FAIL' 'no exe and no csc.exe'; return }
     Push-Location $srcRoot
     & $csc /nologo /optimize+ /unsafe /platform:x64 /target:exe /out:Hashslinger.exe /r:System.dll /r:System.Core.dll 'cs\*.cs'
     Pop-Location
     if (-not (Test-Path $srcExe)) { Result 'Build exe' 'FAIL' 'compile errors above'; return }
     Result 'Build exe' 'PASS' 'built with in-box csc.exe'
-  } else { Result 'Build exe' 'SKIP' 'Hashslinger.exe already present' }
+  } else { Result 'Build exe' 'SKIP' 'Hashslinger.exe is present and newer than the source' }
   if ((Resolve-Path $srcRoot).Path -ne (Resolve-Path $Dir.bin).Path) {
     if (Test-Path "$($Dir.bin)\Hashslinger.exe") {
       $bk = "$($Dir.root)\app-backups\app-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
@@ -389,13 +404,35 @@ function Do-Finish {
     @($Dir.status, 'ReadAndExecute', 'ContainerInherit,ObjectInherit'),
     @($Dir.requests, 'CreateFiles', 'None')
   )
-  foreach ($entry in $plan) {
-    if ($PSCmdlet.ShouldProcess($entry[0], 'Restrict ACL')) { if ($entry.Count -gt 3) { Set-FolderAcl $entry[0] $gmsaSid $analystSid $entry[1] $entry[2] $entry[3] } else { Set-FolderAcl $entry[0] $gmsaSid $analystSid $entry[1] $entry[2] } }
+  # Only folders INSIDE the install folder are locked down (inheritance off, ACL replaced). A folder the settings point
+  # to outside it may be shared with other software, so there the service account is only GRANTED access and
+  # everything else is left exactly as it was.
+  $rootFull = [IO.Path]::GetFullPath($Dir.root).TrimEnd('\')
+  function Test-UnderRoot([string]$p) {
+    $f = [IO.Path]::GetFullPath($p).TrimEnd('\')
+    return ($f -ieq $rootFull) -or $f.StartsWith($rootFull + '\', [StringComparison]::OrdinalIgnoreCase)
   }
+  $external = @()
+  foreach ($entry in $plan) {
+    if (-not $PSCmdlet.ShouldProcess($entry[0], 'Restrict ACL')) { continue }
+    if (Test-UnderRoot $entry[0]) {
+      if ($entry.Count -gt 3) { Set-FolderAcl $entry[0] $gmsaSid $analystSid $entry[1] $entry[2] $entry[3] } else { Set-FolderAcl $entry[0] $gmsaSid $analystSid $entry[1] $entry[2] }
+    } else {
+      $rights = if ($entry.Count -gt 3) { $entry[3] } else { 'Modify' }
+      try {
+        $acl = Get-Acl $entry[0]
+        $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($gmsaSid, [Security.AccessControl.FileSystemRights]$rights, 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
+        Set-Acl -Path $entry[0] -AclObject $acl
+        $external += $entry[0]
+      } catch { Result 'Folder permissions' 'WARN' "could not grant the service account access to $($entry[0]): $($_.Exception.Message)" }
+    }
+  }
+  if ($external.Count) { Result 'Folders outside the install folder' 'WARN' ("granted the service account access but left the other permissions alone (they may be shared with other software): " + ($external -join '; ') + '. Make sure only the people who should read them can.') }
   # Files that were moved/linked in earlier keep their old permissions and the gMSA could not read them.
-  # Reset them to the permissions inherited from their (now locked-down) folder.
+  # Reset them to the permissions inherited from their (locked-down) folder. Only inside the install folder.
   $fixed = 0
   foreach ($d in $Dir.staging, $Dir.store) {
+    if (-not (Test-UnderRoot $d)) { continue }
     Get-ChildItem $d -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object { & icacls.exe $_.FullName /reset 2>&1 | Out-Null; $fixed++ }
   }
   Result 'Existing files in staging and store readable by the gMSA' 'PASS' "$fixed file(s) reset to inherited permissions"
@@ -406,15 +443,19 @@ function Do-Finish {
   $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
   $cadence = Opt 'cadence' 'Weekly'
   $day = Opt 'schedule_day' 'Sunday'
-  $at = [datetime]::ParseExact([string](Opt 'schedule_time' '02:00'), 'HH:mm', $null)
   $enableSched = [bool](Opt 'enable_scheduled' $true)
   $enableOnDemand = [bool](Opt 'enable_ondemand' $true)
-  $trigger = switch ($cadence) {
-    'Daily'   { New-ScheduledTaskTrigger -Daily -At $at }
-    'Monthly' { New-ScheduledTaskTrigger -Weekly -WeeksInterval 4 -DaysOfWeek $day -At $at }
-    default   { New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek $day -At $at }
+  $trigger = $null; $when = ''
+  if ($enableSched) {   # the schedule is only parsed when a scheduled scan is wanted (an unused bad time must not stop setup)
+    try { $at = [datetime]::ParseExact([string](Opt 'schedule_time' '02:00'), 'HH:mm', $null) }
+    catch { Result 'Schedule' 'FAIL' "schedule_time '$(Opt 'schedule_time' '')' is not a valid HH:mm time (Admin tool > Scan options)"; return }
+    $trigger = switch ($cadence) {
+      'Daily'   { New-ScheduledTaskTrigger -Daily -At $at }
+      'Monthly' { New-ScheduledTaskTrigger -Weekly -WeeksInterval 4 -DaysOfWeek $day -At $at }
+      default   { New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek $day -At $at }
+    }
+    $when = switch ($cadence) { 'Daily' { "daily at $($at.ToString('HH:mm'))" } 'Monthly' { "every 4 weeks on $day at $($at.ToString('HH:mm'))" } default { "weekly on $day at $($at.ToString('HH:mm'))" } }
   }
-  $when = switch ($cadence) { 'Daily' { "daily at $($at.ToString('HH:mm'))" } 'Monthly' { "every 4 weeks on $day at $($at.ToString('HH:mm'))" } default { "weekly on $day at $($at.ToString('HH:mm'))" } }
   if ($PSCmdlet.ShouldProcess('Hashslinger tasks', 'Register')) {
     if ($enableSched) {
       Register-ScheduledTask -TaskName 'Hashslinger-Scheduled' -Force -Principal $principal -Settings $settings -Trigger $trigger `

@@ -97,13 +97,17 @@ namespace Hashslinger
                 };
                 p.Start();
                 p.BeginErrorReadLine();
-                Timer killer = new Timer(delegate(object o)
-                {
-                    timedOut = true;
-                    try { p.Kill(); } catch (InvalidOperationException) { }
-                }, null, cfg.EngineTimeoutSeconds * 1000, Timeout.Infinite);
+                Timer killer = null;
                 try
                 {
+                    // 64-bit milliseconds: seconds * 1000 overflows 32 bits above about 596 hours. Created inside the try so a
+                    // failure here still ends the PowerShell child in the cleanup below.
+                    long ms = Math.Min((long)cfg.EngineTimeoutSeconds * 1000L, 4294967294L);
+                    killer = new Timer(delegate(object o)
+                    {
+                        timedOut = true;
+                        try { p.Kill(); } catch (InvalidOperationException) { }
+                    }, null, ms, (long)Timeout.Infinite);
                     string line;
                     while ((line = p.StandardOutput.ReadLine()) != null)
                     {
@@ -115,7 +119,7 @@ namespace Hashslinger
                 }
                 finally
                 {
-                    killer.Dispose();
+                    if (killer != null) killer.Dispose();
                     try { if (!p.HasExited) p.Kill(); } catch (InvalidOperationException) { }
                 }
                 if (timedOut) throw new EngineException("the engine ran longer than engine_timeout_seconds (" + cfg.EngineTimeoutSeconds + ") and was stopped");
