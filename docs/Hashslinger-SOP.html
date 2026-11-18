@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hashslinger SOP</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1d2330; --muted: #5b6577; --line: #d9dee7; --soft: #f3f5f9;
+    --accent: #1f4e9c; --accent-soft: #e8effa; --warn: #8a5a00; --warn-bg: #fff4dc; --warn-line: #f0d28a;
+    --bad: #9b1c1c; --bad-bg: #fdeaea; --bad-line: #f0b4b4; --ok: #17613b; --ok-bg: #e5f5ec;
+    --code-bg: #f6f7fa; --code-fg: #1d2330;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10141c; --fg: #e4e8f0; --muted: #98a2b5; --line: #2a3242; --soft: #171d29;
+      --accent: #7fa8ee; --accent-soft: #1a2538; --warn: #f0c36a; --warn-bg: #2a2212; --warn-line: #5c4a1c;
+      --bad: #f19a9a; --bad-bg: #2b1616; --bad-line: #5e2c2c; --ok: #7fd6a4; --ok-bg: #12261b;
+      --code-bg: #171d29; --code-fg: #e4e8f0;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 "Segoe UI", system-ui, -apple-system, Arial, sans-serif; }
+  header.top { background: var(--accent); color: #fff; padding: 28px 16px; }
+  header.top .in, main, nav.toc { max-width: 920px; margin: 0 auto; padding-left: 16px; padding-right: 16px; }
+  header.top .in { padding: 0; }
+  header.top h1 { margin: 0 0 4px; font-size: 1.9rem; letter-spacing: .2px; }
+  header.top p { margin: 0; opacity: .92; }
+  nav.toc { margin-top: 20px; }
+  nav.toc .box { background: var(--soft); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; }
+  nav.toc strong { display: block; margin-bottom: 6px; }
+  nav.toc ol { margin: 0; padding-left: 22px; columns: 2; column-gap: 28px; }
+  nav.toc a { color: var(--accent); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+  main { padding-bottom: 60px; }
+  section { margin-top: 38px; }
+  h2 { font-size: 1.45rem; margin: 0 0 10px; padding-bottom: 6px; border-bottom: 2px solid var(--line); }
+  h3 { font-size: 1.12rem; margin: 22px 0 6px; }
+  p { margin: 8px 0; }
+  ul, ol { margin: 8px 0; padding-left: 24px; }
+  li { margin: 4px 0; }
+  code { font-family: Consolas, "Cascadia Mono", Menlo, monospace; font-size: .92em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); color: var(--code-fg); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; font: 13.5px/1.5 Consolas, "Cascadia Mono", Menlo, monospace; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: .95rem; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--soft); }
+  .note, .warn, .bad, .ok { border-radius: 8px; padding: 10px 14px; margin: 12px 0; border: 1px solid var(--line); }
+  .note { background: var(--accent-soft); }
+  .warn { background: var(--warn-bg); border-color: var(--warn-line); }
+  .bad { background: var(--bad-bg); border-color: var(--bad-line); }
+  .ok { background: var(--ok-bg); }
+  .note > strong:first-child, .warn > strong:first-child, .bad > strong:first-child, .ok > strong:first-child { display: block; margin-bottom: 2px; }
+  .warn > strong:first-child { color: var(--warn); }
+  .bad > strong:first-child { color: var(--bad); }
+  .ok > strong:first-child { color: var(--ok); }
+  .tag { display: inline-block; font-size: .8rem; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--soft); }
+  .tag.high { background: var(--bad-bg); border-color: var(--bad-line); color: var(--bad); }
+  .tag.med { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn); }
+  .check { list-style: none; padding-left: 4px; }
+  .check li::before { content: "\2610\00a0"; }
+  footer { max-width: 920px; margin: 0 auto; padding: 0 16px 40px; color: var(--muted); font-size: .9rem; }
+  @media (max-width: 700px) { nav.toc ol { columns: 1; } }
+  @media print {
+    :root { --bg: #fff; --fg: #000; --accent: #000; }
+    header.top { background: none; color: #000; border-bottom: 2px solid #000; padding: 8px 0; }
+    nav.toc { display: none; }
+    pre, table, .note, .warn, .bad, .ok { break-inside: avoid; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top"><div class="in">
+  <h1>Hashslinger: Standard Operating Procedure</h1>
+  <p>Audit Active Directory password hashes against breached and weak password lists. Read-only to AD. Everything stays on the scan server.</p>
+</div></header>
+
+<nav class="toc"><div class="box">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#purpose">Purpose and rules</a></li>
+    <li><a href="#roles">Roles</a></li>
+    <li><a href="#before">Before you start</a></li>
+    <li><a href="#gmsa">Create the service account</a></li>
+    <li><a href="#install">Install</a></li>
+    <li><a href="#settings">Change settings</a></li>
+    <li><a href="#wordlists">Wordlists</a></li>
+    <li><a href="#scan">Run a scan</a></li>
+    <li><a href="#report">Read the report</a></li>
+    <li><a href="#layout">Where everything is</a></li>
+    <li><a href="#trouble">Troubleshooting</a></li>
+    <li><a href="#security">Security notes</a></li>
+  </ol>
+</div></nav>
+
+<main>
+
+<section id="purpose">
+  <h2>1. Purpose and rules</h2>
+  <p>Hashslinger reads password hashes for the accounts you choose, compares them with known breached and weak password lists, and writes a CSV of the accounts that need a password reset. It never stores or shows plaintext passwords, and it never writes hashes to the report.</p>
+  <div class="warn"><strong>Authorized use only</strong>Run it only on a network where you hold documented, signed authorization for this engagement. A scan uses directory replication rights, so it looks like a DCSync to monitoring tools. Tell the SOC before the first scan.</div>
+  <ul>
+    <li><strong>Read-only to AD.</strong> Nothing in the tool creates, changes or deletes anything in Active Directory.</li>
+    <li><strong>Local only.</strong> Account hashes exist in memory during the run and are wiped afterward. The only network traffic is to the domain controller.</li>
+    <li><strong>The report is sensitive.</strong> It names accounts with weak or reused passwords. Store and share it only as your tasking allows.</li>
+  </ul>
+</section>
+
+<section id="roles">
+  <h2>2. Roles</h2>
+  <table>
+    <tr><th>Role</th><th>What they do</th></tr>
+    <tr><td>Domain Admin</td><td>Creates the service account (gMSA) and grants it two replication rights, once, by hand. See section 4.</td></tr>
+    <tr><td>Server administrator</td><td>Local administrator on the scan server. Installs, changes settings, manages wordlists, runs scans. No Domain Admin rights needed.</td></tr>
+    <tr><td>SOC</td><td>Told in advance that the scan server and service account will generate replication (DCSync) alerts.</td></tr>
+    <tr><td>Report reader</td><td>Receives the CSV and drives the password resets.</td></tr>
+  </table>
+</section>
+
+<section id="before">
+  <h2>3. Before you start</h2>
+  <ul class="check">
+    <li>Signed authorization for this network is on file.</li>
+    <li>The scan server is a dedicated member server, <strong>not a domain controller</strong>, with access limited to the people who need it.</li>
+    <li>Memory: plan for roughly 1.5 GB per 5 million accounts, with a comfortable margin (16 GB or more for large environments).</li>
+    <li>Disk: the full HIBP store is about 17 GB, and a merge needs about twice that free while it runs. Pick a drive that fits.</li>
+    <li>The service account exists and has the two replication rights (section 4).</li>
+    <li>The SOC has been told.</li>
+    <li>The server has the AD PowerShell tools (RSAT). Setup installs them on Windows Server if missing.</li>
+    <li>DSInternals is available: either internet access to the PowerShell Gallery, or a copied module folder for offline servers.</li>
+    <li>FIPS mode is understood. See the FIPS entry in <a href="#trouble">Troubleshooting</a>.</li>
+  </ul>
+</section>
+
+<section id="gmsa">
+  <h2>4. Create the service account (Domain Admin, by hand)</h2>
+  <p>Hashslinger does not create the service account and never changes AD. A Domain Admin creates it once. Setup then checks it read-only. Read each command before you run it.</p>
+<pre><code># 1. KDS root key. Once per forest. Skip if Get-KdsRootKey already returns a key.
+Add-KdsRootKey -EffectiveImmediately        # usable after about 10 hours, once every DC has it
+
+# 2. The service account. Only the scan server may retrieve its password.
+New-ADServiceAccount -Name svc-hashslinger `
+  -DNSHostName svc-hashslinger.corp.contoso.com `
+  -PrincipalsAllowedToRetrieveManagedPassword (Get-ADComputer SCANSERVER) `
+  -KerberosEncryptionType AES256
+
+# 3. Two replication rights on the DOMAIN ROOT only (never the forest, never the schema):
+#      Replicating Directory Changes       1131f6aa-9c07-11d1-f79f-00c04fc2dcd2
+#      Replicating Directory Changes All   1131f6ad-9c07-11d1-f79f-00c04fc2dcd2
+#    Easiest: extras\Grant-HashslingerReplicationRights.ps1 -GmsaName svc-hashslinger   (add -WhatIf first)
+#    Or set them in ADSI Edit on the domain root, "this object only".
+
+# 4. On the scan server, elevated:
+Install-ADServiceAccount svc-hashslinger
+Test-ADServiceAccount svc-hashslinger       # must print True</code></pre>
+  <div class="warn"><strong>Least privilege</strong>Do not add the account to Domain Admins or any other privileged group. It needs only the two replication rights. Setup warns if it finds the account inside a privileged group, or if more than one computer may retrieve its password.</div>
+  <p>The folder <code>extras</code> in the install folder has optional helper scripts for the Domain Admin. Using them is a convenience, never a requirement.</p>
+</section>
+
+<section id="install">
+  <h2>5. Install</h2>
+  <p>Copy the whole Hashslinger folder to the scan server and double-click <code>Setup-Hashslinger.cmd</code>. A local administrator is enough.</p>
+  <ol>
+    <li><strong>Where to install.</strong> Click Browse and pick a drive and folder. Everything is created inside a folder named <code>Hashslinger</code>, so the program, settings, data, reports and logs are all in one place. The window shows the exact folder and its free space.</li>
+    <li><strong>Domain controller.</strong> Pick the DC to read from.</li>
+    <li><strong>Service account name.</strong> The gMSA from section 4.</li>
+    <li><strong>What to scan.</strong> A tree like Active Directory. Expand it and tick OUs. Everything underneath a ticked OU is included. Type in the search box to find an OU; its parents stay visible. The list under the tree shows what will really be scanned. Double-click an entry to remove it.</li>
+    <li><strong>Password lists</strong> (optional). Choose rockyou and HIBP files now, or add them later in the Admin tool.</li>
+    <li>Click <strong>Check readiness</strong>. It changes nothing and tells you in plain language what would fail.</li>
+    <li>Click <strong>Install</strong>. It installs on this server, then runs the service account checks.</li>
+  </ol>
+  <h3>What the service account checks mean</h3>
+  <table>
+    <tr><th>Check</th><th>What a problem means</th></tr>
+    <tr><td>Service account exists in AD</td><td>Wrong name, or it was not created yet (section 4).</td></tr>
+    <tr><td>This server can resolve the account name</td><td>The server cannot look up the account through its domain controller. Check TCP 445 and 135 to the DC and <code>Test-ComputerSecureChannel</code>.</td></tr>
+    <tr><td>This server may retrieve the password</td><td>The account was created for a different server name.</td></tr>
+    <tr><td>Only this server may retrieve the password</td><td>Warning: other computers can also use the account. The design is one server.</td></tr>
+    <tr><td>Not in a privileged group</td><td>Warning: remove the account from Domain Admins, Enterprise Admins, Schema Admins or Administrators.</td></tr>
+    <tr><td>Replication rights on the domain root</td><td>Warning: one of the two rights is missing, denied, or not applied to the domain root itself.</td></tr>
+    <tr><td>Test-ADServiceAccount</td><td>The account is not installed on this server yet. Run <code>Install-ADServiceAccount</code> here, elevated.</td></tr>
+    <tr><td>Folder permissions and scheduled tasks</td><td>Done locally. Only the service account, local Administrators and SYSTEM can reach the data.</td></tr>
+    <tr><td>Live test as the service account</td><td>The definitive check. It replicates this server's own computer object as the service account and reports the exact error if it fails.</td></tr>
+  </table>
+  <p>When everything is green, click <strong>Run first scan</strong>. If a check fails, fix it and click <strong>Re-run service account checks</strong>.</p>
+</section>
+
+<section id="settings">
+  <h2>6. Change settings (Admin tool)</h2>
+  <p>Open <code>Hashslinger-Admin.cmd</code> in the install folder. It is a separate window from the setup wizard. Every setting lives in one file, <code>config\hashslinger.json</code>, and every one is editable here with an explanation under it. A backup of the previous settings is kept on each save. Changes apply to the next scan.</p>
+  <table>
+    <tr><th>Tab</th><th>What you can change</th></tr>
+    <tr><td>Where everything is</td><td>Hash store, wordlists, reports, audit log, status and requests locations, pattern rules, allowed report locations. Browse and Open buttons on each. Changing a folder does not move the files in it.</td></tr>
+    <tr><td>Active Directory</td><td>Domain controller, live or offline mode, bulk or per-account replication, the small-scope switch, account types, flags to skip or require, and the scope tree.</td></tr>
+    <tr><td>Scan options</td><td>Duplicate-password checking, schedule (how often, day, time), report retention, scan timeout.</td></tr>
+    <tr><td>Security and accounts</td><td>Service account name, scan server, analyst group, allowed EDIPIs, BitLocker requirement, offline module folder, and a button to re-apply permissions and tasks.</td></tr>
+    <tr><td>Wordlists</td><td>Add files, merge them into the store, show the store size.</td></tr>
+    <tr><td>Run and logs</td><td>Start a scan, watch progress, open the newest report, last-scan timings, readiness re-check, self-test, support bundle, and this SOP.</td></tr>
+  </table>
+  <div class="note"><strong>Schedule changes</strong>After you save a new day, time or frequency, the tool asks whether to update the scheduled task now. Changing the service account, analyst group or scan server needs the <em>Re-apply permissions and scheduled tasks</em> button as well.</div>
+</section>
+
+<section id="wordlists">
+  <h2>7. Wordlists</h2>
+  <p>Wordlists are the breached and weak passwords a scan matches against. Add them in the Admin tool (<em>Wordlists</em> tab) or copy files into the matching folder under <code>data\staging</code>. Always <strong>copy</strong> them in rather than moving them, so they take the folder's permissions and the service account can read them.</p>
+  <table>
+    <tr><th>Folder</th><th>Typical content</th><th>Format</th></tr>
+    <tr><td><code>HIBP</code></td><td>Have I Been Pwned NTLM list</td><td>Lines of <code>HASH</code> or <code>HASH:count</code></td></tr>
+    <tr><td><code>rockyou</code></td><td>Plain password list</td><td>One password per line</td></tr>
+    <tr><td><code>custom</code></td><td>Your own terms or large tables</td><td>Plain list, NT hash list, or <code>.tsv</code>/<code>.csv</code> with a hash column and a password column</td></tr>
+  </table>
+  <h3>Hash and password tables (TSV or CSV)</h3>
+  <ul>
+    <li>The layout is detected: tab, colon or comma separated; hash in the first or last column; optional header row.</li>
+    <li>The first rows are tested. If the NT hash of the password equals the hash column, the hash column is NT and is used directly. If not, the hash column is another algorithm and would never match AD, so the NT hash is computed from the password column and the hash column is ignored. The log says which happened.</li>
+    <li><strong>Passwords are never stored.</strong> Only the 16-byte NT hash is kept, plus a small source tag. Duplicates across files collapse. The merged store is far smaller than the source files.</li>
+    <li>All new files for a folder are merged in one pass, parsed in parallel. Large files take a while; the scan prints progress per file.</li>
+  </ul>
+  <div class="warn"><strong>Originals are plaintext password lists</strong>Keep the source files somewhere protected, or delete them after they are merged. The staging folder is locked to the service account and local Administrators.</div>
+</section>
+
+<section id="scan">
+  <h2>8. Run a scan</h2>
+  <p>Scans run on the schedule you set (weekly by default) under the service account. To run one now: Admin tool, <em>Run and logs</em>, <strong>Start a scan now</strong>. A progress window opens.</p>
+  <table>
+    <tr><th>Step</th><th>What it is doing</th></tr>
+    <tr><td>1 Preflight</td><td>Checks the output location and settings.</td></tr>
+    <tr><td>2 Merge wordlists</td><td>Merges any new or changed files from the staging folders.</td></tr>
+    <tr><td>3 Build patterns</td><td>Prepares keyboard-walk and base-word candidates.</td></tr>
+    <tr><td>4 Pull accounts from AD</td><td>The longest step. First a scope search, then the replication pull. Progress lines show counts.</td></tr>
+    <tr><td>5 Match against the store</td><td>Looks up each hash. Fast.</td></tr>
+    <tr><td>6 Write the report</td><td>Writes the CSV (flagged accounts only).</td></tr>
+    <tr><td>7 Wipe and log</td><td>Wipes memory, writes the audit entry.</td></tr>
+  </table>
+  <ul>
+    <li>Only one scan runs at a time. A second start is refused and logged.</li>
+    <li>Anyone with read access to the status folder can open the progress window; it does not depend on who started the scan.</li>
+    <li><strong>Small scopes are fast.</strong> At or below the small-scope switch (5,000 accounts by default), only the accounts in scope are replicated. Larger scopes use one bulk pass over the whole directory, so the time depends on the size of the directory.</li>
+    <li>The audit log records the time spent in each stage. The Admin tool shows it under <em>Last scan</em>.</li>
+  </ul>
+</section>
+
+<section id="report">
+  <h2>9. Read the report</h2>
+  <p>Each scan writes <code>report_&lt;date&gt;.csv</code> in the reports folder. One row per flagged account. Accounts with no finding do not appear. The file never contains hashes or passwords.</p>
+  <table>
+    <tr><th>Column</th><th>Meaning</th></tr>
+    <tr><td><code>sAMAccountName</code></td><td>The account's sAMAccountName, as AD reports it. Never blank.</td></tr>
+    <tr><td><code>OU / Distinguished Name</code></td><td>The account's parent OU or container, to route the reset to the right team.</td></tr>
+    <tr><td><code>Account Type</code></td><td>User, Service or Computer.</td></tr>
+    <tr><td><code>Flag Reason</code></td><td>One or more reasons, separated by semicolons.</td></tr>
+    <tr><td><code>Severity</code></td><td>The highest severity among the reasons.</td></tr>
+    <tr><td><code>Scan Run ID / Date</code></td><td>Ties the row to the audit log entry.</td></tr>
+  </table>
+  <h3>Flag reasons</h3>
+  <table>
+    <tr><th>Reason</th><th>Severity</th></tr>
+    <tr><td>Found in HIBP breach corpus</td><td><span class="tag high">High</span></td></tr>
+    <tr><td>Found in rockyou list</td><td><span class="tag high">High</span></td></tr>
+    <tr><td>Found in custom/organization term list</td><td><span class="tag high">High</span></td></tr>
+    <tr><td>No password set</td><td><span class="tag high">High</span></td></tr>
+    <tr><td>Reversible encryption enabled</td><td><span class="tag high">High</span></td></tr>
+    <tr><td>Matched common-pattern rule (keyboard walk / dictionary base word)</td><td><span class="tag med">Medium</span></td></tr>
+    <tr><td>Duplicate password shared with another account (only if duplicate checking is on)</td><td><span class="tag med">Medium</span></td></tr>
+    <tr><td>LM hash present</td><td><span class="tag med">Medium</span></td></tr>
+  </table>
+  <p><strong>Action:</strong> force a password reset for every High row now, and for Medium rows on the normal schedule. Names that begin with a spreadsheet formula character are prefixed with an apostrophe so a spreadsheet will not run them.</p>
+</section>
+
+<section id="layout">
+  <h2>10. Where everything is</h2>
+  <p>Everything is under the install folder you chose:</p>
+<pre><code>Hashslinger\
+  app\        the program and scripts
+  config\     hashslinger.json (the ONE settings file), pattern_rules.json
+  data\       store\ (merged hash store)   staging\ (wordlists: HIBP, rockyou, custom)
+  reports\    the CSV from each scan
+  logs\       audit.jsonl, setup logs, SETUP-SUMMARY.txt
+  status\     live progress file
+  requests\   analyst request drop box (only if you use an analyst group)
+  extras\     optional helper scripts for a Domain Admin
+  Hashslinger-Admin.cmd</code></pre>
+  <p>The Admin tool's first tab lists every location with Open buttons.</p>
+</section>
+
+<section id="trouble">
+  <h2>11. Troubleshooting</h2>
+  <table>
+    <tr><th>You see</th><th>Cause and fix</th></tr>
+    <tr><td><code>Replication access was denied</code></td><td>The service account lacks one of the two rights on the <strong>domain root</strong>, or a Deny overrides it, or the DSInternals version is asking for the Schema partition. The tool passes explicit property sets to avoid the Schema request. Re-run the service account checks: the effective-rights line and the live test show which. Confirm both rights are Allow entries on the domain root, applied to this object.</td></tr>
+    <tr><td><code>Only FIPS certified cryptographic algorithms are enabled in .NET ... MD5</code></td><td>The server enforces FIPS-only cryptography. Reading password hashes over replication needs MD5 and RC4, so DSInternals refuses to run. Setup, permissions and tasks are unaffected; only the scan is blocked. Options, each needing your security approval: a policy exception for this server only, or an approved host that is not FIPS-enforced. Check: <code>Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\FipsAlgorithmPolicy -Name Enabled</code> (1 means on).</td></tr>
+    <tr><td><code>Some or all identity references could not be translated</code> or <code>0x80070534</code></td><td>This server cannot translate the service account's name or SID through a domain controller. Check TCP 445 and 135 to the DC and <code>Test-ComputerSecureChannel</code>.</td></tr>
+    <tr><td><code>Access to the path ... is denied</code> on a wordlist</td><td>The file kept the permissions of where it came from. Copy the file into the staging folder (do not move it), or run <code>icacls &lt;folder&gt; /T /reset</code>. The service account checks also repair this.</td></tr>
+    <tr><td>Step 4 shows no progress for a long time</td><td>Large scopes first run a scope search, then a bulk pull of the whole directory. That is expected on large directories; progress lines appear as it goes. For a small scope the tool switches to per-account automatically. If nothing changes for many minutes, check the engine process CPU and connections.</td></tr>
+    <tr><td>The scheduled task will not start</td><td>The service account needs the "Log on as a batch job" right on this server (Local Security Policy, or the GPO).</td></tr>
+    <tr><td>Scripts are blocked or ask for confirmation</td><td>Downloaded files are marked as untrusted. Start setup from <code>Setup-Hashslinger.cmd</code>, which unblocks the folder, or run <code>Get-ChildItem &lt;folder&gt; -Recurse | Unblock-File</code>.</td></tr>
+    <tr><td><code>Search base not found</code></td><td>The built-in Users container is <code>CN=Users</code>, not an OU. Pick it from the scope tree instead of typing it.</td></tr>
+    <tr><td>You need help</td><td>Admin tool, <em>Run and logs</em>, <strong>Create support bundle</strong>. It contains settings and logs only: no reports, no hashes.</td></tr>
+  </table>
+</section>
+
+<section id="security">
+  <h2>12. Security notes</h2>
+  <ul>
+    <li><strong>Access.</strong> Only the service account, local Administrators and SYSTEM can read the store, wordlists, logs and settings. Failed access attempts are audited if the Audit File System policy is on.</li>
+    <li><strong>Local Administrators</strong> on the scan server can read process memory during a scan. Keep that group small.</li>
+    <li><strong>Memory wipe.</strong> Account hashes live in one buffer that is zeroed after the run; the audit log records whether the wipe was confirmed. Wiping is best effort on SSDs, so volume encryption (BitLocker) is the real control.</li>
+    <li><strong>Audit log.</strong> Every run, including failed ones, records who or what started it, when, how many accounts, where the report went, the wipe result and the time per stage.</li>
+    <li><strong>Report handling.</strong> Reports are deleted securely after the retention period if you set one. Treat each report like the credential data it describes.</li>
+  </ul>
+</section>
+
+</main>
+<footer>Hashslinger SOP. For an authorized internal credential audit only.</footer>
+</body>
+</html>

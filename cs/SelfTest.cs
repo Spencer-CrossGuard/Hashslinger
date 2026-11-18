@@ -278,6 +278,9 @@ namespace Hashslinger
             Check("frank: no password", by["frank"][3] == "No password set");
             Check("gina: reversible + LM", by["gina"][3].Contains("Reversible") && by["gina"][3].Contains("LM"));
             Check("OU column is parent container", by["alice"][1] == Ou);
+            bool allNamed = rows.Count > 1;
+            for (int i = 1; i < rows.Count; i++) if (rows[i][0].Length == 0) allNamed = false;
+            Check("report column 1 is sAMAccountName and no name is blank", rows[0][0] == "sAMAccountName" && allNamed);
             Check("no hashes in report", !text.ToLowerInvariant().Contains(Hex(Ntlm.Hash("password")).ToLowerInvariant()));
             string[] log = File.ReadAllLines(cfg.LogPath);
             Check("audit log has start+end", log.Length == 2 && log[0].Contains("\"start\"") && log[1].Contains("\"wipe_confirmed\":true"));

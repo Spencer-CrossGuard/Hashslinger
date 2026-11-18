@@ -41,7 +41,6 @@ function Get-HsDefaultConfig([string]$Root) {
     require_encrypted_volume = $false
     authorized_edipis = @()
     gmsa_name = 'svc-hashslinger'
-    gmsa_precreated = $false
     run_server = $env:COMPUTERNAME
     analyst_group = ''
     wordlists = [ordered]@{ hibp = ''; rockyou = ''; custom = '' }

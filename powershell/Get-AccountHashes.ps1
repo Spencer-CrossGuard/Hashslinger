@@ -51,12 +51,30 @@ function Status([string]$m) { $out.WriteLine('##HS## ' + $m) }
 function ToHex($b) { if ($b) { [BitConverter]::ToString([byte[]]$b).Replace('-', '') } else { '' } }
 function Clean([string]$s) { $s -replace '[\t\r\n]', ' ' }
 
+# sAMAccountName must never be blank in the report. Normally DSInternals supplies it; if not, read it from AD (LDAP, read-only).
+function Get-SamFromLdap($guid) {
+  if ($Mode -ne 'live' -or -not $Server -or -not $guid) { return '' }
+  try {
+    $hex = (([Guid]$guid).ToByteArray() | ForEach-Object { '\' + $_.ToString('x2') }) -join ''
+    $ds = New-Object System.DirectoryServices.DirectorySearcher
+    $ds.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$Server")
+    $ds.Filter = "(objectGUID=$hex)"
+    [void]$ds.PropertiesToLoad.Add('samaccountname')
+    $r = $ds.FindOne()
+    if ($r -and $r.Properties['samaccountname'].Count) { return [string]$r.Properties['samaccountname'][0] }
+  } catch { }
+  return ''
+}
+
 function Emit($acct, [string]$type) {
+  $sam = [string]$acct.SamAccountName
+  if (-not $sam) { $sam = Get-SamFromLdap $acct.Guid }
+  if (-not $sam) { $sam = '(unknown)' }
   $clear = ($null -ne $acct.SupplementalCredentials) -and ($null -ne $acct.SupplementalCredentials.ClearText)
   $uac = [int]$acct.UserAccountControl
   $rev = if ($clear -or (($uac -band 0x80) -ne 0)) { '1' } else { '0' }
   $lm = if ($null -ne $acct.LMHash) { '1' } else { '0' }
-  $out.WriteLine((Clean $acct.SamAccountName) + "`t" + (Clean $acct.DistinguishedName) + "`t" + $type + "`t" +
+  $out.WriteLine((Clean $sam) + "`t" + (Clean $acct.DistinguishedName) + "`t" + $type + "`t" +
                  (ToHex $acct.NTHash) + "`t" + $lm + "`t" + $rev)
 }
 

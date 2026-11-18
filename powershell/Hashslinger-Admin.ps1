@@ -235,8 +235,7 @@ Add-Row $tpScan 'engine_timeout_seconds' 'Stop a scan after (hours)' 'hours' $nu
 # ================================================================ tab: Security
 $tpSec = New-Tab 'Security and accounts'
 Add-Heading $tpSec 'Service account and access'
-Add-Row $tpSec 'gmsa_name' 'Service account (gMSA) name' 'text' $null 'The account the scheduled scan runs as. It needs the two directory replication rights (a Domain Admin grants them).'
-Add-Row $tpSec 'gmsa_precreated' 'Already created in AD' 'bool' 'Tick if a Domain Admin already created it (skips the hand-off).'
+Add-Row $tpSec 'gmsa_name' 'Service account (gMSA) name' 'text' $null 'The account the scheduled scan runs as. Create it by hand first; it needs only the two directory replication rights on the domain root and nothing else.'
 Add-Row $tpSec 'run_server' 'Scan server' 'text' $null 'The only computer allowed to use the service account.'
 Add-Row $tpSec 'analyst_group' 'Analyst group (optional)' 'text' $null 'Leave empty so only the service account and local Administrators have access. A group lets analysts submit scans.'
 Add-Row $tpSec 'authorized_edipis' 'Allowed EDIPIs' 'lines' $null 'One per line. Empty = any valid 10-digit EDIPI may request a scan (only used with the analyst request GUI).'
@@ -248,7 +247,9 @@ $btnFinish.Add_Click({
     Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-File', "`"$setupScript`"", '-Config', "`"$ConfigPath`"", '-Phase', 'Finish')
   }
 })
-$tpSec.Controls.Add($btnFinish); $tpSec.Tag = [int]$tpSec.Tag + 40
+$btnExtras = New-Object Windows.Forms.Button -Property @{ Text = 'Open extras (gMSA helper scripts)'; Left = 580; Top = [int]$tpSec.Tag; Width = 260; Height = 30 }
+$btnExtras.Add_Click({ $p = Join-Path $root 'extras'; if (Test-Path $p) { Start-Process explorer.exe $p } else { Msg "Not found: $p" } })
+$tpSec.Controls.AddRange(@($btnFinish, $btnExtras)); $tpSec.Tag = [int]$tpSec.Tag + 40
 Add-Note $tpSec 'Changing the service account, analyst group or scan server needs this re-apply step to take effect.'
 
 # ================================================================ tab: Wordlists
@@ -315,7 +316,8 @@ Add-Heading $tpRun 'Checks and support'
 $btns2 = @(
   @('Re-run readiness checks', { Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-File', "`"$setupScript`"", '-Config', "`"$ConfigPath`"", '-Phase', 'Check') }),
   @('Create support bundle', { New-SupportBundle }),
-  @('Run self-test (exe)', { Start-Process cmd.exe -ArgumentList '/k', "`"`"$exe`" selftest`"" })
+  @('Run self-test (exe)', { Start-Process cmd.exe -ArgumentList '/k', "`"`"$exe`" selftest`"" }),
+  @('Open the SOP', { $p = Join-Path $root 'app\docs\Hashslinger-SOP.html'; if (Test-Path $p) { Start-Process $p } else { Msg "Not found: $p" } })
 )
 $x = 12; $y = [int]$tpRun.Tag
 foreach ($b in $btns2) {

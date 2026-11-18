@@ -9,7 +9,7 @@ Run only with documented, signed authorization for the target network.
 
 - **The tool never changes Active Directory.** The scripts in `powershell\` only read AD: LDAP searches, directory
   replication reads (`Get-ADReplAccount`), and read-only `Get-AD*` / `Get-Acl` queries. Everything that changes AD is
-  isolated in `ad-admin\` (a Domain Admin runs it by hand, `-WhatIf` first) and `diagnostics\` (lab only). Setup never
+  isolated in `extras\` (optional helpers a Domain Admin may run by hand, `-WhatIf` first) and `diagnostics\` (lab only). Setup never
   calls those. `Hashslinger.exe selftest` scans the shipped `powershell\` scripts and FAILS if it finds any AD-write
   command (New/Set/Add/Remove-AD*, Add-KdsRootKey, Set-Acl on AD:, ldifde, dsacls, ...) or any network command.
 - **Who requested a scan.** The EDIPI and reason are typed by the requester, so they are self-asserted. The audit log
@@ -59,16 +59,18 @@ is created inside it:
   logs\       audit log, setup logs, SETUP-SUMMARY.txt
   status\     live progress file
   requests\   analyst request drop box (only if you use an analyst group)
-  handoff\    the package for the Domain Admin
+  extras\     optional gMSA helper scripts (a Domain Admin may use them; never required)
   Hashslinger-Admin.cmd   opens the Admin tool
 ```
 
-**1. Setup wizard** (`Setup-Hashslinger.cmd`, double-click, local administrator is enough, no Domain Admin):
-pick the install folder, the domain controller, the service account name, and tick what to scan in a **nested tree that
-looks like AD** (search keeps the parents visible; ticking an OU includes everything underneath). *Check readiness*
-tells you in plain language what would fail; *Install* installs and writes the Domain Admin hand-off; *Finish* (after the
-Domain Admin has done their part) checks the AD prerequisites read-only, applies folder permissions, registers the tasks.
-Tick "Already created" if the service account already exists and the hand-off is skipped.
+**1. Setup wizard** (`Setup-Hashslinger.cmd`, double-click, local administrator is enough): pick the install folder, the
+domain controller, the service account name, and tick what to scan in a **nested tree that looks like AD** (search keeps the
+parents visible; ticking an OU includes everything underneath). *Check readiness* tells you in plain language what would fail.
+**You create the service account (gMSA) by hand first** (SOP section 4); the wizard does not create it and there is no
+hand-off package. *Install* installs locally and then runs the **service account checks** (read-only AD checks that the
+account exists, only this server may use it, it is not in a privileged group, it has the two replication rights on the
+domain root, then folder permissions, scheduled tasks, and a live replication test AS the account). If a check fails, fix it
+and click *Re-run service account checks*.
 
 **2. Admin tool** (`<folder>\Hashslinger-Admin.cmd`): change **any** setting, with an explanation under each one:
 where files live, the domain controller, mode, replication, account types, UAC flags, the nested scope tree, duplicate
@@ -77,8 +79,12 @@ requirement. Also: add wordlists, merge them, start and watch scans, open the ne
 re-check, and a **support bundle** (settings and logs only, no hashes) you can send for help. A backup of the settings is
 kept on every save. Changes apply to the next scan.
 
-**Hashslinger never creates or changes anything in Active Directory.** The Domain Admin does the AD part once, by hand, from
-the `handoff` folder (the scripts live in `ad-admin\`).
+**Hashslinger never creates or changes anything in Active Directory.** The gMSA is created by hand; the optional helper
+scripts are in `extras\`. The full procedure is the **SOP**: `docs\Hashslinger-SOP.html` (opens in any browser; also reachable
+from the Admin tool, *Run and logs*, *Open the SOP*).
+
+**Results file:** column 1 is `sAMAccountName` (the engine falls back to a read-only LDAP lookup if DSInternals returns it
+empty, and the report falls back to the CN, so it is never blank).
 
 ## Build (no SDK, no install)
 

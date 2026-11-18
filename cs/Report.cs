@@ -42,7 +42,7 @@ namespace Hashslinger
 
     public static class Report
     {
-        static readonly string[] Columns = { "Username", "OU / Distinguished Name", "Account Type", "Flag Reason", "Severity", "Scan Run ID / Date" };
+        static readonly string[] Columns = { "sAMAccountName", "OU / Distinguished Name", "Account Type", "Flag Reason", "Severity", "Scan Run ID / Date" };
 
         static int FirstUnescapedComma(string dn)
         {
@@ -52,6 +52,15 @@ namespace Hashslinger
                 if (dn[i] == ',') return i;
             }
             return -1;
+        }
+
+        /// <summary>The CN from a DN: only a last-resort stand-in so the sAMAccountName column is never blank.</summary>
+        public static string CnFromDn(string dn)
+        {
+            int i = FirstUnescapedComma(dn);
+            string first = i >= 0 ? dn.Substring(0, i) : dn;
+            if (first.StartsWith("CN=", StringComparison.OrdinalIgnoreCase)) first = first.Substring(3);
+            return first.Replace("\\,", ",");
         }
 
         /// <summary>Strip the leading CN= RDN so the column routes remediation to an OU.</summary>
@@ -118,6 +127,7 @@ namespace Hashslinger
                     if (r == 0) continue;
                     string sam, dn;
                     t.GetNames(i, out sam, out dn);
+                    if (string.IsNullOrEmpty(sam) || sam == "(unknown)") sam = CnFromDn(dn);
                     string[] cells =
                     {
                         Safe(sam), Safe(ParentContainer(dn)), AccountTable.TypeNames[t.Type(i)],

@@ -6,23 +6,22 @@
   THIS SCRIPT NEVER CREATES OR CHANGES ANYTHING IN ACTIVE DIRECTORY. It runs fine as a local administrator
   on the scan server (no Domain Admin needed).
     Phase Check    preflight only, no changes
-    Phase Local    folders under <root> (app, config, data, reports, logs, status, requests, handoff), install to
+    Phase Local    folders under <root> (app, config, data, reports, logs, status, requests, extras), install to
                    <root>\app, build the exe if missing, DSInternals + AD tools, unblock files, verify
                    (PowerShell syntax parse, exe selftest, AD-free smoke test, DC/OU reachability)
-    Phase Handoff  write <root>\handoff for a Domain Admin: plain-language request + the gMSA scripts.
-                   The Domain Admin does the AD part by hand, separately.
-    Phase Finish   after the Domain Admin is done: READ-ONLY checks that the gMSA and its rights exist,
-                   then local-only steps: folder permissions, scheduled tasks, live test as the gMSA.
-    Phase All      Local then Handoff
-  AD SAFETY: the scripts in powershell\ only READ AD. Anything that changes AD lives in ad-admin\ (for a Domain
-  Admin to run by hand) and diagnostics\ (lab only). 'Hashslinger.exe selftest' re-verifies this on your machine.
+    Phase Finish   READ-ONLY checks of the service account you created by hand (exists, only this server may use it,
+                   not in a privileged group, has the two replication rights on the domain root), then local-only
+                   steps: folder permissions, scheduled tasks, and a live replication test AS the service account.
+    Phase All      Local then Finish
+  AD SAFETY: the scripts in powershell\ only READ AD. Anything that changes AD lives in extras\ (optional
+  helpers for a Domain Admin to run by hand) and diagnostics\ (lab only). 'Hashslinger.exe selftest' re-verifies this on your machine.
 .NOTES
   Finish-phase steps are UNTESTED against a live domain.
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
   [Alias('InitConfig')][string]$Config,
-  [ValidateSet('Check', 'Local', 'Handoff', 'Finish', 'All')][string]$Phase = 'Local'
+  [ValidateSet('Check', 'Local', 'Finish', 'All')][string]$Phase = 'Local'
 )
 $ErrorActionPreference = 'Stop'
 $srcRoot = Split-Path -Parent $PSScriptRoot      # the dropped folder (repo root)
@@ -80,7 +79,6 @@ $Dir = @{
   output = Opt 'output_path' "$root\reports"
   status = Split-Path -Parent (Opt 'status_path' "$root\status\status.json")
   requests = Opt 'request_dir' "$root\requests"
-  handoff = "$root\handoff"
 }
 $exe = "$($Dir.bin)\Hashslinger.exe"
 $runtimeCfg = $Config
@@ -126,7 +124,7 @@ Start-Transcript -Path $transcript | Out-Null
 # ---------------------------------------------------------------- phase: Local
 function Do-Local {
   Step 'Folders'
-  foreach ($d in $Dir.bin, $Dir.config, $Dir.store, $Dir.staging, "$($Dir.staging)\HIBP", "$($Dir.staging)\rockyou", "$($Dir.staging)\custom", $Dir.logs, $Dir.output, $Dir.status, $Dir.requests, $Dir.handoff) {
+  foreach ($d in $Dir.bin, $Dir.config, $Dir.store, $Dir.staging, "$($Dir.staging)\HIBP", "$($Dir.staging)\rockyou", "$($Dir.staging)\custom", $Dir.logs, $Dir.output, $Dir.status, $Dir.requests, "$($Dir.root)\extras") {
     New-Item -ItemType Directory -Force $d | Out-Null
   }
   Result 'Folders created' 'PASS' "root $($Dir.root)"
@@ -143,8 +141,8 @@ function Do-Local {
   } else { Result 'Build exe' 'SKIP' 'Hashslinger.exe already present' }
   if ((Resolve-Path $srcRoot).Path -ne (Resolve-Path $Dir.bin).Path) {
     Copy-Item $srcExe $Dir.bin -Force
-    New-Item -ItemType Directory -Force "$($Dir.bin)\powershell", "$($Dir.bin)\config", "$($Dir.bin)\docs", "$($Dir.bin)\ad-admin" | Out-Null
-    Copy-Item "$srcRoot\ad-admin\*" "$($Dir.bin)\ad-admin" -Force -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Force "$($Dir.bin)\powershell", "$($Dir.bin)\config", "$($Dir.bin)\docs" | Out-Null
+    Copy-Item "$srcRoot\extras\*" "$($Dir.root)\extras" -Force -ErrorAction SilentlyContinue   # optional gMSA helper scripts
     Copy-Item "$srcRoot\powershell\*.ps1" "$($Dir.bin)\powershell" -Force
     Copy-Item "$srcRoot\config\*" "$($Dir.bin)\config" -Force
     Copy-Item "$srcRoot\docs\*" "$($Dir.bin)\docs" -Force -ErrorAction SilentlyContinue
@@ -233,7 +231,7 @@ function Do-Verify {
   $csv = Get-ChildItem "$v\output\*.csv" -ErrorAction SilentlyContinue | Select-Object -First 1
   if ($LASTEXITCODE -ne 0 -or -not $csv) { Result 'Smoke test (fake engine)' 'FAIL' (($so | Out-String).Trim() + '  (blocked script policy? run Unblock-File on the bin folder)') }
   else {
-    $names = ((Import-Csv $csv.FullName).Username | Sort-Object) -join ','
+    $names = ((Import-Csv $csv.FullName).sAMAccountName | Sort-Object) -join ','
     $raw = Get-Content $csv.FullName -Raw
     if ($names -eq 'alice,carol,dave,erin,frank,gina' -and $raw -notmatch '[0-9A-Fa-f]{32}') { Result 'Smoke test (fake engine)' 'PASS' 'exe -> powershell -> csv, no hashes in report' }
     else { Result 'Smoke test (fake engine)' 'FAIL' "unexpected flagged set: $names" }
@@ -255,7 +253,7 @@ function Do-Verify {
   }
 }
 
-# ---------------------------------------------------------------- phase: Handoff (writes NO Active Directory changes)
+# ---------------------------------------------------------------- folder permissions helper
 function Set-FolderAcl([string]$path, $gmsaSid, $analystSid, $analystRights, [string]$analystInherit = 'ContainerInherit,ObjectInherit') {
   $acl = New-Object Security.AccessControl.DirectorySecurity
   $acl.SetAccessRuleProtection($true, $false)
@@ -279,23 +277,9 @@ function Set-FolderAcl([string]$path, $gmsaSid, $analystSid, $analystRights, [st
   Set-Acl -Path $path -AclObject $acl
 }
 
-function Do-Handoff {
-  if ([bool](Opt 'gmsa_precreated' $false)) { Result 'Domain Admin hand-off' 'SKIP' "gMSA '$gmsa' is marked as already created"; return }
-  Step 'Hand-off package for a Domain Admin (nothing in AD is changed by this tool)'
-  $h = $Dir.handoff
-  New-Item -ItemType Directory -Force $h | Out-Null
-  Copy-Item "$($Dir.bin)\ad-admin\*.ps1" $h -Force
-  $domName = try { (Get-CimInstance Win32_ComputerSystem).Domain } catch { '(this domain)' }
-  $short = $env:COMPUTERNAME
-  $tplPath = Join-Path $Dir.bin 'ad-admin\README-FOR-DOMAIN-ADMIN.template.txt'
-  $text = (Get-Content $tplPath -Raw).Replace('{{DATE}}', (Get-Date).ToString()).Replace('{{DOMAIN}}', $domName).Replace('{{SERVER}}', $short).Replace('{{GMSA}}', $gmsa)
-  Set-Content (Join-Path $h 'README-FOR-DOMAIN-ADMIN.txt') $text -Encoding UTF8
-  Result 'Domain Admin hand-off written' 'PASS' $h
-}
-
 # ---------------------------------------------------------------- phase: Finish (read-only AD checks, local changes only)
 function Do-Finish {
-  Step 'Finish: verify the AD prerequisites (read-only), then install locally'
+  Step 'Finish: check the service account you created (read-only), then set up permissions and tasks locally'
   if ($env:COMPUTERNAME -ne $runServer.Split('.')[0] -and $env:COMPUTERNAME -ne $runServer) {
     Result 'Running on the run server' 'FAIL' "this is $env:COMPUTERNAME, the settings say $runServer (Admin tool > Security and accounts)."; return
   }
@@ -304,7 +288,7 @@ function Do-Finish {
   $domainNC = $dom.DistinguishedName
   $gmsaSam = "$($dom.NetBIOSName)\${gmsa}$"
   $svc = Get-ADServiceAccount -Filter "Name -eq '$gmsa' -or SamAccountName -eq '$gmsa' -or SamAccountName -eq '${gmsa}$'" -Properties PrincipalsAllowedToRetrieveManagedPassword -ErrorAction SilentlyContinue
-  if (-not $svc) { Result 'gMSA exists in AD' 'FAIL' "not found. Check the name in the Admin tool (Security and accounts), or have a Domain Admin complete the request in $($Dir.handoff)."; return }
+  if (-not $svc) { Result 'gMSA exists in AD' 'FAIL' "not found. Create the service account first (by hand, see the SOP section 'Create the service account'; helper scripts are in $($Dir.root)\extras), or fix the name in the Admin tool (Security and accounts)."; return }
   Result 'gMSA exists in AD' 'PASS' "$($svc.SamAccountName) ($($svc.SID))"
   $gmsaSid = $svc.SID
   # use the REAL account name AD reports, and prove this server can resolve it (task scheduler and ACLs need that)
@@ -317,7 +301,9 @@ function Do-Finish {
     return
   }
   $me = Get-ADComputer $env:COMPUTERNAME
-  if (@($svc.PrincipalsAllowedToRetrieveManagedPassword) -contains $me.DistinguishedName) { Result 'This server may retrieve the gMSA password' 'PASS' }
+  $allowed = @($svc.PrincipalsAllowedToRetrieveManagedPassword)
+  if ($allowed.Count -gt 1) { Result 'Only this server may retrieve the gMSA password' 'WARN' ("$($allowed.Count) principals may retrieve it: " + ($allowed -join '; ') + '. The design is ONE server (this one).') }
+  if ($allowed -contains $me.DistinguishedName) { Result 'This server may retrieve the gMSA password' 'PASS' }
   else { Result 'This server may retrieve the gMSA password' 'FAIL' "not allowed. The Domain Admin used a different -RunServer than $env:COMPUTERNAME."; return }
 
   # Read-only effective-access check: anyone can read the domain root ACL and the gMSA's token groups.
@@ -354,6 +340,14 @@ function Do-Finish {
         else { $problems += "$($want[$k]): no allow entry for the gMSA or any of its groups" }
       }
     }
+    # least privilege: the service account should hold ONLY the two replication rights, not admin group membership
+    $privNames = @()
+    foreach ($sv in $sids) {
+      if ($sv -match '-512$') { $privNames += 'Domain Admins' } elseif ($sv -match '-518$') { $privNames += 'Schema Admins' }
+      elseif ($sv -match '-519$') { $privNames += 'Enterprise Admins' } elseif ($sv -eq 'S-1-5-32-544') { $privNames += 'BUILTIN\Administrators' }
+    }
+    if ($privNames.Count) { Result 'Service account is NOT in a privileged group' 'WARN' ("it is (indirectly) a member of: " + ($privNames -join ', ') + '. Remove it: the scan needs only the two replication rights.') }
+    else { Result 'Service account is NOT in a privileged group' 'PASS' }
     if ($problems.Count -eq 0) { Result 'Replication rights on the domain root (effective, read-only)' 'PASS' 'allowed for the gMSA directly or via a group' }
     else { Result 'Replication rights on the domain root (effective, read-only)' 'WARN' (($problems -join '; ') + '. Scans will fail until a Domain Admin fixes this.') }
   } catch { Result 'Replication rights on the domain root' 'WARN' ('could not compute: ' + $_.Exception.Message) }
@@ -448,8 +442,7 @@ function Do-Finish {
 
 try {
   if ($Phase -in 'Local', 'All') { Do-Local; Do-Verify }
-  if ($Phase -in 'Handoff', 'All') { Do-Handoff }
-  if ($Phase -eq 'Finish') { Do-Finish }
+  if ($Phase -in 'Finish', 'All') { Do-Finish }
 }
 finally { Stop-Transcript | Out-Null }
 
@@ -472,7 +465,7 @@ Install folder: $($Dir.root)
   data:     store $($Dir.store)    wordlists $($Dir.staging)
   reports:  $($Dir.output)
   logs:     $($Dir.logs)    status: $($Dir.status)
-  handoff:  $($Dir.handoff)
+  extras:   $($Dir.root)\extras   (optional gMSA helper scripts)
 Admin tool: $($Dir.root)\Hashslinger-Admin.cmd
 Progress:   powershell -File "$($Dir.bin)\powershell\Show-HashslingerProgress.ps1" -ConfigPath "$Config"
 Setup log:  $transcript

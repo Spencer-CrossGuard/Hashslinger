@@ -35,7 +35,7 @@ jobs:
           Get-Content "$t\output\*.csv"
           Get-Content "$t\logs\audit.jsonl"
           $rows = Import-Csv (Get-ChildItem "$t\output\*.csv").FullName
-          $names = ($rows.Username | Sort-Object) -join ','
+          $names = ($rows.sAMAccountName | Sort-Object) -join ','
           if ($names -ne 'alice,carol,dave,erin,frank,gina') { throw "unexpected flagged set: $names" }
           if ((Get-Content "$t\output\*.csv" -Raw) -match '[0-9A-Fa-f]{32}') { throw "hash in report" }
           if (-not ((Get-Content "$t\logs\audit.jsonl" | Select-Object -Last 1) -match '"wipe_confirmed":true')) { throw "wipe not confirmed" }

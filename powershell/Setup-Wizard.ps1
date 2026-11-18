@@ -4,8 +4,9 @@
 .DESCRIPTION
   Runs as a local administrator (no Domain Admin needed) and NEVER changes Active Directory.
   You choose one folder; everything is created inside it (app, config, data, reports, logs, status, requests,
-  handoff). All settings go into ONE file, <folder>\config\hashslinger.json, which the Admin tool edits later.
-  Install = local install + a hand-off package for a Domain Admin. When they are done, click Finish.
+  extras). All settings go into ONE file, <folder>\config\hashslinger.json, which the Admin tool edits later.
+  You create the service account (gMSA) by hand first. Install = local install, then the service account checks
+  (read-only AD checks, folder permissions, scheduled tasks, live test as the service account).
   Day-to-day changes are made in the Admin tool (<folder>\Hashslinger-Admin.cmd), not here.
 #>
 $ErrorActionPreference = 'Stop'
@@ -46,10 +47,9 @@ $form.Controls.AddRange(@($txtRoot, $btnRoot))
 $cmbDc = New-Object Windows.Forms.ComboBox -Property @{ Left = 15; Top = 184; Width = 380; DropDownStyle = 'DropDown' }
 foreach ($d in $ad.DCs) { [void]$cmbDc.Items.Add($d) }
 $cmbDc.Text = $ad.DcDefault
-[void](Lbl 'Service account (gMSA) name' 420 160 300 20 $true)
-$txtGmsa = New-Object Windows.Forms.TextBox -Property @{ Left = 420; Top = 184; Width = 250; Text = 'svc-hashslinger' }
-$chkPre = New-Object Windows.Forms.CheckBox -Property @{ Text = 'Already created by a Domain Admin'; Left = 680; Top = 184; Width = 220 }
-$form.Controls.AddRange(@($cmbDc, $txtGmsa, $chkPre))
+[void](Lbl 'Service account (gMSA) name. Create it first, by hand.' 420 160 445 20 $true)
+$txtGmsa = New-Object Windows.Forms.TextBox -Property @{ Left = 420; Top = 184; Width = 445; Text = 'svc-hashslinger' }
+$form.Controls.AddRange(@($cmbDc, $txtGmsa))
 
 # 3. scope tree
 [void](Lbl ('3. What should be scanned? Expand the tree, tick OUs (everything underneath is included). ' + $(if ($ad.Error) { 'AD could not be read: add DNs by hand below.' } else { '' })) 15 220 860 20 $true)
@@ -68,13 +68,12 @@ $lblDs.Visible = $needDsOffline
 $form.Controls.AddRange(@($txtRock, $btnRock, $txtHibp, $btnHibp, $txtDs, $btnDs))
 
 # actions
-$btnCheck = New-Object Windows.Forms.Button -Property @{ Text = '1. Check readiness'; Left = 15; Top = 812; Width = 150; Height = 36 }
-$btnGo = New-Object Windows.Forms.Button -Property @{ Text = '2. Install'; Left = 173; Top = 812; Width = 110; Height = 36 }
-$btnHand = New-Object Windows.Forms.Button -Property @{ Text = 'Domain Admin hand-off'; Left = 291; Top = 812; Width = 170; Height = 36; Enabled = $false }
-$btnFinish = New-Object Windows.Forms.Button -Property @{ Text = '3. Finish (after DA)'; Left = 469; Top = 812; Width = 150; Height = 36; Enabled = $false }
-$btnScan = New-Object Windows.Forms.Button -Property @{ Text = 'Run first scan'; Left = 627; Top = 812; Width = 120; Height = 36; Enabled = $false }
-$btnAdmin = New-Object Windows.Forms.Button -Property @{ Text = 'Open Admin tool'; Left = 755; Top = 812; Width = 110; Height = 36; Enabled = $false }
-$form.Controls.AddRange(@($btnCheck, $btnGo, $btnHand, $btnFinish, $btnScan, $btnAdmin))
+$btnCheck = New-Object Windows.Forms.Button -Property @{ Text = '1. Check readiness'; Left = 15; Top = 812; Width = 170; Height = 36 }
+$btnGo = New-Object Windows.Forms.Button -Property @{ Text = '2. Install'; Left = 193; Top = 812; Width = 130; Height = 36 }
+$btnFinish = New-Object Windows.Forms.Button -Property @{ Text = 'Re-run service account checks'; Left = 331; Top = 812; Width = 220; Height = 36; Enabled = $false }
+$btnScan = New-Object Windows.Forms.Button -Property @{ Text = 'Run first scan'; Left = 559; Top = 812; Width = 150; Height = 36; Enabled = $false }
+$btnAdmin = New-Object Windows.Forms.Button -Property @{ Text = 'Open Admin tool'; Left = 717; Top = 812; Width = 148; Height = 36; Enabled = $false }
+$form.Controls.AddRange(@($btnCheck, $btnGo, $btnFinish, $btnScan, $btnAdmin))
 $lblResult = Lbl 'Ready. Choose the options above, then click Check readiness or Install.' 15 856 860 24 $true
 $bar = New-Object Windows.Forms.ProgressBar -Property @{ Left = 15; Top = 884; Width = 850; Height = 16 }
 $btnLog = New-Object Windows.Forms.Button -Property @{ Text = 'Open full log'; Left = 745; Top = 904; Width = 120; Height = 24 }
@@ -100,7 +99,7 @@ function Update-Plan {
   if (-not $r) { $lblPlan.Text = 'Pick a folder.'; return }
   $drv = [IO.Path]::GetPathRoot($r)
   try { $di = New-Object IO.DriveInfo($drv); $free = '{0:N0} GB free on {1}' -f ($di.AvailableFreeSpace / 1GB), $drv } catch { $free = "drive not found: $drv" }
-  $lblPlan.Text = "Will install to: $r   ($free)`r`nInside: app, config, data (store + wordlists), reports, logs, status, requests, handoff. Everything stays under this one folder."
+  $lblPlan.Text = "Will install to: $r   ($free)`r`nInside: app, config, data (store + wordlists), reports, logs, status, requests, extras. Everything stays under this one folder."
 }
 
 function Load-Existing {
@@ -111,10 +110,10 @@ function Load-Existing {
   try {
     $cfg = Read-HsConfig $p
     if ($cfg['target_server']) { $cmbDc.Text = [string]$cfg['target_server'] }
-    $txtGmsa.Text = [string]$cfg['gmsa_name']; $chkPre.Checked = [bool]$cfg['gmsa_precreated']
+    $txtGmsa.Text = [string]$cfg['gmsa_name']
     Set-HsOuSelection @($cfg['target_ous'])
     $txtRock.Text = [string]$cfg['wordlists']['rockyou']; $txtHibp.Text = [string]$cfg['wordlists']['hibp']
-    $btnHand.Enabled = $true; $btnFinish.Enabled = $true; $btnAdmin.Enabled = (Test-Path (Join-Path $r 'Hashslinger-Admin.cmd'))
+    $btnFinish.Enabled = $true; $btnAdmin.Enabled = (Test-Path (Join-Path $r 'Hashslinger-Admin.cmd'))
     Log "Loaded the existing settings from $p"
   } catch { Log ('Could not read the existing settings: ' + $_.Exception.Message) }
 }
@@ -126,7 +125,6 @@ function Save-Settings([string]$root) {
   $cfg['target_server'] = $cmbDc.Text.Trim()
   $cfg['target_ous'] = @(Get-HsOuSelection)
   $cfg['gmsa_name'] = $txtGmsa.Text.Trim()
-  $cfg['gmsa_precreated'] = [bool]$chkPre.Checked
   $cfg['run_server'] = $env:COMPUTERNAME
   $cfg['wordlists']['rockyou'] = $txtRock.Text.Trim()
   $cfg['wordlists']['hibp'] = $txtHibp.Text.Trim()
@@ -188,7 +186,6 @@ $btnLog.Add_Click({
   $l = if ($r) { Get-ChildItem (Join-Path $r 'logs') -Filter 'setup-*.log' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1 }
   if ($l) { Start-Process notepad.exe $l.FullName } else { [void][Windows.Forms.MessageBox]::Show('No setup log yet.') }
 })
-$btnHand.Add_Click({ $r = Resolve-Root $txtRoot.Text; $h = Join-Path $r 'handoff'; if (Test-Path $h) { Start-Process explorer.exe $h } else { [void][Windows.Forms.MessageBox]::Show('Click Install first. It creates the hand-off folder.') } })
 $btnAdmin.Add_Click({ $r = Resolve-Root $txtRoot.Text; Start-Process (Join-Path $r 'Hashslinger-Admin.cmd') })
 $btnScan.Add_Click({
   try {
@@ -219,18 +216,11 @@ $btnGo.Add_Click({
     $rc = Invoke-Setup $cfgPath 'Local'
     if ($rc -ne 0) { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'The install has a problem: ' + (Fail-Text 'see the log below.'); return }
     $btnAdmin.Enabled = $true
-    if ($chkPre.Checked) {
-      $lblResult.Text = 'Installed. Checking the existing service account and finishing...'
-      $rc = Invoke-Setup $cfgPath 'Finish'
-      if ($rc -eq 0) { $lblResult.ForeColor = [Drawing.Color]::SeaGreen; $lblResult.Text = 'All done. You can run the first scan now.'; $btnScan.Enabled = $true }
-      else { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Not finished: ' + (Fail-Text 'see the log below.') }
-    } else {
-      [void](Invoke-Setup $cfgPath 'Handoff')
-      $btnHand.Enabled = $true
-      $lblResult.ForeColor = [Drawing.Color]::SeaGreen
-      $lblResult.Text = 'Installed. Next: give the hand-off folder to a Domain Admin, then click Finish.'
-    }
     $btnFinish.Enabled = $true
+    $lblResult.Text = 'Installed. Checking the service account, permissions and scheduled tasks...'
+    $rc = Invoke-Setup $cfgPath 'Finish'
+    if ($rc -eq 0) { $lblResult.ForeColor = [Drawing.Color]::SeaGreen; $lblResult.Text = 'All done. You can run the first scan now.'; $btnScan.Enabled = $true }
+    else { $lblResult.ForeColor = [Drawing.Color]::DarkOrange; $lblResult.Text = 'Installed, but the service account checks need attention: ' + (Fail-Text 'see the log below.') + '  Fix it, then click Re-run service account checks.' }
   }
   catch { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Error: ' + $_.Exception.Message; Log ('ERROR: ' + $_.Exception.Message) }
   finally { $bar.Style = 'Continuous'; $btnCheck.Enabled = $true; $btnGo.Enabled = $true }
