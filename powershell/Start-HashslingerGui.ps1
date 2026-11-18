@@ -43,6 +43,8 @@ $run.Add_Click({
   $req = @{ ou = [string]$ou.SelectedItem; output_dir = $out.Text; edipi = $ed.Text; reason = $rs.Text.Trim(); requested_by = "$env:USERDOMAIN\$env:USERNAME" }
   $file = Join-Path $cfg.request_dir ("req_{0}.json" -f [guid]::NewGuid())
   $req | ConvertTo-Json | Set-Content -Path $file -Encoding UTF8
+  # make the file's owner THIS person (not the Administrators group), so the audit log can name who started the scan
+  try { $acl = Get-Acl $file; $acl.SetOwner([Security.Principal.WindowsIdentity]::GetCurrent().User); Set-Acl $file $acl } catch { }
   try {
     Start-ScheduledTask -TaskName $taskName
     $status.Text = 'Scan requested. Check the output folder and audit log for results.'

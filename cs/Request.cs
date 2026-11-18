@@ -72,6 +72,13 @@ namespace Hashslinger
             }
         }
 
+        /// <summary>The Windows account that owns (so created) the request file: filled in by Windows, not by the requester.</summary>
+        public static string FileOwnerOf(string path)
+        {
+            try { return File.GetAccessControl(path).GetOwner(typeof(NTAccount)).Value; }
+            catch (Exception) { return null; }
+        }
+
         /// <summary>Validate an analyst request. Only config-listed OUs and allowed output roots are accepted;
         /// an EDIPI (10 digits) and a reason (10-500 chars) are mandatory and end up in the audit log.</summary>
         public static ScanRequest Load(Config cfg, string path)
@@ -92,8 +99,7 @@ namespace Hashslinger
                     throw new RequestException(e.Message, edipi, reason, by);
                 throw;
             }
-            string owner = null;
-            try { owner = File.GetAccessControl(path).GetOwner(typeof(NTAccount)).Value; } catch (Exception) { }
+            string owner = FileOwnerOf(path);
             ScanRequest r = new ScanRequest();
             r.FileOwner = owner;
             r.Ou = ou; r.OutputDir = outDir; r.Edipi = edipi; r.Reason = reason; r.RequestedBy = by;

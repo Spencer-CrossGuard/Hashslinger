@@ -79,7 +79,7 @@ namespace Hashslinger
             }
 
             IList<string> ous = ou != null ? new List<string> { ou } : null;
-            string by = null, edipi = null, reason = null;
+            string by = null, edipi = null, reason = null, startedBy = null;
             if (requestFile != null)
             {
                 ScanRequest rq = null;
@@ -89,13 +89,13 @@ namespace Hashslinger
                 }
                 catch (RequestException e)
                 {
-                    new AuditLog(cfg.LogPath).Rejected(e.Message, e.Edipi, e.Reason, e.RequestedBy);
+                    new AuditLog(cfg.LogPath).Rejected(e.Message, e.Edipi, e.Reason, e.RequestedBy, Request.FileOwnerOf(requestFile));
                     Console.Error.WriteLine("scan failed: " + e.Message);
                     return 2;
                 }
                 catch (FormatException)
                 {
-                    new AuditLog(cfg.LogPath).Rejected("malformed request file", null, null, null);
+                    new AuditLog(cfg.LogPath).Rejected("malformed request file", null, null, null, Request.FileOwnerOf(requestFile));
                     Console.Error.WriteLine("scan failed: malformed request file");
                     return 2;
                 }
@@ -106,7 +106,10 @@ namespace Hashslinger
                 ous = new List<string> { rq.Ou };
                 outDir = rq.OutputDir;
                 trigger = "on-demand";
-                by = (rq.RequestedBy ?? "(not given)") + " | request file created by: " + (rq.FileOwner ?? "unknown"); edipi = rq.Edipi; reason = rq.Reason;
+                by = (rq.RequestedBy ?? "(not given)") + " | request file created by: " + (rq.FileOwner ?? "unknown"); edipi = rq.Edipi; reason = rq.Reason; startedBy = rq.FileOwner;
+                // an elevated admin's new files are owned by the Administrators group, which names no person
+                if (startedBy == null || startedBy.StartsWith("BUILTIN\\", StringComparison.OrdinalIgnoreCase) || startedBy.StartsWith("NT AUTHORITY\\", StringComparison.OrdinalIgnoreCase))
+                    startedBy = (rq.RequestedBy ?? "unknown") + " (as stated in the request; file owner is " + (rq.FileOwner ?? "unknown") + ")";
             }
 
             if (requestFile == null)
@@ -124,13 +127,13 @@ namespace Hashslinger
                         Console.Error.WriteLine("scan not started: " + e.Message);
                         return 2;
                     }
-                    edipi = edipiArg; reason = reasonArg; by = who; trigger = "manual";
+                    edipi = edipiArg; reason = reasonArg; by = who; startedBy = who; trigger = "manual";
                 }
             }
 
             try
             {
-                RunResult res = Runner.Run(cfg, new PowerShellSource(), ous, outDir, trigger, by, edipi, reason, false);
+                RunResult res = Runner.Run(cfg, new PowerShellSource(), ous, outDir, trigger, by, edipi, reason, false, startedBy);
                 Console.WriteLine(res.RunId + ": " + res.Accounts + " accounts, " + res.Flagged + " flagged -> " + res.Output);
                 return 0;
             }

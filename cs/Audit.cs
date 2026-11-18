@@ -61,7 +61,7 @@ namespace Hashslinger
             return today + "-" + (n + 1).ToString("D3", CultureInfo.InvariantCulture);
         }
 
-        public void Start(string runId, string trigger, IList<string> scope, string requestedBy, string edipi, string reason)
+        public void Start(string runId, string trigger, IList<string> scope, string requestedBy, string edipi, string reason, string startedBy = null)
         {
             Dictionary<string, object> e = new Dictionary<string, object>();
             e["event"] = "start";
@@ -69,6 +69,7 @@ namespace Hashslinger
             e["time"] = Now();
             e["trigger"] = trigger;
             e["run_as"] = Who();
+            e["started_by"] = startedBy ?? Who();   // taken from Windows automatically, never typed in
             e["host"] = Environment.MachineName;
             e["requested_by"] = requestedBy;
             e["edipi"] = edipi;
@@ -77,12 +78,13 @@ namespace Hashslinger
             Append(e);
         }
 
-        public void Rejected(string why, string edipi, string reason, string requestedBy)
+        public void Rejected(string why, string edipi, string reason, string requestedBy, string startedBy = null)
         {
             Dictionary<string, object> e = new Dictionary<string, object>();
             e["event"] = "rejected";
             e["time"] = Now();
             e["run_as"] = Who();
+            e["started_by"] = startedBy ?? Who();
             e["host"] = Environment.MachineName;
             e["why"] = why;
             e["edipi"] = edipi;

@@ -50,7 +50,7 @@ namespace Hashslinger
         }
 
         public static RunResult Run(Config cfg, IAccountSource source, IList<string> ous, string outputDir,
-            string trigger, string requestedBy, string edipi, string reason, bool skipPreflight)
+            string trigger, string requestedBy, string edipi, string reason, bool skipPreflight, string startedBy = null)
         {
             if (ous == null || ous.Count == 0) ous = cfg.TargetOus;
             foreach (string ou in ous)
@@ -68,13 +68,13 @@ namespace Hashslinger
             }
             catch (IOException)
             {
-                log.Rejected("scan already running", edipi, reason, requestedBy);
+                log.Rejected("scan already running", edipi, reason, requestedBy, startedBy);
                 throw new InvalidOperationException("A scan is already running. Open the progress viewer to watch it.");
             }
 
             string runId = log.NextRunId();
-            log.Start(runId, trigger, ous, requestedBy, edipi, reason);
-            Progress.Begin(cfg.StatusPath, runId, Environment.UserDomainName + "\\" + Environment.UserName, requestedBy, ous);
+            log.Start(runId, trigger, ous, requestedBy, edipi, reason, startedBy);
+            Progress.Begin(cfg.StatusPath, runId, Environment.UserDomainName + "\\" + Environment.UserName, startedBy ?? requestedBy, ous);
 
             AccountTable table = new AccountTable();
             string status = "failed", error = null, outPath = null;
