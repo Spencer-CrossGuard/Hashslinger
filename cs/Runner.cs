@@ -80,7 +80,8 @@ namespace Hashslinger
             FileStream runLock = TryLock(cfg);   // kept next to the store so a person who can read the status folder cannot hold it open
             if (runLock == null)
             {
-                log.Rejected("scan already running", edipi, reason, requestedBy, startedBy, startedBySid);
+                // a queued on-demand request just waits and retries (see Program), so it is not logged as refused every 30 seconds
+                if (trigger != "on-demand") log.Rejected("scan already running", edipi, reason, requestedBy, startedBy, startedBySid);
                 throw new ScanBusyException("A scan or merge is already running. Open the progress viewer to watch it.");
             }
 

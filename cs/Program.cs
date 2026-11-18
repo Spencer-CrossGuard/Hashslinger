@@ -6,6 +6,7 @@ namespace Hashslinger
 {
     public static class Program
     {
+        static bool busy;   // the last attempt was refused because another scan or merge holds the lock
         const string Usage =
             "Hashslinger <command>\n" +
             "  selftest                              run built-in checks (no AD needed)\n" +
@@ -28,14 +29,24 @@ namespace Hashslinger
                     for (int i = 3; i + 1 < args.Length; i++) if (args[i] == "--request-dir") queue = args[i + 1];
                 if (queue == null) return Dispatch(args);
                 int rc;
-                for (int n = 0; ; n++)
+                int waits = 0;
+                for (int n = 0; n < 5000; n++)
                 {
                     string before = OldestRequest(queue);
                     rc = Dispatch(args);
                     string after = OldestRequest(queue);
-                    if (after == null || after == before || n >= 500) break;
+                    if (after == null) return rc;
+                    if (busy)
+                    {
+                        // a scheduled scan or merge is running: wait for it instead of leaving the request stranded
+                        if (waits++ >= 2880) return rc;   // about 24 hours at 30 seconds a try
+                        if (waits == 1) Console.WriteLine("another scan or merge is running; the request is kept and will run when it finishes");
+                        System.Threading.Thread.Sleep(30000);
+                        continue;
+                    }
+                    if (after == before) return rc;      // the request could not be removed: do not loop on it
                 }
-                return rc;
+                return 2;
             }
             catch (Exception ex)
             {
@@ -46,6 +57,7 @@ namespace Hashslinger
 
         static int Dispatch(string[] args)
         {
+            busy = false;
             if (args.Length == 1 && args[0] == "selftest") return SelfTest.Run();
             if (args.Length >= 1 && args[0] == "bench") return Bench.Run(args);
             if (args.Length < 3 || args[0] != "--config") { Console.Error.Write(Usage); return 1; }
@@ -156,7 +168,8 @@ namespace Hashslinger
             }
             catch (ScanBusyException e)
             {
-                keepRequest = true;   // another scan holds the lock: leave the request in place for the next on-demand start
+                keepRequest = true;   // another scan holds the lock: keep the request; Main waits and tries again
+                busy = true;
                 Console.Error.WriteLine("scan not started: " + e.Message);
                 return 2;
             }

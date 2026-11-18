@@ -146,9 +146,20 @@ namespace Hashslinger
             }
             if (File.Exists(final)) File.Delete(final);
             File.Move(tmp, final);
-            int lines = 0;
+            int lines = 0;   // CSV records: a line break inside a quoted cell does not start a new record
+            bool inQuotes = false, any = false;
             using (StreamReader sr = new StreamReader(final, Encoding.UTF8))
-                while (sr.ReadLine() != null) lines++;
+            {
+                int ch;
+                while ((ch = sr.Read()) >= 0)
+                {
+                    any = true;
+                    if (ch == '"') inQuotes = !inQuotes;
+                    else if (ch == '\n' && !inQuotes) any = false;
+                    if (ch == '\n' && !inQuotes) lines++;
+                }
+            }
+            if (any) lines++;
             if (lines - 1 != rows) throw new InvalidOperationException("Report verification failed: row count mismatch");
             flagged = rows;
             return final;

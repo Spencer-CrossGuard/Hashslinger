@@ -260,20 +260,43 @@ namespace Hashslinger
         /// <summary>fmt 'table' = TSV/CSV-style file with a hash column and a password column (see IterTable).</summary>
         public static IEnumerable<Hash128> IterSource(string path, string fmt, Action<string> log)
         {
-            if (fmt == "table") return IterTable(path, log);
-            return IterLines(path, fmt);
+            return Counted(path, fmt == "table" ? IterTable(path, log) : IterLines(path, fmt));
+        }
+
+        // how many usable hashes each file really produced (a file that produces none must not be recorded as merged)
+        static readonly Dictionary<string, long> importCounts = new Dictionary<string, long>();
+        static readonly Dictionary<string, long> badLines = new Dictionary<string, long>();
+
+        static IEnumerable<Hash128> Counted(string path, IEnumerable<Hash128> src)
+        {
+            long n = 0;
+            foreach (Hash128 h in src) { n++; yield return h; }
+            lock (importCounts) importCounts[path] = n;
+        }
+
+        static long ImportedFrom(string path)
+        {
+            long n;
+            lock (importCounts) return importCounts.TryGetValue(path, out n) ? n : 0;
+        }
+
+        static long BadLinesIn(string path)
+        {
+            long n;
+            lock (importCounts) return badLines.TryGetValue(path, out n) ? n : 0;
         }
 
         static IEnumerable<Hash128> IterLines(string path, string fmt)
         {
+            long bad = 0;
             foreach (string line in ReadLinesSmart(path))
             {
                 if (line.Length == 0) continue;
                 if (fmt == "ntlm")
                 {
-                    if (line.Length != 32 && !(line.Length > 32 && line[32] == ':')) continue;
                     Hash128 h;
-                    if (Hash128.TryParseHex(line, 0, out h)) yield return h;
+                    if ((line.Length == 32 || (line.Length > 32 && line[32] == ':')) && Hash128.TryParseHex(line, 0, out h)) yield return h;
+                    else bad++;
                 }
                 else if (fmt == "plaintext")
                 {
@@ -284,6 +307,7 @@ namespace Hashslinger
                     throw new StoreException("Unknown source format " + fmt);
                 }
             }
+            lock (importCounts) badLines[path] = bad;
         }
 
         /// <summary>Decode one line: UTF-8 when it is valid UTF-8, otherwise Windows-1252. Old lists such as rockyou hold
@@ -342,7 +366,9 @@ namespace Hashslinger
             return MergeStream(master, IterSource(source, fmt, null), bit, chunk);
         }
 
-        public static long MergeStream(string master, IEnumerable<Hash128> input, byte bit, int chunk)
+        /// <summary>clearBits: source bits removed from every existing record first (records left with no source are dropped).
+        /// Used to rebuild one list's share of the store after that list was edited or removed.</summary>
+        public static long MergeStream(string master, IEnumerable<Hash128> input, byte bit, int chunk, byte clearBits = 0)
         {
             string dir = Path.GetDirectoryName(Path.GetFullPath(master));
             Directory.CreateDirectory(dir);
@@ -368,8 +394,9 @@ namespace Hashslinger
                         byte wm;
                         if (haveM && (!haveN || mh.CompareTo(nh) < 0))
                         {
-                            w = mh; wm = mm;
+                            w = mh; wm = (byte)(mm & ~clearBits);
                             haveM = mr.Next(out mh, out mm);
+                            if (wm == 0) continue;   // this record only belonged to the list being rebuilt
                         }
                         else if (haveN && (!haveM || nh.CompareTo(mh) < 0))
                         {
@@ -378,7 +405,7 @@ namespace Hashslinger
                         }
                         else
                         {
-                            w = mh; wm = (byte)(mm | bit);
+                            w = mh; wm = (byte)((mm & ~clearBits) | bit);
                             haveM = mr.Next(out mh, out mm);
                             haveN = ns.Next(out nh);
                         }
@@ -613,9 +640,10 @@ namespace Hashslinger
 
         /// <summary>Merge several files of one source tag into the master in ONE pass (one rewrite of the master,
         /// however many files).</summary>
-        public static long MergeFiles(string master, string tag, IList<string> files, int chunk, Action<string> log)
+        public static long MergeFiles(string master, string tag, IList<string> files, int chunk, Action<string> log, bool replace = false)
         {
-            return MergeStream(master, ParallelSources(files, tag, log), Sources.Bit(tag), chunk);
+            byte bit = Sources.Bit(tag);
+            return MergeStream(master, ParallelSources(files, tag, log), bit, chunk, replace ? bit : (byte)0);
         }
 
         // ------------------------------------------------------------ staging pipeline
@@ -646,32 +674,55 @@ namespace Hashslinger
             foreach (string tag in Sources.Tags)
             {
                 string d = Path.Combine(staging, tag);
-                if (!Directory.Exists(d)) continue;
-                string[] files = Directory.GetFiles(d);
+                string[] files = Directory.Exists(d) ? Directory.GetFiles(d) : new string[0];
                 Array.Sort(files, StringComparer.Ordinal);
                 List<string> changed = new List<string>();
                 Dictionary<string, string> prints = new Dictionary<string, string>();
+                HashSet<string> present = new HashSet<string>();
+                bool replace = false;   // a merged list was edited or removed: its old hashes must go
                 foreach (string f in files)
                 {
                     string key = tag + "/" + Path.GetFileName(f);
+                    present.Add(key);
                     string fp = FingerPrint(f);
                     object old;
-                    if (manifest.TryGetValue(key, out old) && (old as string) == fp) continue;
+                    if (manifest.TryGetValue(key, out old))
+                    {
+                        if ((old as string) == fp) continue;
+                        replace = true;
+                    }
                     changed.Add(f);
                     prints[f] = fp;
                 }
-                if (changed.Count == 0) continue;
+                List<string> stale = new List<string>();
+                foreach (string k in manifest.Keys)
+                    if (k.StartsWith(tag + "/", StringComparison.Ordinal) && !present.Contains(k)) stale.Add(k);
+                if (stale.Count > 0) replace = true;
+                if (changed.Count == 0 && !replace) continue;
+
+                List<string> inputs = replace ? new List<string>(files) : changed;
                 if (log != null)
                 {
                     List<string> names = new List<string>();
-                    foreach (string f in changed) names.Add(Path.GetFileName(f) + " (" + FormatFor(tag, f) + ")");
-                    log("merging " + changed.Count + " file(s) into " + tag + " in one pass: " + string.Join(", ", names.ToArray()));
+                    foreach (string f in inputs) names.Add(Path.GetFileName(f) + " (" + FormatFor(tag, f) + ")");
+                    if (replace) log("a " + tag + " list was edited or removed: rebuilding the " + tag + " part of the store from " + inputs.Count + " file(s) so removed entries stop matching");
+                    log("merging " + inputs.Count + " file(s) into " + tag + " in one pass: " + string.Join(", ", names.ToArray()));
                 }
-                MergeFiles(master, tag, changed, 16000000, log);
-                foreach (string f in changed)
+                MergeFiles(master, tag, inputs, 16000000, log, replace);
+                foreach (string k in stale) manifest.Remove(k);
+                foreach (string f in inputs)
                 {
                     string key = tag + "/" + Path.GetFileName(f);
-                    manifest[key] = prints[f];
+                    long got = ImportedFrom(f);
+                    long bad = BadLinesIn(f);
+                    if (bad > 0 && log != null) log("WARNING " + Path.GetFileName(f) + ": " + bad + " line(s) were not valid hashes and were skipped");
+                    if (got == 0)
+                    {
+                        manifest.Remove(key);   // nothing usable came out of it: do not pretend it was merged
+                        if (log != null) log("WARNING " + Path.GetFileName(f) + ": no usable hashes found (wrong format, no 32-character hex hash column, or empty). It was NOT recorded as merged and will be tried again next run.");
+                        continue;
+                    }
+                    manifest[key] = prints.ContainsKey(f) ? prints[f] : FingerPrint(f);
                     merged.Add(key);
                 }
                 File.WriteAllText(manPath + ".tmp", Json.Write(manifest), Encoding.UTF8);

@@ -297,7 +297,7 @@ Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
   </table></div>
   <ul>
     <li>Watching a scan: the progress window shows the step, how long this step has run, how long since the last message from the engine, and a scrolling log. Step 4 reports sub-steps A (scope search), B (property test), C (replication) with counts, rate per second, elapsed time and a rough time left, every 5 seconds. The same log is in <code>status\status.json</code> (<code>log</code>).</li>
-    <li>One scan at a time (<code>data\store\run.lock</code>, next to the store, so only the service account and administrators can touch it). A second start is refused and logged; an on-demand request that arrives meanwhile is kept and run afterwards. Merges (<code>merge</code>, Admin tool Merge now) use the same lock.</li>
+    <li>One scan at a time (<code>data\store\run.lock</code>, next to the store, so only the service account and administrators can touch it). A second start is refused and logged; an on-demand request that arrives meanwhile is kept, the on-demand task waits (checks every 30 seconds, up to about 24 hours) and runs it as soon as the lock is free. Merges (<code>merge</code>, Admin tool Merge now) use the same lock.</li>
     <li>The scheduled task runs <code>Hashslinger.exe --config ... scan</code> as the service account on the cadence, day and time in the settings.</li>
     <li>Memory is about 150 to 250 bytes per account plus 40 for sorting.</li>
   </ul>
@@ -388,7 +388,8 @@ Exit codes: 0 ok, 1 usage, 2 failed (also logged)</code></pre>
   </table></div>
   <ul>
     <li><code>master.ntlm.manifest.json</code> records each merged file by size and modified time. Only new or changed files are merged, all new files of one folder in a single pass, parsed in parallel.</li>
-    <li>The store is a union. <b>Deleting a source file does not remove its hashes.</b> To drop a list, rebuild (section 14).</li>
+    <li>Adding a file only adds hashes. <b>Editing or deleting a file you already merged rebuilds that list's share of the store</b> on the next scan or merge: its old hashes are removed from the store and the remaining files of that list are merged again, so a corrected or removed entry stops matching. Other lists (for example HIBP) are not re-read.</li>
+    <li>A file that produces no usable hashes (wrong format, no 32-character hex hash column, empty) is <b>not</b> recorded as merged. The merge log shows a WARNING, and it is tried again next run. Lines in an NT hash file that are not valid hashes are counted and reported.</li>
     <li>Merge time is mostly disk speed; a full HIBP merge needs about twice the store size free. The source files are plaintext password lists; keep or delete them as you see fit.</li>
   </ul>
 </section>
@@ -471,9 +472,9 @@ Exit codes: 0 ok, 1 usage, 2 failed (also logged)</code></pre>
     <thead><tr><th>Switch</th><th>Removes</th></tr></thead>
     <tbody>
       <tr><td class="k">(none)</td><td>Stops a running scan and removes both scheduled tasks. All files stay; a reinstall continues where you left off.</td></tr>
-      <tr><td class="k">-RemoveData</td><td><code>data\</code>: store, manifest, wordlists.</td></tr>
-      <tr><td class="k">-RemoveReports</td><td>The reports folder.</td></tr>
-      <tr><td class="k">-RemoveLogs</td><td><code>logs\</code> and <code>status\</code> (audit log included).</td></tr>
+      <tr><td class="k">-RemoveData</td><td>Hashslinger's own files only: the hash store, manifest and lock, and the HIBP, rockyou and custom wordlist folders. Other files in those folders are left alone.</td></tr>
+      <tr><td class="k">-RemoveReports</td><td>The <code>report_*.csv</code> files (the folder is removed only if it is then empty).</td></tr>
+      <tr><td class="k">-RemoveLogs</td><td>The audit log, setup logs and status file (folders removed only if then empty). A shared logs folder keeps its other files.</td></tr>
       <tr><td class="k">-RemoveApp</td><td><code>app\</code>, <code>app-backups\</code>, <code>extras\</code>, the launchers. <code>config\</code> stays.</td></tr>
       <tr><td class="k">-RemoveAll</td><td>Everything above, plus <code>config\</code> and the install folder.</td></tr>
       <tr><td class="k">-SecureWipe</td><td>Overwrite files before deleting (slow for a large store).</td></tr>

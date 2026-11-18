@@ -53,9 +53,9 @@ if ($RemoveAll -and (($root.TrimEnd('\') -match '^[A-Za-z]:$') -or -not (Test-Pa
 if ($RemoveAll) { $RemoveData = $RemoveReports = $RemoveLogs = $RemoveApp = $true }
 $plan = New-Object System.Collections.ArrayList
 [void]$plan.Add('Stop any running scan; remove the scheduled tasks (Hashslinger-Scheduled, Hashslinger-OnDemand)')
-if ($RemoveData) { [void]$plan.Add("Delete the hash store and wordlists: $store, $staging") }
-if ($RemoveReports) { [void]$plan.Add("Delete the reports: $reports") }
-if ($RemoveLogs) { [void]$plan.Add("Delete logs and status: $logs, $status") }
+if ($RemoveData) { [void]$plan.Add("Delete Hashslinger's hash store files and the HIBP, rockyou and custom wordlist folders in: $store, $staging (other files in those folders are left alone)") }
+if ($RemoveReports) { [void]$plan.Add("Delete Hashslinger's report_*.csv files in: $reports (other files are left alone)") }
+if ($RemoveLogs) { [void]$plan.Add("Delete Hashslinger's audit log, setup logs and status file in: $logs, $status (other files are left alone)") }
 if ($RemoveApp) { [void]$plan.Add("Delete the program: $root\app, $root\app-backups, $root\extras, launchers") }
 if ($RemoveAll) { [void]$plan.Add("Delete the settings and the install folder itself: $root") }
 if ($RemoveDsInternals) { [void]$plan.Add("Delete the DSInternals module: $env:ProgramFiles\WindowsPowerShell\Modules\DSInternals") }
@@ -101,10 +101,46 @@ Get-Process -Name Hashslinger -ErrorAction SilentlyContinue | Stop-Process -Forc
 Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
   Where-Object { $_.CommandLine -match 'Get-AccountHashes' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 
+# Configured folders can be shared with other software (for example a common logs folder). So these remove only the
+# files and subfolders Hashslinger itself creates, and the folder only if it is then empty. Whole-folder deletion is
+# reserved for folders Hashslinger owns outright (the program folders and, with -RemoveAll, the install folder).
+function Remove-OwnFiles([string]$dir, [string[]]$patterns, [string[]]$ownSubdirs = @(), [string[]]$ownSubdirPatterns = @()) {
+  if (-not (Test-Path $dir)) { return }
+  $full = [IO.Path]::GetFullPath($dir).TrimEnd('\')
+  if ($full -match '^[A-Za-z]:$') { Write-Host "  refusing to touch $dir (drive root)" -ForegroundColor Red; return }
+  foreach ($pat in $patterns) {
+    foreach ($f in Get-ChildItem -LiteralPath $dir -File -Filter $pat -Force -ErrorAction SilentlyContinue) {
+      if ($SecureWipe) {
+        try {
+          $fs = [IO.File]::Open($f.FullName, 'Open', 'Write', 'None'); $buf = New-Object byte[] (1MB); $left = $f.Length
+          while ($left -gt 0) { $n = [Math]::Min($left, $buf.Length); $fs.Write($buf, 0, $n); $left -= $n }
+          $fs.Flush($true); $fs.Dispose()
+        } catch { }
+      }
+      Remove-Item -LiteralPath $f.FullName -Force -ErrorAction SilentlyContinue
+    }
+  }
+  foreach ($s in $ownSubdirs) { Remove-Tree (Join-Path $dir $s) }
+  foreach ($pat in $ownSubdirPatterns) {
+    foreach ($d in Get-ChildItem -LiteralPath $dir -Directory -Filter $pat -Force -ErrorAction SilentlyContinue) { Remove-Tree $d.FullName }
+  }
+  if (-not (Get-ChildItem -LiteralPath $dir -Force -ErrorAction SilentlyContinue)) { Remove-Item -LiteralPath $dir -Force -ErrorAction SilentlyContinue; Write-Host "  removed $dir" }
+  else { Write-Host "  cleaned Hashslinger files from $dir (other files are there, so the folder was kept)" }
+}
+
 # 2. delete what was asked
-if ($RemoveData) { Remove-Tree $staging; Remove-Tree $store; if ($dataRoot -and (Test-Path $dataRoot) -and -not (Get-ChildItem $dataRoot -Force -ErrorAction SilentlyContinue)) { Remove-Item $dataRoot -Force } }
-if ($RemoveReports) { Remove-Tree $reports }
-if ($RemoveLogs) { Remove-Tree $logs; Remove-Tree $status }
+if ($RemoveData) {
+  $masterName = [IO.Path]::GetFileName((Cfg 'hash_store_path' "$root\data\store\master.ntlm"))
+  Remove-OwnFiles $staging @() @('HIBP', 'rockyou', 'custom')
+  Remove-OwnFiles $store @("$masterName*", 'run.lock') @() @('merge-*')
+  if ($dataRoot -and (Test-Path $dataRoot) -and -not (Get-ChildItem $dataRoot -Force -ErrorAction SilentlyContinue)) { Remove-Item $dataRoot -Force }
+}
+if ($RemoveReports) { Remove-OwnFiles $reports @('report_*.csv', 'report_*.csv.tmp') }
+if ($RemoveLogs) {
+  $auditName = [IO.Path]::GetFileName((Cfg 'log_path' "$root\logs\audit.jsonl"))
+  Remove-OwnFiles $logs @("$auditName*", 'setup-*.log', 'SETUP-SUMMARY.txt')
+  Remove-OwnFiles $status @('status.json*', 'gmsa-probe.txt')
+}
 if ($RemoveDsInternals) { Remove-Tree "$env:ProgramFiles\WindowsPowerShell\Modules\DSInternals" }
 if ($RemoveApp -and -not $RemoveAll) {
   Remove-Tree "$root\extras"; Remove-Tree "$root\app-backups"
