@@ -499,9 +499,9 @@ Hashslinger-Uninstall.cmd -RemoveAll -SecureWipe    everything</code></pre>
       <tr><td class="k">Delete reports</td><td>Delete the CSV files in the reports folder, or lower <code>retention_days</code> (applied after each scan).</td></tr>
       <tr><td class="k">Clear the audit log</td><td>Delete <code>logs\audit.jsonl</code>. The next run starts a new one; run ids restart at 001 for the day.</td></tr>
       <tr><td class="k">Remove a scope</td><td>Admin tool, Active Directory tab: untick it (or double-click it in the list), then Save.</td></tr>
-      <tr><td class="k">Drop a wordlist</td><td>Hashes of a deleted source file stay in the store. Delete the file from staging, delete <code>data\store\master.ntlm</code> and <code>master.ntlm.manifest.json</code>, then run <code>Hashslinger.exe --config ... merge</code>. The store is rebuilt from the files that remain.</td></tr>
+      <tr><td class="k">Drop a wordlist</td><td>Delete the file from <code>data\staging</code>. On the next scan or merge that list's share of the store is rebuilt from the files that remain, so the deleted file's hashes stop matching.</td></tr>
       <tr><td class="k">Reset the store</td><td>Delete <code>master.ntlm</code> and its manifest. The next scan or merge rebuilds it.</td></tr>
-      <tr><td class="k">Delete the plaintext originals</td><td>After merging you may delete the source files in staging. The store keeps working; they simply will not re-merge.</td></tr>
+      <tr><td class="k">Delete the plaintext originals</td><td>Deleting a merged source file counts as removing that list (see above): its hashes are dropped at the next merge. To keep the hashes, keep the file.</td></tr>
       <tr><td class="k">Stop scheduled scans</td><td>Disable or delete <code>Hashslinger-Scheduled</code> in Task Scheduler, or uninstall with no switches.</td></tr>
       <tr><td class="k">Remove a stuck lock</td><td>If no scan is running, delete <code>data\store\run.lock</code>. The lock is released automatically when a scan ends or its process dies.</td></tr>
     </tbody>
