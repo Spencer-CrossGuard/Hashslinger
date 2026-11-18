@@ -635,7 +635,14 @@ namespace Hashslinger
             string manPath = master + ".manifest.json";
             Dictionary<string, object> manifest = new Dictionary<string, object>();
             if (File.Exists(manPath) && File.Exists(master))   // a manifest without its store would wrongly skip every file
-                manifest = (Dictionary<string, object>)Json.Parse(File.ReadAllText(manPath, Encoding.UTF8));
+            {
+                try { manifest = Json.Parse(File.ReadAllText(manPath, Encoding.UTF8)) as Dictionary<string, object> ?? new Dictionary<string, object>(); }
+                catch (FormatException)   // damaged (for example a crash while it was written): merging again is harmless, the store is a union
+                {
+                    manifest = new Dictionary<string, object>();
+                    if (log != null) log("the merge manifest was damaged; every wordlist will be merged again");
+                }
+            }
             foreach (string tag in Sources.Tags)
             {
                 string d = Path.Combine(staging, tag);
@@ -667,7 +674,8 @@ namespace Hashslinger
                     manifest[key] = prints[f];
                     merged.Add(key);
                 }
-                File.WriteAllText(manPath, Json.Write(manifest), Encoding.UTF8);
+                File.WriteAllText(manPath + ".tmp", Json.Write(manifest), Encoding.UTF8);
+                if (File.Exists(manPath)) File.Replace(manPath + ".tmp", manPath, null); else File.Move(manPath + ".tmp", manPath);
             }
             return merged;
         }

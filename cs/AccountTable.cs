@@ -13,6 +13,7 @@ namespace Hashslinger
         public Hash128 Nt;
         public bool Lm;
         public bool Rev;
+        public bool NoPw;   // no NT hash and PASSWD_NOTREQD set: the account has no password
     }
 
     /// <summary>Compact, zeroable storage for millions of accounts: hashes in one byte[], names in

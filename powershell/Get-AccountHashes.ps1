@@ -78,7 +78,8 @@ $sharedBlock = {
     $uac = [int]$acct.UserAccountControl
     $rev = if ($clear -or (($uac -band 0x80) -ne 0)) { '1' } else { '0' }
     $lm = if ($null -ne $acct.LMHash) { '1' } else { '0' }
-    (Clean $sam) + "`t" + (Clean $acct.DistinguishedName) + "`t" + $type + "`t" + (ToHex $acct.NTHash) + "`t" + $lm + "`t" + $rev
+    $nopw = if (($null -eq $acct.NTHash) -and (($uac -band 0x20) -ne 0)) { '1' } else { '0' }   # PASSWD_NOTREQD and no hash = no password
+    (Clean $sam) + "`t" + (Clean $acct.DistinguishedName) + "`t" + $type + "`t" + (ToHex $acct.NTHash) + "`t" + $lm + "`t" + $rev + "`t" + $nopw
   }
 }
 . $sharedBlock

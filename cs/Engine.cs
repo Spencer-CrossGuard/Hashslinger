@@ -132,7 +132,7 @@ namespace Hashslinger
         public static AccountRecord Parse(string line)
         {
             string[] f = line.Split('\t');
-            if (f.Length != 6) throw new EngineException("engine produced a malformed line");
+            if (f.Length != 6 && f.Length != 7) throw new EngineException("engine produced a malformed line");
             AccountRecord a = new AccountRecord();
             a.Sam = f[0];
             a.Dn = f[1];
@@ -147,6 +147,7 @@ namespace Hashslinger
             }
             a.Lm = f[4] == "1";
             a.Rev = f[5] == "1";
+            a.NoPw = f.Length == 7 && f[6] == "1";
             return a;
         }
     }

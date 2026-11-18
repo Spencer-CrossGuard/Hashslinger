@@ -13,8 +13,24 @@ namespace Hashslinger
         public bool WipeConfirmed;
     }
 
+    /// <summary>Another scan or merge holds the lock. A request being processed is kept so it can run later.</summary>
+    public class ScanBusyException : InvalidOperationException
+    {
+        public ScanBusyException(string m) : base(m) { }
+    }
+
     public static class Runner
     {
+        /// <summary>The one lock shared by scans and merges (kept next to the store: service account and administrators only).
+        /// Returns null when something else holds it.</summary>
+        public static FileStream TryLock(Config cfg)
+        {
+            string lockDir = Path.GetDirectoryName(Path.GetFullPath(cfg.HashStorePath));
+            Directory.CreateDirectory(lockDir);
+            try { return new FileStream(Path.Combine(lockDir, "run.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
+            catch (IOException) { return null; }
+        }
+
         /// <summary>Lookups, pattern matching and duplicate detection run over hashes sorted ascending,
         /// so reads of the mmap'd store move forward through the file instead of jumping around.</summary>
         internal static HashIdx[] Analyze(AccountTable t, HashStore store, Dictionary<Hash128, string> patterns, bool checkDuplicates)
@@ -61,19 +77,11 @@ namespace Hashslinger
             // One scan at a time: the lock is held for the whole run and released by the OS if the process dies.
             string statusDir = Path.GetDirectoryName(Path.GetFullPath(cfg.StatusPath));
             Directory.CreateDirectory(statusDir);
-            FileStream runLock;
-            try
-            {
-                // the lock lives with the store (service account and administrators only), so a person who can read the
-                // status folder cannot hold it open and block every scan
-                string lockDir = Path.GetDirectoryName(Path.GetFullPath(cfg.HashStorePath));
-                Directory.CreateDirectory(lockDir);
-                runLock = new FileStream(Path.Combine(lockDir, "run.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-            }
-            catch (IOException)
+            FileStream runLock = TryLock(cfg);   // kept next to the store so a person who can read the status folder cannot hold it open
+            if (runLock == null)
             {
                 log.Rejected("scan already running", edipi, reason, requestedBy, startedBy, startedBySid);
-                throw new InvalidOperationException("A scan is already running. Open the progress viewer to watch it.");
+                throw new ScanBusyException("A scan or merge is already running. Open the progress viewer to watch it.");
             }
 
             string runId = log.NextRunId();
@@ -103,6 +111,7 @@ namespace Hashslinger
                     int idx = table.Add(a);
                     byte r = 0;
                     if (a.Rev) r |= Reason.Reversible;
+                    if (a.NoPw) r |= Reason.Empty;   // no password hash at all and the account is allowed to have no password
                     if (a.Lm) r |= Reason.Lm;
                     if (r != 0) table.AddReasons(idx, r);
                     received++;

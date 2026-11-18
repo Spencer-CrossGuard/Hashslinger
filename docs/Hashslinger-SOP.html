@@ -297,7 +297,7 @@ Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
   </table></div>
   <ul>
     <li>Watching a scan: the progress window shows the step, how long this step has run, how long since the last message from the engine, and a scrolling log. Step 4 reports sub-steps A (scope search), B (property test), C (replication) with counts, rate per second, elapsed time and a rough time left, every 5 seconds. The same log is in <code>status\status.json</code> (<code>log</code>).</li>
-    <li>One scan at a time (<code>data\store\run.lock</code>, next to the store, so only the service account and administrators can touch it). A second start is refused and logged.</li>
+    <li>One scan at a time (<code>data\store\run.lock</code>, next to the store, so only the service account and administrators can touch it). A second start is refused and logged; an on-demand request that arrives meanwhile is kept and run afterwards. Merges (<code>merge</code>, Admin tool Merge now) use the same lock.</li>
     <li>The scheduled task runs <code>Hashslinger.exe --config ... scan</code> as the service account on the cadence, day and time in the settings.</li>
     <li>Memory is about 150 to 250 bytes per account plus 40 for sorting.</li>
   </ul>
@@ -412,7 +412,7 @@ Exit codes: 0 ok, 1 usage, 2 failed (also logged)</code></pre>
     <thead><tr><th>Flag reason</th><th>Severity</th></tr></thead>
     <tbody>
       <tr><td>Found in HIBP breach corpus; Found in rockyou list; Found in custom/organization term list</td><td><span class="pill high">High</span></td></tr>
-      <tr><td>No password set; Reversible encryption enabled</td><td><span class="pill high">High</span></td></tr>
+      <tr><td>No password set (an empty hash, or no hash on an account that may have no password); Reversible encryption enabled</td><td><span class="pill high">High</span></td></tr>
       <tr><td>Matched common-pattern rule; Duplicate password shared with another account; LM hash present</td><td><span class="pill med">Medium</span></td></tr>
     </tbody>
   </table></div>

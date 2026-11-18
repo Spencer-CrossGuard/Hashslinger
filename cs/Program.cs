@@ -21,7 +21,21 @@ namespace Hashslinger
         {
             try
             {
-                return Dispatch(args);
+                // Requests that arrive while a scan is running cannot start a second task instance, so keep going
+                // through the queue here until it is empty (or no progress is being made).
+                string queue = null;
+                if (args.Length >= 3 && args[0] == "--config" && args[2] == "scan")
+                    for (int i = 3; i + 1 < args.Length; i++) if (args[i] == "--request-dir") queue = args[i + 1];
+                if (queue == null) return Dispatch(args);
+                int rc;
+                for (int n = 0; ; n++)
+                {
+                    string before = OldestRequest(queue);
+                    rc = Dispatch(args);
+                    string after = OldestRequest(queue);
+                    if (after == null || after == before || n >= 500) break;
+                }
+                return rc;
             }
             catch (Exception ex)
             {
@@ -40,9 +54,13 @@ namespace Hashslinger
 
             if (cmd == "merge")
             {
-                List<string> done = StoreMerge.ProcessStaging(cfg.HashStorePath, cfg.StagingPath, Console.WriteLine);
-                Console.WriteLine("merged " + done.Count + " source file(s)");
-                return 0;
+                using (FileStream mergeLock = Runner.TryLock(cfg))
+                {
+                    if (mergeLock == null) { Console.Error.WriteLine("a scan or merge is already running; try again when it has finished"); return 2; }
+                    List<string> done = StoreMerge.ProcessStaging(cfg.HashStorePath, cfg.StagingPath, Console.WriteLine);
+                    Console.WriteLine("merged " + done.Count + " source file(s)");
+                    return 0;
+                }
             }
             if (cmd == "info")
             {
@@ -90,18 +108,16 @@ namespace Hashslinger
                 catch (RequestException e)
                 {
                     new AuditLog(cfg.LogPath).Rejected(e.Message, e.Edipi, e.Reason, e.RequestedBy, Request.FileOwnerOf(requestFile), Request.FileOwnerSidOf(requestFile));
+                    TryDelete(requestFile);
                     Console.Error.WriteLine("scan failed: " + e.Message);
                     return 2;
                 }
                 catch (Exception ex)   // malformed, wrong shape, too deeply nested, unreadable: refuse and log, never crash
                 {
                     new AuditLog(cfg.LogPath).Rejected("malformed request file (" + ex.GetType().Name + ")", null, null, null, Request.FileOwnerOf(requestFile), Request.FileOwnerSidOf(requestFile));
+                    TryDelete(requestFile);
                     Console.Error.WriteLine("scan failed: malformed request file");
                     return 2;
-                }
-                finally
-                {
-                    try { File.Delete(requestFile); } catch (IOException) { } // content now lives only in the audit log
                 }
                 ous = new List<string> { rq.Ou };
                 outDir = rq.OutputDir;
@@ -131,11 +147,18 @@ namespace Hashslinger
                 }
             }
 
+            bool keepRequest = false;
             try
             {
                 RunResult res = Runner.Run(cfg, new PowerShellSource(), ous, outDir, trigger, by, edipi, reason, false, startedBy, startedBySid);
                 Console.WriteLine(res.RunId + ": " + res.Accounts + " accounts, " + res.Flagged + " flagged -> " + res.Output);
                 return 0;
+            }
+            catch (ScanBusyException e)
+            {
+                keepRequest = true;   // another scan holds the lock: leave the request in place for the next on-demand start
+                Console.Error.WriteLine("scan not started: " + e.Message);
+                return 2;
             }
             catch (RequestException e)
             {
@@ -148,6 +171,23 @@ namespace Hashslinger
                 Console.Error.WriteLine("scan failed: " + e.Message);
                 return 2;
             }
+            finally
+            {
+                if (requestFile != null && !keepRequest) TryDelete(requestFile);   // content now lives only in the audit log
+            }
+        }
+
+        static void TryDelete(string path)
+        {
+            try { File.Delete(path); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        }
+
+        static string OldestRequest(string dir)
+        {
+            string[] c = Directory.Exists(dir) ? Directory.GetFiles(dir, "req_*.json") : new string[0];
+            if (c.Length == 0) return null;
+            Array.Sort(c, delegate(string x, string y) { return File.GetLastWriteTimeUtc(x).CompareTo(File.GetLastWriteTimeUtc(y)); });
+            return c[0];
         }
     }
 }
