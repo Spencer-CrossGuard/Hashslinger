@@ -26,7 +26,7 @@ $best = Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | Sort-Object Fr
 $defaultRoot = if ($best) { Join-Path ($best.DeviceID + '\') 'Hashslinger' } else { 'C:\Hashslinger' }
 
 # ---- form
-$form = New-Object Windows.Forms.Form -Property @{ Text = 'Hashslinger setup'; Width = 920; Height = 960; MinimumSize = New-Object Drawing.Size(900, 700); StartPosition = 'CenterScreen'; AutoScroll = $true; Font = New-Object Drawing.Font('Segoe UI', 9) }
+$form = New-Object Windows.Forms.Form -Property @{ Text = 'Hashslinger setup'; Width = 920; Height = 990; MinimumSize = New-Object Drawing.Size(900, 700); StartPosition = 'CenterScreen'; AutoScroll = $true; Font = New-Object Drawing.Font('Segoe UI', 9) }
 function Lbl($text, $x, $y, $w = 860, $h = 20, $bold = $false) {
   $l = New-Object Windows.Forms.Label -Property @{ Text = $text; Left = $x; Top = $y; Width = $w; Height = $h }
   if ($bold) { $l.Font = New-Object Drawing.Font('Segoe UI', 10, [Drawing.FontStyle]::Bold) }
@@ -53,31 +53,31 @@ $form.Controls.AddRange(@($cmbDc, $txtGmsa))
 
 # 3. scope tree
 [void](Lbl ('3. What should be scanned? Expand the tree, tick OUs (everything underneath is included). ' + $(if ($ad.Error) { 'AD could not be read: add DNs by hand below.' } else { '' })) 15 220 860 20 $true)
-New-HsOuPicker -Parent $form -X 15 -Y 246 -Width 850 -Height 400 -Dns $ad.Dns
+New-HsOuPicker -Parent $form -X 15 -Y 246 -Width 850 -Height 300 -Dns $ad.Dns
 
 # 4. optional wordlists
-[void](Lbl '4. Password lists (optional; you can add more later in the Admin tool)' 15 660 860 20 $true)
-$txtRock = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 684; Width = 720 }
-$btnRock = New-Object Windows.Forms.Button -Property @{ Text = 'rockyou...'; Left = 745; Top = 682; Width = 120; Height = 26 }
-$txtHibp = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 714; Width = 720 }
-$btnHibp = New-Object Windows.Forms.Button -Property @{ Text = 'HIBP...'; Left = 745; Top = 712; Width = 120; Height = 26 }
-$txtDs = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 774; Width = 720; Visible = $needDsOffline }
-$btnDs = New-Object Windows.Forms.Button -Property @{ Text = 'Browse...'; Left = 745; Top = 772; Width = 120; Height = 26; Visible = $needDsOffline }
-$lblDs = Lbl 'DSInternals is not installed. No internet here? Pick a copied DSInternals module folder (otherwise leave blank).' 15 748 860 20
+[void](Lbl '4. Password lists (optional; you can add more later in the Admin tool)' 15 566 860 20 $true)
+$txtRock = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 590; Width = 720 }
+$btnRock = New-Object Windows.Forms.Button -Property @{ Text = 'rockyou...'; Left = 745; Top = 588; Width = 120; Height = 26 }
+$txtHibp = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 620; Width = 720 }
+$btnHibp = New-Object Windows.Forms.Button -Property @{ Text = 'HIBP...'; Left = 745; Top = 618; Width = 120; Height = 26 }
+$txtDs = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 680; Width = 720; Visible = $needDsOffline }
+$btnDs = New-Object Windows.Forms.Button -Property @{ Text = 'Browse...'; Left = 745; Top = 678; Width = 120; Height = 26; Visible = $needDsOffline }
+$lblDs = Lbl 'DSInternals is not installed. No internet here? Pick a copied DSInternals module folder (otherwise leave blank).' 15 654 860 20
 $lblDs.Visible = $needDsOffline
 $form.Controls.AddRange(@($txtRock, $btnRock, $txtHibp, $btnHibp, $txtDs, $btnDs))
 
 # actions
-$btnCheck = New-Object Windows.Forms.Button -Property @{ Text = '1. Check readiness'; Left = 15; Top = 812; Width = 170; Height = 36 }
-$btnGo = New-Object Windows.Forms.Button -Property @{ Text = '2. Install'; Left = 193; Top = 812; Width = 130; Height = 36 }
-$btnFinish = New-Object Windows.Forms.Button -Property @{ Text = 'Re-run service account checks'; Left = 331; Top = 812; Width = 220; Height = 36; Enabled = $false }
-$btnScan = New-Object Windows.Forms.Button -Property @{ Text = 'Run first scan'; Left = 559; Top = 812; Width = 150; Height = 36; Enabled = $false }
-$btnAdmin = New-Object Windows.Forms.Button -Property @{ Text = 'Open Admin tool'; Left = 717; Top = 812; Width = 148; Height = 36; Enabled = $false }
+$btnCheck = New-Object Windows.Forms.Button -Property @{ Text = '1. Check readiness'; Left = 15; Top = 718; Width = 170; Height = 36 }
+$btnGo = New-Object Windows.Forms.Button -Property @{ Text = '2. Install'; Left = 193; Top = 718; Width = 130; Height = 36 }
+$btnFinish = New-Object Windows.Forms.Button -Property @{ Text = 'Re-run service account checks'; Left = 331; Top = 718; Width = 220; Height = 36; Enabled = $false }
+$btnScan = New-Object Windows.Forms.Button -Property @{ Text = 'Run first scan'; Left = 559; Top = 718; Width = 150; Height = 36; Enabled = $false }
+$btnAdmin = New-Object Windows.Forms.Button -Property @{ Text = 'Open Admin tool'; Left = 717; Top = 718; Width = 148; Height = 36; Enabled = $false }
 $form.Controls.AddRange(@($btnCheck, $btnGo, $btnFinish, $btnScan, $btnAdmin))
-$lblResult = Lbl 'Ready. Choose the options above, then click Check readiness or Install.' 15 856 860 24 $true
-$bar = New-Object Windows.Forms.ProgressBar -Property @{ Left = 15; Top = 884; Width = 850; Height = 16 }
-$btnLog = New-Object Windows.Forms.Button -Property @{ Text = 'Open full log'; Left = 745; Top = 904; Width = 120; Height = 24 }
-$log = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 906; Width = 720; Height = 260; Multiline = $true; ReadOnly = $true; ScrollBars = 'Vertical'; WordWrap = $true; Font = New-Object Drawing.Font('Consolas', 9.5) }
+$lblResult = Lbl 'Ready. Choose the options above, then click Check readiness or Install.' 15 764 860 24 $true
+$bar = New-Object Windows.Forms.ProgressBar -Property @{ Left = 15; Top = 792; Width = 850; Height = 16 }
+$btnLog = New-Object Windows.Forms.Button -Property @{ Text = 'Open full log'; Left = 745; Top = 816; Width = 120; Height = 24 }
+$log = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 816; Width = 720; Height = 130; Anchor = 'Top,Bottom,Left,Right'; Multiline = $true; ReadOnly = $true; ScrollBars = 'Vertical'; WordWrap = $true; Font = New-Object Drawing.Font('Consolas', 9.5) }
 $form.Controls.AddRange(@($bar, $btnLog, $log))
 
 function Log([string]$m) { $log.AppendText($m + "`r`n") }
@@ -118,9 +118,10 @@ function Load-Existing {
   } catch { Log ('Could not read the existing settings: ' + $_.Exception.Message) }
 }
 
-function Save-Settings([string]$root) {
-  $cfgPath = Join-Path $root 'config\hashslinger.json'
-  $cfg = Read-HsConfig $cfgPath
+function Save-Settings([string]$root, [switch]$Temp) {
+  $realPath = Join-Path $root 'config\hashslinger.json'
+  $cfgPath = if ($Temp) { Join-Path $env:TEMP ('hashslinger-check-' + [guid]::NewGuid().ToString('N') + '.json') } else { $realPath }
+  $cfg = Read-HsConfig $realPath
   $cfg['install_root'] = $root
   $cfg['target_server'] = $cmbDc.Text.Trim()
   $cfg['target_ous'] = @(Get-HsOuSelection)
@@ -199,8 +200,8 @@ $btnCheck.Add_Click({
   try {
     $root = Test-Inputs; if (-not $root) { return }
     Busy $true; $log.Clear(); $lblResult.ForeColor = [Drawing.Color]::Black; $lblResult.Text = 'Checking this server (nothing is changed)...'
-    $cfgPath = Save-Settings $root
-    $rc = Invoke-Setup $cfgPath 'Check'
+    $cfgPath = Save-Settings $root -Temp     # readiness check changes nothing: it uses a throwaway settings file
+    try { $rc = Invoke-Setup $cfgPath 'Check' } finally { Remove-Item $cfgPath -ErrorAction SilentlyContinue }
     if ($rc -eq 0) { $lblResult.ForeColor = [Drawing.Color]::SeaGreen; $lblResult.Text = 'Ready to install. No blocking problems found.' }
     else { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Fix this first: ' + (Fail-Text 'see the log below.') }
   }
