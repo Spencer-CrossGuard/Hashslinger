@@ -5,52 +5,199 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hashslinger SOP</title>
 <style>
-  :root { --bg:#fff; --fg:#1d2330; --muted:#5b6577; --line:#d9dee7; --soft:#f3f5f9; --accent:#1f4e9c; --code:#f6f7fa; --warn:#fff4dc; --warnline:#f0d28a; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg:#10141c; --fg:#e4e8f0; --muted:#98a2b5; --line:#2a3242; --soft:#171d29; --accent:#7fa8ee; --code:#171d29; --warn:#2a2212; --warnline:#5c4a1c; }
+  :root {
+    --bg:#ffffff; --panel:#f5f7fb; --panel2:#eef2f9; --fg:#1b2230; --muted:#5d687c; --line:#dbe1ec;
+    --accent:#1f4e9c; --accent-fg:#ffffff; --accent-soft:#e6eefb; --code-bg:#f3f5fa;
+    --note:#e6eefb; --note-line:#b8cdef; --warn:#fff3d6; --warn-line:#ecc979; --bad:#fdeaea; --bad-line:#eba9a9;
+    --ok:#e4f4ea; --ok-line:#a9d8bb; --shadow:0 1px 2px rgba(20,30,50,.06), 0 4px 14px rgba(20,30,50,.05);
   }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#0f131b; --panel:#161c27; --panel2:#1c2432; --fg:#e5e9f1; --muted:#9aa5b8; --line:#2a3345;
+      --accent:#7fa8ee; --accent-fg:#0f131b; --accent-soft:#1a2740; --code-bg:#151b26;
+      --note:#18263d; --note-line:#2d4a78; --warn:#2b2412; --warn-line:#6b5420; --bad:#2d1717; --bad-line:#6a3030;
+      --ok:#12281b; --ok-line:#2c6a46; --shadow:none;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#0f131b; --panel:#161c27; --panel2:#1c2432; --fg:#e5e9f1; --muted:#9aa5b8; --line:#2a3345;
+    --accent:#7fa8ee; --accent-fg:#0f131b; --accent-soft:#1a2740; --code-bg:#151b26;
+    --note:#18263d; --note-line:#2d4a78; --warn:#2b2412; --warn-line:#6b5420; --bad:#2d1717; --bad-line:#6a3030;
+    --ok:#12281b; --ok-line:#2c6a46; --shadow:none;
+  }
+
   * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:15.5px/1.5 "Segoe UI", system-ui, Arial, sans-serif; }
-  .wrap { max-width: 960px; margin: 0 auto; padding: 0 18px 60px; }
-  h1 { margin: 26px 0 4px; font-size: 1.7rem; }
-  .sub { color: var(--muted); margin: 0 0 14px; }
-  nav { background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: 10px 16px; margin: 14px 0 6px; }
-  nav a { color: var(--accent); text-decoration: none; margin-right: 14px; white-space: nowrap; display: inline-block; }
-  nav a:hover { text-decoration: underline; }
-  h2 { font-size: 1.3rem; margin: 34px 0 8px; padding-bottom: 5px; border-bottom: 2px solid var(--line); }
-  h3 { font-size: 1.05rem; margin: 18px 0 4px; }
-  p { margin: 7px 0; } ul, ol { margin: 6px 0; padding-left: 24px; } li { margin: 3px 0; }
-  code { font-family: Consolas, "Cascadia Mono", Menlo, monospace; font-size: .92em; background: var(--code); padding: 1px 5px; border-radius: 4px; }
-  pre { background: var(--code); border: 1px solid var(--line); border-radius: 7px; padding: 10px 13px; overflow-x: auto; font: 13px/1.45 Consolas, "Cascadia Mono", Menlo, monospace; margin: 8px 0; }
-  pre code { background: none; padding: 0; font-size: inherit; }
-  table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: .93rem; }
-  th, td { border: 1px solid var(--line); padding: 6px 9px; text-align: left; vertical-align: top; }
-  th { background: var(--soft); }
-  td:first-child { white-space: nowrap; }
-  .note { background: var(--warn); border: 1px solid var(--warnline); border-radius: 7px; padding: 8px 12px; margin: 10px 0; }
-  @media print { nav { display: none; } pre, table, .note { break-inside: avoid; } }
+  html { scroll-behavior: smooth; scroll-padding-top: 18px; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.6 "Segoe UI", system-ui, -apple-system, Arial, sans-serif; }
+  a { color:var(--accent); }
+
+  /* ---------- layout ---------- */
+  .layout { display:grid; grid-template-columns: 300px minmax(0,1fr); min-height:100vh; }
+  aside.side { position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto; background:var(--panel); border-right:1px solid var(--line); padding:18px 14px 28px; }
+  main { padding:0 38px 80px; max-width:1060px; width:100%; }
+
+  /* ---------- side menu ---------- */
+  .brand { display:flex; align-items:center; gap:10px; margin:2px 4px 14px; }
+  .logo { width:34px; height:34px; border-radius:9px; background:var(--accent); color:var(--accent-fg); display:grid; place-items:center; font-weight:700; font-size:17px; flex:none; }
+  .brand b { display:block; font-size:1.05rem; line-height:1.15; }
+  .brand span { color:var(--muted); font-size:.8rem; }
+  .search { position:relative; margin:0 2px 12px; }
+  .search input { width:100%; padding:9px 34px 9px 11px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); font:inherit; font-size:.92rem; }
+  .search input:focus { outline:2px solid var(--accent); outline-offset:0; }
+  .search kbd { position:absolute; right:9px; top:50%; transform:translateY(-50%); font:11px Consolas, monospace; color:var(--muted); border:1px solid var(--line); border-radius:4px; padding:0 5px; background:var(--panel); }
+  .menu .grp { margin:0 0 10px; }
+  .menu h4 { margin:12px 6px 4px; font-size:.72rem; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); }
+  .menu ul { list-style:none; margin:0; padding:0; }
+  .menu a { display:flex; gap:9px; align-items:baseline; padding:6px 9px; border-radius:7px; color:var(--fg); text-decoration:none; font-size:.93rem; border-left:3px solid transparent; }
+  .menu a .n { color:var(--muted); font-size:.78rem; min-width:18px; text-align:right; font-variant-numeric:tabular-nums; }
+  .menu a:hover { background:var(--panel2); }
+  .menu a.on { background:var(--accent-soft); border-left-color:var(--accent); font-weight:600; }
+  #nores { display:none; color:var(--muted); font-size:.9rem; padding:6px 8px; }
+  .tools { display:flex; gap:8px; margin:14px 2px 0; }
+  .btn { border:1px solid var(--line); background:var(--bg); color:var(--fg); border-radius:7px; padding:6px 10px; font:inherit; font-size:.84rem; cursor:pointer; }
+  .btn:hover { background:var(--panel2); }
+  #menuBtn { display:none; }
+
+  /* ---------- page header ---------- */
+  .hero { padding:34px 0 8px; }
+  .hero h1 { margin:0 0 6px; font-size:2rem; letter-spacing:-.01em; }
+  .hero p { margin:0; color:var(--muted); font-size:1.02rem; max-width:760px; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin:22px 0 4px; }
+  .tile { display:block; text-decoration:none; color:var(--fg); background:var(--panel); border:1px solid var(--line); border-radius:11px; padding:13px 15px; box-shadow:var(--shadow); transition:border-color .15s, transform .15s; }
+  .tile:hover { border-color:var(--accent); transform:translateY(-1px); }
+  .tile b { display:block; margin-bottom:2px; }
+  .tile span { color:var(--muted); font-size:.88rem; }
+
+  /* ---------- sections ---------- */
+  section { padding-top:34px; }
+  h2 { display:flex; align-items:center; gap:12px; margin:0 0 12px; padding-bottom:9px; border-bottom:2px solid var(--line); font-size:1.5rem; letter-spacing:-.005em; }
+  h2 .num { flex:none; width:34px; height:34px; border-radius:50%; background:var(--accent); color:var(--accent-fg); display:grid; place-items:center; font-size:.95rem; font-weight:700; }
+  h2 a.anchor { margin-left:auto; color:var(--muted); text-decoration:none; font-size:1rem; opacity:0; }
+  h2:hover a.anchor { opacity:1; }
+  h3 { margin:24px 0 6px; font-size:1.12rem; }
+  p { margin:9px 0; }
+  ul, ol { margin:8px 0; padding-left:24px; } li { margin:4px 0; }
+  code { font-family:Consolas,"Cascadia Mono",Menlo,monospace; font-size:.9em; background:var(--code-bg); border:1px solid var(--line); border-radius:5px; padding:1px 6px; word-break:break-word; }
+  pre { position:relative; background:var(--code-bg); border:1px solid var(--line); border-radius:9px; padding:13px 15px; overflow-x:auto; margin:12px 0; font:13.2px/1.5 Consolas,"Cascadia Mono",Menlo,monospace; }
+  pre code { background:none; border:0; padding:0; font-size:inherit; word-break:normal; }
+  pre .copy { position:absolute; top:7px; right:7px; opacity:0; transition:opacity .15s; }
+  pre:hover .copy, pre .copy:focus { opacity:1; }
+  .tw { overflow-x:auto; margin:12px 0; border:1px solid var(--line); border-radius:9px; }
+  table { width:100%; border-collapse:collapse; font-size:.93rem; }
+  th, td { padding:8px 12px; text-align:left; vertical-align:top; border-bottom:1px solid var(--line); }
+  th { background:var(--panel2); font-weight:600; white-space:nowrap; }
+  tr:last-child td { border-bottom:0; }
+  tbody tr:nth-child(even) td { background:color-mix(in srgb, var(--panel) 70%, transparent); }
+  td.k { font-weight:600; width:1%; }
+  .callout { border:1px solid var(--line); border-left-width:4px; border-radius:9px; padding:10px 14px; margin:14px 0; }
+  .callout b:first-child { display:block; margin-bottom:1px; }
+  .callout.note { background:var(--note); border-color:var(--note-line); }
+  .callout.warn { background:var(--warn); border-color:var(--warn-line); }
+  .callout.ok { background:var(--ok); border-color:var(--ok-line); }
+  .pill { display:inline-block; font-size:.74rem; font-weight:600; padding:1px 9px; border-radius:999px; border:1px solid var(--line); background:var(--panel2); vertical-align:1px; }
+  .pill.high { background:var(--bad); border-color:var(--bad-line); }
+  .pill.med { background:var(--warn); border-color:var(--warn-line); }
+  ol.steps { list-style:none; counter-reset:s; padding:0; margin:12px 0; }
+  ol.steps > li { counter-increment:s; position:relative; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:11px 14px 11px 52px; margin:9px 0; }
+  ol.steps > li::before { content:counter(s); position:absolute; left:13px; top:10px; width:28px; height:28px; border-radius:50%; background:var(--accent); color:var(--accent-fg); display:grid; place-items:center; font-weight:700; font-size:.9rem; }
+  .two { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:12px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:11px 15px; }
+  .card h3 { margin:0 0 4px; font-size:1rem; }
+  .totop { position:fixed; right:18px; bottom:18px; display:none; box-shadow:var(--shadow); }
+  footer { color:var(--muted); font-size:.88rem; padding:34px 0 0; border-top:1px solid var(--line); margin-top:44px; }
+
+  /* ---------- small screens ---------- */
+  @media (max-width: 980px) {
+    .layout { grid-template-columns:1fr; }
+    aside.side { position:static; height:auto; border-right:0; border-bottom:1px solid var(--line); padding-bottom:12px; }
+    #menuBtn { display:inline-block; }
+    .menu-wrap { display:none; }
+    .menu-wrap.open { display:block; }
+    main { padding:0 18px 70px; }
+  }
+  /* ---------- print ---------- */
+  @media print {
+    aside.side, .tiles, .totop, pre .copy, .tools { display:none !important; }
+    .layout { display:block; }
+    main { padding:0; max-width:none; }
+    section { break-inside:auto; padding-top:18px; }
+    pre, .tw, .callout, ol.steps > li { break-inside:avoid; }
+    h2 { break-after:avoid; }
+    a { color:inherit; text-decoration:none; }
+  }
 </style>
 </head>
-<body><div class="wrap">
+<body>
+<div class="layout">
 
-<h1>Hashslinger SOP</h1>
-<p class="sub">How the tool works and how to operate it: functions, settings, upgrade, reinstall, uninstall, delete.</p>
-<nav>
-  <a href="#what">What it does</a><a href="#layout">Folders</a><a href="#install">Install</a><a href="#gmsa">Service account</a>
-  <a href="#scan">How a scan works</a><a href="#tools">Functions</a><a href="#settings">Settings</a><a href="#wordlists">Wordlists</a>
-  <a href="#report">Report</a><a href="#logs">Logs</a><a href="#upgrade">Upgrade</a><a href="#reinstall">Reinstall / move</a>
-  <a href="#uninstall">Uninstall</a><a href="#delete">Delete things</a><a href="#trouble">Troubleshooting</a>
-</nav>
+<!-- ===================== SIDE MENU ===================== -->
+<aside class="side">
+  <div class="brand"><div class="logo">H</div><div><b>Hashslinger</b><span>Standard Operating Procedure</span></div></div>
+  <div class="tools"><button id="menuBtn" class="btn" type="button">Menu</button></div>
+  <div class="menu-wrap" id="menuWrap">
+    <div class="search"><input id="q" type="search" placeholder="Search this manual" autocomplete="off" aria-label="Search this manual"><kbd>/</kbd></div>
+    <nav class="menu" aria-label="Sections">
+      <div class="grp"><h4>Overview</h4><ul>
+        <li><a href="#what"><span class="n">1</span>What it does</a></li>
+        <li><a href="#layout"><span class="n">2</span>Folders</a></li>
+      </ul></div>
+      <div class="grp"><h4>Set up</h4><ul>
+        <li><a href="#gmsa"><span class="n">3</span>Service account</a></li>
+        <li><a href="#install"><span class="n">4</span>Install</a></li>
+      </ul></div>
+      <div class="grp"><h4>How it works</h4><ul>
+        <li><a href="#scan"><span class="n">5</span>A scan, step by step</a></li>
+        <li><a href="#tools"><span class="n">6</span>Functions</a></li>
+        <li><a href="#settings"><span class="n">7</span>Settings reference</a></li>
+        <li><a href="#wordlists"><span class="n">8</span>Wordlists and the store</a></li>
+        <li><a href="#report"><span class="n">9</span>The report</a></li>
+        <li><a href="#logs"><span class="n">10</span>Logs and status</a></li>
+      </ul></div>
+      <div class="grp"><h4>Maintain</h4><ul>
+        <li><a href="#upgrade"><span class="n">11</span>Upgrade</a></li>
+        <li><a href="#reinstall"><span class="n">12</span>Reinstall or move</a></li>
+        <li><a href="#uninstall"><span class="n">13</span>Uninstall</a></li>
+        <li><a href="#delete"><span class="n">14</span>Delete things</a></li>
+      </ul></div>
+      <div class="grp"><h4>Help</h4><ul>
+        <li><a href="#trouble"><span class="n">15</span>Troubleshooting</a></li>
+      </ul></div>
+      <div id="nores">No section matches that.</div>
+    </nav>
+    <div class="tools"><button id="themeBtn" class="btn" type="button">Light / dark</button><button id="printBtn" class="btn" type="button">Print</button></div>
+  </div>
+</aside>
 
-<h2 id="what">What it does</h2>
-<p>Reads account NT hashes from AD (read-only), looks each one up in a local store of breached and weak password hashes, and writes a CSV of the flagged accounts. Account hashes stay in memory and are wiped after the run. The only network traffic is to the domain controller. Nothing in the tool changes AD.</p>
+<!-- ===================== CONTENT ===================== -->
+<main>
+<div class="hero">
+  <h1>Hashslinger SOP</h1>
+  <p>How the tool works and how to run it: functions, settings, upgrade, reinstall, uninstall and delete.</p>
+  <div class="tiles">
+    <a class="tile" href="#install"><b>Install</b><span>Wizard, phases and checks</span></a>
+    <a class="tile" href="#tools"><b>Run a scan</b><span>Admin tool and command line</span></a>
+    <a class="tile" href="#settings"><b>Change a setting</b><span>Every key and what it does</span></a>
+    <a class="tile" href="#wordlists"><b>Add wordlists</b><span>Formats and merging</span></a>
+    <a class="tile" href="#upgrade"><b>Upgrade</b><span>Whole package or one file</span></a>
+    <a class="tile" href="#uninstall"><b>Uninstall</b><span>Switches and AD cleanup</span></a>
+    <a class="tile" href="#trouble"><b>Something broke</b><span>Symptom to fix</span></a>
+  </div>
+</div>
 
-<h2 id="layout">Folders</h2>
-<p>One folder you pick at setup. Everything lives inside it:</p>
+<!-- 1 -->
+<section id="what">
+  <h2><span class="num">1</span>What it does<a class="anchor" href="#what">#</a></h2>
+  <p>Reads account NT hashes from AD (read-only), looks each one up in a local store of breached and weak password hashes, and writes a CSV of the flagged accounts. Account hashes stay in memory and are wiped after the run. The only network traffic is to the domain controller. Nothing in the tool changes AD.</p>
+</section>
+
+<!-- 2 -->
+<section id="layout">
+  <h2><span class="num">2</span>Folders<a class="anchor" href="#layout">#</a></h2>
+  <p>One folder you pick at setup. Everything lives inside it:</p>
 <pre><code>Hashslinger\
   app\            program and scripts (Hashslinger.exe, powershell\, config\ defaults, docs\)
   app-backups\    the last 3 copies of app\ taken before an upgrade or reinstall
-  config\         hashslinger.json (the ONE settings file), pattern_rules.json, hashslinger.json.bak-* (save backups)
+  config\         hashslinger.json (the ONE settings file), pattern_rules.json, hashslinger.json.bak-*
   data\store\     master.ntlm (merged hash store) + master.ntlm.manifest.json (which files are merged)
   data\staging\   HIBP\  rockyou\  custom\   (wordlist files)
   reports\        report_&lt;date&gt;.csv
@@ -59,40 +206,13 @@
   requests\       analyst request drop box (only if an analyst group is used)
   extras\         optional gMSA helper scripts
   Hashslinger-Admin.cmd   Hashslinger-Uninstall.cmd</code></pre>
-<p>Outside the folder: two scheduled tasks (<code>Hashslinger-Scheduled</code>, <code>Hashslinger-OnDemand</code>), the DSInternals module (<code>%ProgramFiles%\WindowsPowerShell\Modules</code>), the RSAT AD tools feature, support bundles you create (Desktop), and the service account in AD.</p>
+  <div class="callout note"><b>Outside the folder</b>Two scheduled tasks (<code>Hashslinger-Scheduled</code>, <code>Hashslinger-OnDemand</code>), the DSInternals module (<code>%ProgramFiles%\WindowsPowerShell\Modules</code>), the RSAT AD tools feature, support bundles you create (Desktop), and the service account in AD.</div>
+</section>
 
-<h2 id="install">Install</h2>
-<ol>
-  <li>Create the service account first (next section).</li>
-  <li>Copy the package to the scan server, double-click <code>Setup-Hashslinger.cmd</code> (local administrator).</li>
-  <li>Pick the install folder, the DC, the service account name, and tick scope in the tree (ticking an OU includes everything below it; search keeps parents visible). Optional: rockyou and HIBP files, offline DSInternals folder.</li>
-  <li><b>Check readiness</b> (changes nothing), then <b>Install</b>. Install = local install, then the service account checks.</li>
-</ol>
-<p>Setup phases (the wizard runs these; you can run them yourself): <code>Setup-Hashslinger.cmd -Phase Check|Local|Finish|All -Config &lt;folder&gt;\config\hashslinger.json [-WhatIf]</code></p>
-<table>
-  <tr><th>Phase</th><th>Does</th></tr>
-  <tr><td>Check</td><td>Preflight only: source files, PowerShell, compiler, domain, drive space, DC and scope set. No changes.</td></tr>
-  <tr><td>Local</td><td>Creates the folders, backs up and copies <code>app\</code>, builds the exe if the package has none, installs RSAT AD tools and DSInternals if missing, unblocks files, copies any wordlists you chose, creates the two launchers, then verifies: script syntax parse, <code>Hashslinger.exe selftest</code>, an AD-free smoke test (exe, PowerShell, CSV), DC reachability and that each scope exists. Refuses to run while a scan is running.</td></tr>
-  <tr><td>Finish</td><td>Service account checks (below), folder permissions, scheduled tasks, and a live replication test as the service account.</td></tr>
-  <tr><td>All</td><td>Local, then Finish.</td></tr>
-</table>
-<h3>Finish checks</h3>
-<table>
-  <tr><th>Check</th><th>Failure means</th></tr>
-  <tr><td>Service account exists</td><td>Name wrong or not created. Looked up by Name, sAMAccountName, or sAMAccountName with <code>$</code>.</td></tr>
-  <tr><td>Server can resolve the account name</td><td>SID to name translation fails: TCP 445/135 to the DC, <code>Test-ComputerSecureChannel</code>.</td></tr>
-  <tr><td>This server may retrieve the password</td><td>The account was created for another computer.</td></tr>
-  <tr><td>Only this server may retrieve it</td><td>Warning: more than one principal can retrieve it.</td></tr>
-  <tr><td>Not in a privileged group</td><td>Warning: remove it from Domain/Enterprise/Schema Admins or Administrators.</td></tr>
-  <tr><td>Replication rights (effective, read-only)</td><td>Warning: one of the two rights is missing, denied, or does not apply to the domain root itself. Computed from the ACL and the account's token groups, so group-granted rights count.</td></tr>
-  <tr><td><code>Test-ADServiceAccount</code></td><td>Account not installed on this server (see next section).</td></tr>
-  <tr><td>Folder permissions</td><td>Applied by SID: service account, local Administrators, SYSTEM; existing files in staging and store are reset to inherit. Analyst group gets limited access only if one is set.</td></tr>
-  <tr><td>Scheduled tasks</td><td>Registered under the service account, no stored password.</td></tr>
-  <tr><td>Live test as the service account</td><td>Replicates this server's own computer object as the service account. Reports the exact error and a likely cause (denied, FIPS, RPC, batch right, Schema).</td></tr>
-</table>
-
-<h2 id="gmsa">Service account (created by hand)</h2>
-<p>The tool never creates or changes anything in AD. A Domain Admin creates the account once:</p>
+<!-- 3 -->
+<section id="gmsa">
+  <h2><span class="num">3</span>Service account (created by hand)<a class="anchor" href="#gmsa">#</a></h2>
+  <p>The tool never creates or changes anything in AD. A Domain Admin creates the account once, <b>before</b> install:</p>
 <pre><code># KDS root key, once per forest (skip if Get-KdsRootKey returns one)
 Add-KdsRootKey -EffectiveImmediately          # usable after ~10 hours, once every DC has it
 
@@ -110,191 +230,377 @@ New-ADServiceAccount -Name svc-hashslinger `
 # On the scan server, elevated
 Install-ADServiceAccount svc-hashslinger
 Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
-<p>No other rights and no privileged group membership. The account also needs "Log on as a batch job" on the scan server if the task will not start.</p>
+  <div class="callout warn"><b>Nothing else</b>No other rights and no privileged group membership. The account also needs "Log on as a batch job" on the scan server if the scheduled task will not start.</div>
+</section>
 
-<h2 id="scan">How a scan works</h2>
-<table>
-  <tr><th>Step</th><th>What happens</th></tr>
-  <tr><td>1 Preflight</td><td>Output folder must be under an allowed report location; optional BitLocker check.</td></tr>
-  <tr><td>2 Merge wordlists</td><td>New or changed files in <code>data\staging</code> are merged into the store (section Wordlists).</td></tr>
-  <tr><td>3 Patterns</td><td>Builds hashed candidates from <code>pattern_rules.json</code> (keyboard walks, base words, leetspeak, seasons, years, suffixes).</td></tr>
-  <tr><td>4 Pull from AD</td><td>The engine (<code>Get-AccountHashes.ps1</code>) runs an LDAP search for the scope (base DN, account types, UAC flags) to get the in-scope account GUIDs, then replicates them with DSInternals. <b>bulk</b>: one pass over the whole directory, keeping only in-scope accounts. <b>per-account</b>: one call per account. At or below <code>per_account_threshold</code> (5000) bulk switches to per-account automatically, since bulk costs the same for 2 accounts as for all. Explicit <code>-Properties</code> sets are used so no Schema partition rights are needed. Offline mode reads an <code>ntds.dit</code> copy instead. Hashes go to the exe over a pipe, never to disk.</td></tr>
-  <tr><td>5 Match</td><td>Hashes are sorted, then looked up in the memory-mapped store (binary search plus a 2-byte prefix index). Pattern candidates, empty password, reversible encryption, LM hash, and (if on) duplicates are checked.</td></tr>
-  <tr><td>6 Report</td><td>Writes <code>report_&lt;date&gt;.csv</code> (flagged accounts only). Refuses to write any cell containing an account's hash.</td></tr>
-  <tr><td>7 Wipe</td><td>Zeroes the in-memory hash and name buffers, deletes temp merge folders, writes the audit entry with <code>wipe_confirmed</code>, applies report retention.</td></tr>
-</table>
-<ul>
-  <li>One scan at a time (<code>status\run.lock</code>); a second start is refused and logged.</li>
-  <li>The scheduled task runs <code>Hashslinger.exe --config ... scan</code> as the service account on the cadence, day and time in settings.</li>
-  <li>Memory is about 150 to 250 bytes per account plus 40 for sorting.</li>
-</ul>
+<!-- 4 -->
+<section id="install">
+  <h2><span class="num">4</span>Install<a class="anchor" href="#install">#</a></h2>
+  <ol class="steps">
+    <li>Create the service account (section 3).</li>
+    <li>Copy the package to the scan server and double-click <code>Setup-Hashslinger.cmd</code> (local administrator).</li>
+    <li>Pick the install folder, the DC and the service account name. Tick the scope in the tree: ticking an OU includes everything below it, and search keeps parents visible. Optional: rockyou and HIBP files, an offline DSInternals folder.</li>
+    <li>Click <b>Check readiness</b> (changes nothing), then <b>Install</b>. Install is the local install followed by the service account checks.</li>
+  </ol>
+  <h3>Setup phases</h3>
+  <p>The wizard runs these; you can run them yourself: <code>Setup-Hashslinger.cmd -Phase Check|Local|Finish|All -Config &lt;folder&gt;\config\hashslinger.json [-WhatIf]</code></p>
+  <div class="tw"><table>
+    <thead><tr><th>Phase</th><th>Does</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Check</td><td>Preflight only: source files, PowerShell, compiler, domain, drive space, DC and scope set. No changes.</td></tr>
+      <tr><td class="k">Local</td><td>Creates the folders, backs up and copies <code>app\</code>, builds the exe if the package has none, installs RSAT AD tools and DSInternals if missing, unblocks files, copies any wordlists you chose, creates the two launchers, then verifies: script syntax parse, <code>Hashslinger.exe selftest</code>, an AD-free smoke test (exe, PowerShell, CSV), DC reachability and that each scope exists. Refuses to run while a scan is running.</td></tr>
+      <tr><td class="k">Finish</td><td>Service account checks (below), folder permissions, scheduled tasks, and a live replication test as the service account.</td></tr>
+      <tr><td class="k">All</td><td>Local, then Finish.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Finish checks</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Check</th><th>A failure means</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Service account exists</td><td>Name wrong or not created. Looked up by Name, sAMAccountName, or sAMAccountName with <code>$</code>.</td></tr>
+      <tr><td class="k">Server can resolve the account name</td><td>SID to name translation fails: TCP 445 and 135 to the DC, <code>Test-ComputerSecureChannel</code>.</td></tr>
+      <tr><td class="k">This server may retrieve the password</td><td>The account was created for another computer.</td></tr>
+      <tr><td class="k">Only this server may retrieve it</td><td>Warning: more than one principal can retrieve it.</td></tr>
+      <tr><td class="k">Not in a privileged group</td><td>Warning: remove it from Domain, Enterprise or Schema Admins or Administrators.</td></tr>
+      <tr><td class="k">Replication rights (effective, read-only)</td><td>Warning: one of the two rights is missing, denied, or does not apply to the domain root itself. Computed from the ACL and the account's token groups, so group-granted rights count.</td></tr>
+      <tr><td class="k"><code>Test-ADServiceAccount</code></td><td>Account not installed on this server (section 3, last step).</td></tr>
+      <tr><td class="k">Folder permissions</td><td>Applied by SID to the service account, local Administrators and SYSTEM; existing files in staging and store are reset to inherit. An analyst group gets limited access only if one is set.</td></tr>
+      <tr><td class="k">Scheduled tasks</td><td>Registered under the service account, no stored password.</td></tr>
+      <tr><td class="k">Live test as the service account</td><td>Replicates this server's own computer object as the service account. Reports the exact error and a likely cause (denied, FIPS, RPC, batch right, Schema).</td></tr>
+    </tbody>
+  </table></div>
+</section>
 
-<h2 id="tools">Functions</h2>
-<h3>Admin tool (<code>Hashslinger-Admin.cmd</code>)</h3>
-<p>Edits <code>config\hashslinger.json</code>; a backup is kept on every save; changes apply to the next scan.</p>
-<table>
-  <tr><th>Tab</th><th>Does</th></tr>
-  <tr><td>Where everything is</td><td>All file and folder locations with Browse/Open, allowed report locations, edit pattern rules. Changing a path does not move files.</td></tr>
-  <tr><td>Active Directory</td><td>DC, mode, replication, small-scope switch, account types, UAC flags to skip or require, offline paths, the scope tree (Reload from AD).</td></tr>
-  <tr><td>Scan options</td><td>Duplicate checking, cadence/day/time (offers to update the scheduled task), retention days, scan timeout.</td></tr>
-  <tr><td>Security and accounts</td><td>Service account name, scan server, analyst group, EDIPI allowlist, BitLocker requirement, offline module folder, <b>Re-apply permissions and scheduled tasks</b> (runs Finish), open extras.</td></tr>
-  <tr><td>Wordlists</td><td>Add files (copied into the right folder), counts and sizes, merge now, store size.</td></tr>
-  <tr><td>Run and logs</td><td>Start a scan, watch progress, open newest report, reports folder, audit log, re-run readiness checks, self-test, support bundle (settings and logs only), this SOP, last scan with time per stage.</td></tr>
-</table>
-<h3>Command line</h3>
+<!-- 5 -->
+<section id="scan">
+  <h2><span class="num">5</span>A scan, step by step<a class="anchor" href="#scan">#</a></h2>
+  <div class="tw"><table>
+    <thead><tr><th>Step</th><th>What happens</th></tr></thead>
+    <tbody>
+      <tr><td class="k">1 Preflight</td><td>The output folder must be under an allowed report location; optional BitLocker check.</td></tr>
+      <tr><td class="k">2 Merge wordlists</td><td>New or changed files in <code>data\staging</code> are merged into the store (section 8).</td></tr>
+      <tr><td class="k">3 Patterns</td><td>Builds hashed candidates from <code>pattern_rules.json</code>: keyboard walks, base words, leetspeak, seasons, years, suffixes.</td></tr>
+      <tr><td class="k">4 Pull from AD</td><td>The engine (<code>Get-AccountHashes.ps1</code>) runs an LDAP search for the scope (base DN, account types, UAC flags) to get the in-scope account GUIDs, then replicates them with DSInternals.<br><b>bulk</b>: one pass over the whole directory, keeping only in-scope accounts. <b>per-account</b>: one call per account. At or below <code>per_account_threshold</code> (5000) bulk switches to per-account on its own, since bulk costs the same for 2 accounts as for all. Explicit <code>-Properties</code> sets are used so Schema partition rights are not needed. Offline mode reads an <code>ntds.dit</code> copy instead. Hashes go to the exe over a pipe, never to disk.</td></tr>
+      <tr><td class="k">5 Match</td><td>Hashes are sorted, then looked up in the memory-mapped store (binary search plus a 2-byte prefix index). Pattern candidates, empty password, reversible encryption, LM hash and (if on) duplicates are checked.</td></tr>
+      <tr><td class="k">6 Report</td><td>Writes <code>report_&lt;date&gt;.csv</code>, flagged accounts only. Refuses to write any cell containing an account's hash.</td></tr>
+      <tr><td class="k">7 Wipe</td><td>Zeroes the in-memory hash and name buffers, deletes temp merge folders, writes the audit entry with <code>wipe_confirmed</code>, applies report retention.</td></tr>
+    </tbody>
+  </table></div>
+  <ul>
+    <li>One scan at a time (<code>status\run.lock</code>). A second start is refused and logged.</li>
+    <li>The scheduled task runs <code>Hashslinger.exe --config ... scan</code> as the service account on the cadence, day and time in the settings.</li>
+    <li>Memory is about 150 to 250 bytes per account plus 40 for sorting.</li>
+  </ul>
+</section>
+
+<!-- 6 -->
+<section id="tools">
+  <h2><span class="num">6</span>Functions<a class="anchor" href="#tools">#</a></h2>
+  <h3>Admin tool (<code>Hashslinger-Admin.cmd</code>)</h3>
+  <p>Edits <code>config\hashslinger.json</code>. A backup is kept on every save and changes apply to the next scan.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Tab</th><th>Does</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Where everything is</td><td>All file and folder locations with Browse and Open, allowed report locations, edit pattern rules. Changing a path does not move files.</td></tr>
+      <tr><td class="k">Active Directory</td><td>DC, mode, replication, small-scope switch, account types, UAC flags to skip or require, offline paths, the scope tree (Reload from AD).</td></tr>
+      <tr><td class="k">Scan options</td><td>Duplicate checking, cadence, day and time (offers to update the scheduled task), retention days, scan timeout.</td></tr>
+      <tr><td class="k">Security and accounts</td><td>Service account name, scan server, analyst group, EDIPI allowlist, BitLocker requirement, offline module folder, <b>Re-apply permissions and scheduled tasks</b> (runs Finish), open extras.</td></tr>
+      <tr><td class="k">Wordlists</td><td>Add files (copied into the right folder), counts and sizes, merge now, store size.</td></tr>
+      <tr><td class="k">Run and logs</td><td>Start a scan, watch progress, open the newest report, the reports folder, the audit log, re-run readiness checks, self-test, support bundle (settings and logs only), this SOP, last scan with time per stage.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Command line</h3>
 <pre><code>Hashslinger.exe --config &lt;json&gt; scan [--ou &lt;dn&gt;] [--output-dir &lt;dir&gt;] [--trigger &lt;t&gt;] [--request &lt;file&gt; | --request-dir &lt;dir&gt;]
-Hashslinger.exe --config &lt;json&gt; merge          merge new staging files into the store now
-Hashslinger.exe --config &lt;json&gt; info           store record count
-Hashslinger.exe selftest                       built-in checks (incl. the AD-read-only and no-network scan of the scripts)
+Hashslinger.exe --config &lt;json&gt; merge             merge new staging files into the store now
+Hashslinger.exe --config &lt;json&gt; info              store record count
+Hashslinger.exe selftest                          built-in checks (includes the AD-read-only and no-network scan of the scripts)
 Hashslinger.exe bench [accounts] [storeRecords]   times the C# side with synthetic data (no AD)
 Exit codes: 0 ok, 1 usage, 2 failed (also logged)</code></pre>
-<h3>Other scripts (<code>app\powershell</code>)</h3>
-<table>
-  <tr><th>Script</th><th>Does</th></tr>
-  <tr><td>Show-HashslingerProgress.ps1</td><td>Read-only live progress window from <code>status.json</code> (stage, detail, accounts, heartbeat). Works for any user with read access; independent of who started the scan.</td></tr>
-  <tr><td>Start-HashslingerGui.ps1</td><td>Optional analyst request window: EDIPI and reason go into a request file; the on-demand task (as the service account) validates and runs it, and logs the EDIPI, reason and the account that created the file.</td></tr>
-  <tr><td>Start-HashslingerRun.ps1</td><td>Runs a scan as YOUR account (needs replication rights). Dev and lab use.</td></tr>
-  <tr><td>Uninstall-Hashslinger.ps1</td><td>See Uninstall.</td></tr>
-</table>
+  <h3>Other scripts (<code>app\powershell</code>)</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Script</th><th>Does</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Show-HashslingerProgress.ps1</td><td>Read-only live progress window from <code>status.json</code> (stage, detail, accounts, heartbeat). Works for any user with read access, independent of who started the scan.</td></tr>
+      <tr><td class="k">Start-HashslingerGui.ps1</td><td>Optional analyst request window. EDIPI and reason go into a request file; the on-demand task (as the service account) validates and runs it, and logs the EDIPI, reason and the account that created the file.</td></tr>
+      <tr><td class="k">Start-HashslingerRun.ps1</td><td>Runs a scan as YOUR account (needs replication rights). Dev and lab use.</td></tr>
+      <tr><td class="k">Uninstall-Hashslinger.ps1</td><td>See section 13.</td></tr>
+    </tbody>
+  </table></div>
+</section>
 
-<h2 id="settings">Settings reference (<code>config\hashslinger.json</code>)</h2>
-<table>
-  <tr><th>Key</th><th>Default</th><th>Meaning</th></tr>
-  <tr><td>install_root</td><td>chosen folder</td><td>Where everything lives.</td></tr>
-  <tr><td>mode</td><td>live</td><td><code>live</code> replicates from a DC; <code>offline</code> reads <code>ntds_path</code> with the SYSTEM hive <code>system_hive_path</code>.</td></tr>
-  <tr><td>replication</td><td>bulk</td><td><code>bulk</code> or <code>per-account</code>.</td></tr>
-  <tr><td>per_account_threshold</td><td>5000</td><td>At or below this many in-scope accounts bulk uses per-account.</td></tr>
-  <tr><td>target_server</td><td>-</td><td>DC to read from.</td></tr>
-  <tr><td>target_ous</td><td>-</td><td>List of DNs. Each is searched as a subtree.</td></tr>
-  <tr><td>account_types</td><td>User, Service</td><td>Also <code>Computer</code>. Service = has a servicePrincipalName.</td></tr>
-  <tr><td>uac.exclude_flags</td><td>SMARTCARD_REQUIRED</td><td>Skip accounts with ANY of these userAccountControl flags (names or numbers).</td></tr>
-  <tr><td>uac.require_flags</td><td>none</td><td>Accounts must have ALL of these.</td></tr>
-  <tr><td>check_duplicates</td><td>false</td><td>Flag shared passwords (Medium). Can add many rows on a large directory.</td></tr>
-  <tr><td>cadence / schedule_day / schedule_time</td><td>Weekly / Sunday / 02:00</td><td>Weekly or Monthly (every 4 weeks).</td></tr>
-  <tr><td>retention_days</td><td>90</td><td>Reports older than this are securely deleted after each scan. 0 keeps everything.</td></tr>
-  <tr><td>engine_timeout_seconds</td><td>86400</td><td>A scan running longer is stopped and logged failed.</td></tr>
-  <tr><td>hash_store_path, staging_path, log_path, output_path, request_dir, status_path, pattern_rules_path, engine_script</td><td>under install_root</td><td>Locations.</td></tr>
-  <tr><td>allowed_output_roots</td><td>reports folder</td><td>A scan or request may only write reports under these.</td></tr>
-  <tr><td>require_encrypted_volume</td><td>false</td><td>Refuse to scan unless store, staging and output are on BitLocker-protected volumes.</td></tr>
-  <tr><td>authorized_edipis</td><td>empty</td><td>If set, only these EDIPIs may submit requests.</td></tr>
-  <tr><td>gmsa_name, run_server, analyst_group</td><td>svc-hashslinger, this server, empty</td><td>Used by Finish. Empty analyst group means only the service account, local Administrators and SYSTEM have access.</td></tr>
-  <tr><td>wordlists.hibp / rockyou / custom</td><td>empty</td><td>Source files copied into staging at install.</td></tr>
-  <tr><td>dsinternals_offline_path</td><td>empty</td><td>Module folder to copy for servers without internet.</td></tr>
-  <tr><td>min_free_space_gb.store / output</td><td>60 / 5</td><td>Readiness check thresholds.</td></tr>
-</table>
-<p>Keys the exe does not use (the setup keys above) are ignored by it, so one file serves both. Advanced keys: <code>powershell_path</code>, <code>engine_command</code>.</p>
+<!-- 7 -->
+<section id="settings">
+  <h2><span class="num">7</span>Settings reference<a class="anchor" href="#settings">#</a></h2>
+  <p>File: <code>config\hashslinger.json</code>. The exe ignores keys it does not use, so one file serves setup, the Admin tool and the scan.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Key</th><th>Default</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td class="k">install_root</td><td>chosen folder</td><td>Where everything lives.</td></tr>
+      <tr><td class="k">mode</td><td>live</td><td><code>live</code> replicates from a DC; <code>offline</code> reads <code>ntds_path</code> with the SYSTEM hive <code>system_hive_path</code>.</td></tr>
+      <tr><td class="k">replication</td><td>bulk</td><td><code>bulk</code> or <code>per-account</code>.</td></tr>
+      <tr><td class="k">per_account_threshold</td><td>5000</td><td>At or below this many in-scope accounts bulk uses per-account.</td></tr>
+      <tr><td class="k">target_server</td><td>none</td><td>DC to read from.</td></tr>
+      <tr><td class="k">target_ous</td><td>none</td><td>List of DNs. Each is searched as a subtree.</td></tr>
+      <tr><td class="k">account_types</td><td>User, Service</td><td>Also <code>Computer</code>. Service means it has a servicePrincipalName.</td></tr>
+      <tr><td class="k">uac.exclude_flags</td><td>SMARTCARD_REQUIRED</td><td>Skip accounts with ANY of these userAccountControl flags (names or numbers).</td></tr>
+      <tr><td class="k">uac.require_flags</td><td>none</td><td>Accounts must have ALL of these.</td></tr>
+      <tr><td class="k">check_duplicates</td><td>false</td><td>Flag shared passwords (Medium). Can add many rows on a large directory.</td></tr>
+      <tr><td class="k">cadence, schedule_day, schedule_time</td><td>Weekly, Sunday, 02:00</td><td>Weekly or Monthly (every 4 weeks).</td></tr>
+      <tr><td class="k">retention_days</td><td>90</td><td>Reports older than this are securely deleted after each scan. 0 keeps everything.</td></tr>
+      <tr><td class="k">engine_timeout_seconds</td><td>86400</td><td>A scan running longer is stopped and logged as failed.</td></tr>
+      <tr><td class="k">hash_store_path, staging_path, log_path, output_path, request_dir, status_path, pattern_rules_path, engine_script</td><td>under install_root</td><td>Locations.</td></tr>
+      <tr><td class="k">allowed_output_roots</td><td>reports folder</td><td>A scan or request may only write reports under these.</td></tr>
+      <tr><td class="k">require_encrypted_volume</td><td>false</td><td>Refuse to scan unless store, staging and output are on BitLocker-protected volumes.</td></tr>
+      <tr><td class="k">authorized_edipis</td><td>empty</td><td>If set, only these EDIPIs may submit requests.</td></tr>
+      <tr><td class="k">gmsa_name, run_server, analyst_group</td><td>svc-hashslinger, this server, empty</td><td>Used by Finish. An empty analyst group means only the service account, local Administrators and SYSTEM have access.</td></tr>
+      <tr><td class="k">wordlists.hibp, .rockyou, .custom</td><td>empty</td><td>Source files copied into staging at install.</td></tr>
+      <tr><td class="k">dsinternals_offline_path</td><td>empty</td><td>Module folder to copy for servers without internet.</td></tr>
+      <tr><td class="k">min_free_space_gb.store, .output</td><td>60, 5</td><td>Readiness check thresholds.</td></tr>
+    </tbody>
+  </table></div>
+  <p>Advanced keys: <code>powershell_path</code>, <code>engine_command</code>.</p>
+</section>
 
-<h2 id="wordlists">Wordlists and the hash store</h2>
-<p>Drop files in <code>data\staging\HIBP</code>, <code>rockyou</code> or <code>custom</code> (copy, do not move, so they inherit the folder permissions). The store is a sorted file of 17-byte records: the 16-byte NT hash plus a 1-byte source tag (HIBP, rockyou, custom). Merging is a linear pass with an atomic swap; a scan never sees a half-written store.</p>
-<table>
-  <tr><th>File</th><th>Handled as</th></tr>
-  <tr><td>plain text (default for rockyou, custom)</td><td>One password per line; NT hash computed.</td></tr>
-  <tr><td><code>.ntlm</code> (default for HIBP)</td><td>Lines of <code>HASH</code> or <code>HASH:count</code>.</td></tr>
-  <tr><td><code>.tsv</code> / <code>.csv</code></td><td>Hash column plus password column. Delimiter (tab, colon, comma), which column holds the hash, and an optional header are detected. The first rows are tested: if NT(password) equals the hash column it is used directly; otherwise the NT hash is computed from the password column and the hash column is ignored. Passwords are never stored. Single-column files are NT hash lists.</td></tr>
-</table>
-<ul>
-  <li><code>master.ntlm.manifest.json</code> records each merged file by size and modified time. Only new or changed files are merged, all new files of one folder in a single pass, parsed in parallel.</li>
-  <li>The store is a union. <b>Deleting a source file does not remove its hashes.</b> To drop a list, rebuild (section Delete things).</li>
-  <li>Merge time is mostly disk speed; a full HIBP merge needs about twice the store size free. The source files are plaintext password lists; keep or delete them as you see fit.</li>
-</ul>
+<!-- 8 -->
+<section id="wordlists">
+  <h2><span class="num">8</span>Wordlists and the store<a class="anchor" href="#wordlists">#</a></h2>
+  <p>Drop files in <code>data\staging\HIBP</code>, <code>rockyou</code> or <code>custom</code>. <b>Copy, do not move</b>, so they inherit the folder permissions. The store is a sorted file of 17-byte records: the 16-byte NT hash plus a 1-byte source tag (HIBP, rockyou, custom). Merging is a linear pass with an atomic swap, so a scan never sees a half-written store.</p>
+  <div class="tw"><table>
+    <thead><tr><th>File</th><th>Handled as</th></tr></thead>
+    <tbody>
+      <tr><td class="k">plain text (default for rockyou, custom)</td><td>One password per line; the NT hash is computed.</td></tr>
+      <tr><td class="k"><code>.ntlm</code> (default for HIBP)</td><td>Lines of <code>HASH</code> or <code>HASH:count</code>.</td></tr>
+      <tr><td class="k"><code>.tsv</code> and <code>.csv</code></td><td>Hash column plus password column. The delimiter (tab, colon, comma), which column holds the hash, and an optional header are detected. The first rows are tested: if NT(password) equals the hash column it is used directly; otherwise the NT hash is computed from the password column and the hash column is ignored. Passwords are never stored. Single-column files are NT hash lists.</td></tr>
+    </tbody>
+  </table></div>
+  <ul>
+    <li><code>master.ntlm.manifest.json</code> records each merged file by size and modified time. Only new or changed files are merged, all new files of one folder in a single pass, parsed in parallel.</li>
+    <li>The store is a union. <b>Deleting a source file does not remove its hashes.</b> To drop a list, rebuild (section 14).</li>
+    <li>Merge time is mostly disk speed; a full HIBP merge needs about twice the store size free. The source files are plaintext password lists; keep or delete them as you see fit.</li>
+  </ul>
+</section>
 
-<h2 id="report">Report</h2>
-<p><code>report_&lt;date&gt;.csv</code> (a second run on the same day is <code>report_&lt;run id&gt;.csv</code>). Flagged accounts only. No hashes, no passwords.</p>
-<table>
-  <tr><th>Column</th><th>Value</th></tr>
-  <tr><td>sAMAccountName</td><td>As AD reports it. Never blank: if DSInternals returns none the engine looks it up over LDAP (read-only), and as a last resort the CN is used.</td></tr>
-  <tr><td>OU / Distinguished Name</td><td>The account's parent container.</td></tr>
-  <tr><td>Account Type</td><td>User, Service, Computer.</td></tr>
-  <tr><td>Flag Reason</td><td>One or more, separated by <code>;</code>.</td></tr>
-  <tr><td>Severity</td><td>Highest of the reasons.</td></tr>
-  <tr><td>Scan Run ID / Date</td><td>Ties the row to the audit log.</td></tr>
-</table>
-<table>
-  <tr><th>Reason</th><th>Severity</th></tr>
-  <tr><td>Found in HIBP breach corpus; Found in rockyou list; Found in custom/organization term list</td><td>High</td></tr>
-  <tr><td>No password set; Reversible encryption enabled</td><td>High</td></tr>
-  <tr><td>Matched common-pattern rule; Duplicate password shared with another account; LM hash present</td><td>Medium</td></tr>
-</table>
-<p>Cells starting with <code>= + - @</code> get a leading apostrophe so a spreadsheet will not run them.</p>
+<!-- 9 -->
+<section id="report">
+  <h2><span class="num">9</span>The report<a class="anchor" href="#report">#</a></h2>
+  <p><code>report_&lt;date&gt;.csv</code> (a second run on the same day is <code>report_&lt;run id&gt;.csv</code>). Flagged accounts only. No hashes, no passwords.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Column</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td class="k">sAMAccountName</td><td>As AD reports it. Never blank: if DSInternals returns none the engine looks it up over LDAP (read-only), and as a last resort the CN is used.</td></tr>
+      <tr><td class="k">OU / Distinguished Name</td><td>The account's parent container.</td></tr>
+      <tr><td class="k">Account Type</td><td>User, Service, Computer.</td></tr>
+      <tr><td class="k">Flag Reason</td><td>One or more, separated by <code>;</code>.</td></tr>
+      <tr><td class="k">Severity</td><td>Highest of the reasons.</td></tr>
+      <tr><td class="k">Scan Run ID / Date</td><td>Ties the row to the audit log.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="tw"><table>
+    <thead><tr><th>Flag reason</th><th>Severity</th></tr></thead>
+    <tbody>
+      <tr><td>Found in HIBP breach corpus; Found in rockyou list; Found in custom/organization term list</td><td><span class="pill high">High</span></td></tr>
+      <tr><td>No password set; Reversible encryption enabled</td><td><span class="pill high">High</span></td></tr>
+      <tr><td>Matched common-pattern rule; Duplicate password shared with another account; LM hash present</td><td><span class="pill med">Medium</span></td></tr>
+    </tbody>
+  </table></div>
+  <p>Cells starting with <code>= + - @</code> get a leading apostrophe so a spreadsheet will not run them.</p>
+</section>
 
-<h2 id="logs">Logs and status</h2>
-<table>
-  <tr><th>File</th><th>Contents</th></tr>
-  <tr><td>logs\audit.jsonl</td><td>One JSON object per line. <code>start</code>: run_id, time, trigger, run_as, host, requested_by, edipi, reason, scope. <code>end</code>: run_id, time, status, accounts_processed, output, wipe_confirmed, error, timings_ms (stage1 to stage7). <code>rejected</code>: a refused request or a second concurrent scan, with why.</td></tr>
-  <tr><td>status\status.json</td><td>Live: state (running/success/failed), run_id, stage, message, detail, accounts_received, run_as, requested_by, host, scope, output, error. Rewritten every ~5 s while running (heartbeat).</td></tr>
-  <tr><td>logs\setup-*.log, SETUP-SUMMARY.txt</td><td>Transcript and summary of each setup run.</td></tr>
-  <tr><td>config\hashslinger.json.bak-*</td><td>Previous settings, last 10 kept.</td></tr>
-</table>
+<!-- 10 -->
+<section id="logs">
+  <h2><span class="num">10</span>Logs and status<a class="anchor" href="#logs">#</a></h2>
+  <div class="tw"><table>
+    <thead><tr><th>File</th><th>Contents</th></tr></thead>
+    <tbody>
+      <tr><td class="k">logs\audit.jsonl</td><td>One JSON object per line. <code>start</code>: run_id, time, trigger, run_as, host, requested_by, edipi, reason, scope. <code>end</code>: run_id, time, status, accounts_processed, output, wipe_confirmed, error, timings_ms (stage1 to stage7). <code>rejected</code>: a refused request or a second concurrent scan, with why.</td></tr>
+      <tr><td class="k">status\status.json</td><td>Live: state (running, success, failed), run_id, stage, message, detail, accounts_received, run_as, requested_by, host, scope, output, error. Rewritten about every 5 seconds while running (heartbeat).</td></tr>
+      <tr><td class="k">logs\setup-*.log, SETUP-SUMMARY.txt</td><td>Transcript and summary of each setup run.</td></tr>
+      <tr><td class="k">config\hashslinger.json.bak-*</td><td>Previous settings, last 10 kept.</td></tr>
+    </tbody>
+  </table></div>
+</section>
 
-<h2 id="upgrade">Upgrade</h2>
-<h3>Whole package</h3>
-<ol>
-  <li>Wait for any running scan to finish (or stop it). Setup refuses to run during a scan.</li>
-  <li>Unzip the new package somewhere else (not inside the install folder). If it has no <code>Hashslinger.exe</code>, run <code>build.cmd</code> in it, or setup builds one with the in-box compiler.</li>
-  <li>Run its <code>Setup-Hashslinger.cmd</code>, pick the <b>same install folder</b> (settings load automatically), click Install.</li>
-</ol>
-<p>This backs up the current <code>app\</code> to <code>app-backups\app-&lt;stamp&gt;</code> (last 3 kept), copies the new exe, scripts, docs and extras, and re-runs verification and Finish (tasks re-registered). <b>Kept untouched:</b> settings, store, wordlists, reports, logs, <code>pattern_rules.json</code>. New settings keys appear in the Admin tool with defaults; click Save to write them.</p>
-<h3>Single file</h3>
-<p>With no scan running, copy the new file over the old one in <code>app\</code> (an exe or a script in <code>app\powershell</code>), then <code>Unblock-File</code> it. Nothing needs restarting. Config changes you can make in the Admin tool; <code>pattern_rules.json</code> can be edited in place.</p>
-<h3>Roll back</h3>
-<p>Copy the contents of <code>app-backups\app-&lt;stamp&gt;</code> back over <code>app\</code>. Settings: copy a <code>config\hashslinger.json.bak-&lt;stamp&gt;</code> over <code>hashslinger.json</code>.</p>
+<!-- 11 -->
+<section id="upgrade">
+  <h2><span class="num">11</span>Upgrade<a class="anchor" href="#upgrade">#</a></h2>
+  <h3>Whole package</h3>
+  <ol class="steps">
+    <li>Wait for any running scan to finish, or stop it. Setup refuses to run during a scan.</li>
+    <li>Unzip the new package somewhere else, not inside the install folder. If it has no <code>Hashslinger.exe</code>, run <code>build.cmd</code> in it, or setup builds one with the in-box compiler.</li>
+    <li>Run its <code>Setup-Hashslinger.cmd</code>, pick the <b>same install folder</b> (settings load automatically), and click Install.</li>
+  </ol>
+  <div class="two">
+    <div class="card"><h3>What it does</h3>Backs up the current <code>app\</code> to <code>app-backups\app-&lt;stamp&gt;</code> (last 3 kept), copies the new exe, scripts, docs and extras, and re-runs verification and Finish (tasks are re-registered).</div>
+    <div class="card"><h3>What it keeps</h3>Settings, store, wordlists, reports, logs and <code>pattern_rules.json</code>. New settings keys appear in the Admin tool with defaults; click Save to write them.</div>
+  </div>
+  <h3>Single file</h3>
+  <p>With no scan running, copy the new file over the old one in <code>app\</code> (the exe, or a script in <code>app\powershell</code>), then <code>Unblock-File</code> it. Nothing needs restarting. Settings can be changed in the Admin tool; <code>pattern_rules.json</code> can be edited in place.</p>
+  <h3>Roll back</h3>
+  <p>Copy the contents of <code>app-backups\app-&lt;stamp&gt;</code> back over <code>app\</code>. For settings, copy a <code>config\hashslinger.json.bak-&lt;stamp&gt;</code> over <code>hashslinger.json</code>.</p>
+</section>
 
-<h2 id="reinstall">Reinstall / move</h2>
-<ul>
-  <li><b>Reinstall in place:</b> same as the upgrade. Settings and data are kept.</li>
-  <li><b>Clean reinstall:</b> uninstall with <code>-RemoveAll</code> (below), then run setup again. The store is rebuilt from the wordlists you supply.</li>
-  <li><b>Move to another drive or folder:</b> uninstall tasks only (no switches), copy the whole install folder to the new location, run setup from the package and pick the new folder, then open the Admin tool and fix any path that still points at the old location (the Where tab). Copying <code>data\store</code> including the manifest avoids re-merging.</li>
-  <li><b>New server:</b> create the service account for the new server name (or add the computer to the existing account's allowed list), run setup there.</li>
-</ul>
+<!-- 12 -->
+<section id="reinstall">
+  <h2><span class="num">12</span>Reinstall or move<a class="anchor" href="#reinstall">#</a></h2>
+  <div class="two">
+    <div class="card"><h3>Reinstall in place</h3>Same as the upgrade. Settings and data are kept.</div>
+    <div class="card"><h3>Clean reinstall</h3>Uninstall with <code>-RemoveAll</code> (section 13), then run setup again. The store is rebuilt from the wordlists you supply.</div>
+    <div class="card"><h3>Move to another drive or folder</h3>Uninstall with no switches (tasks only), copy the whole install folder to the new location, run setup from the package and pick the new folder, then open the Admin tool and fix any path still pointing at the old location (the Where tab). Copying <code>data\store</code> including the manifest avoids re-merging.</div>
+    <div class="card"><h3>New server</h3>Create the service account for the new server name (or add the computer to the existing account's allowed list), then run setup there.</div>
+  </div>
+</section>
 
-<h2 id="uninstall">Uninstall</h2>
-<p><code>Hashslinger-Uninstall.cmd</code> in the install folder (or <code>app\powershell\Uninstall-Hashslinger.ps1 -Config &lt;json&gt;</code>). It is local only.</p>
-<table>
-  <tr><th>Switch</th><th>Removes</th></tr>
-  <tr><td>(none)</td><td>Stops a running scan; removes both scheduled tasks. All files stay; a reinstall continues where you left off.</td></tr>
-  <tr><td>-RemoveData</td><td><code>data\</code>: store, manifest, wordlists.</td></tr>
-  <tr><td>-RemoveReports</td><td>The reports folder.</td></tr>
-  <tr><td>-RemoveLogs</td><td><code>logs\</code> and <code>status\</code> (audit log included).</td></tr>
-  <tr><td>-RemoveApp</td><td><code>app\</code>, <code>app-backups\</code>, <code>extras\</code>, the launchers. <code>config\</code> stays.</td></tr>
-  <tr><td>-RemoveAll</td><td>Everything above plus <code>config\</code> and the install folder.</td></tr>
-  <tr><td>-SecureWipe</td><td>Overwrite files before deleting (slow for a large store).</td></tr>
-  <tr><td>-RemoveDsInternals</td><td>Also deletes the DSInternals module installed for all users.</td></tr>
-  <tr><td>-Force</td><td>No confirmation prompt (otherwise you type YES).</td></tr>
-</table>
+<!-- 13 -->
+<section id="uninstall">
+  <h2><span class="num">13</span>Uninstall<a class="anchor" href="#uninstall">#</a></h2>
+  <p><code>Hashslinger-Uninstall.cmd</code> in the install folder, or <code>app\powershell\Uninstall-Hashslinger.ps1 -Config &lt;json&gt;</code>. It is local only.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Switch</th><th>Removes</th></tr></thead>
+    <tbody>
+      <tr><td class="k">(none)</td><td>Stops a running scan and removes both scheduled tasks. All files stay; a reinstall continues where you left off.</td></tr>
+      <tr><td class="k">-RemoveData</td><td><code>data\</code>: store, manifest, wordlists.</td></tr>
+      <tr><td class="k">-RemoveReports</td><td>The reports folder.</td></tr>
+      <tr><td class="k">-RemoveLogs</td><td><code>logs\</code> and <code>status\</code> (audit log included).</td></tr>
+      <tr><td class="k">-RemoveApp</td><td><code>app\</code>, <code>app-backups\</code>, <code>extras\</code>, the launchers. <code>config\</code> stays.</td></tr>
+      <tr><td class="k">-RemoveAll</td><td>Everything above, plus <code>config\</code> and the install folder.</td></tr>
+      <tr><td class="k">-SecureWipe</td><td>Overwrite files before deleting (slow for a large store).</td></tr>
+      <tr><td class="k">-RemoveDsInternals</td><td>Also deletes the DSInternals module installed for all users.</td></tr>
+      <tr><td class="k">-Force</td><td>No confirmation prompt (otherwise you type YES).</td></tr>
+    </tbody>
+  </table></div>
 <pre><code>Hashslinger-Uninstall.cmd                           tasks only
 Hashslinger-Uninstall.cmd -RemoveAll -SecureWipe    everything</code></pre>
-<p>By hand afterward, in AD (the tool does not do this): remove the service account and delete its two replication rights from the domain root.</p>
+  <div class="callout warn"><b>AD cleanup is by hand</b>The tool does not touch AD. Afterward, remove the service account and delete its two replication rights from the domain root.</div>
 <pre><code>Remove-ADServiceAccount svc-hashslinger
 # domain root ACL (ADSI Edit): delete the two Replicating Directory Changes entries for that account
-# optional on the server: Uninstall the RSAT AD tools feature (Remove-WindowsFeature RSAT-AD-PowerShell)</code></pre>
+# optional on the server: Remove-WindowsFeature RSAT-AD-PowerShell</code></pre>
+</section>
 
-<h2 id="delete">Delete things</h2>
-<table>
-  <tr><th>To</th><th>Do</th></tr>
-  <tr><td>Delete reports</td><td>Delete the CSV files in the reports folder, or lower <code>retention_days</code> (applied after each scan).</td></tr>
-  <tr><td>Clear the audit log</td><td>Delete <code>logs\audit.jsonl</code>. The next run starts a new one (run ids restart at 001 for the day).</td></tr>
-  <tr><td>Remove a scope</td><td>Admin tool, Active Directory tab: untick it (or double-click it in the list), Save.</td></tr>
-  <tr><td>Drop a wordlist</td><td>Hashes of a deleted source file stay in the store. Delete the file from staging, delete <code>data\store\master.ntlm</code> and <code>master.ntlm.manifest.json</code>, then run <code>Hashslinger.exe --config ... merge</code>: the store is rebuilt from the files that remain.</td></tr>
-  <tr><td>Reset the store</td><td>Delete <code>master.ntlm</code> and its manifest; the next scan or merge rebuilds it.</td></tr>
-  <tr><td>Delete only the plaintext originals</td><td>After merging you may delete the source files in staging. The store keeps working; just do not expect them to re-merge.</td></tr>
-  <tr><td>Stop scheduled scans</td><td>Disable or delete <code>Hashslinger-Scheduled</code> in Task Scheduler, or uninstall with no switches.</td></tr>
-  <tr><td>Remove a stuck lock</td><td>If no scan is running, delete <code>status\run.lock</code>. The lock is released automatically when a scan ends or its process dies.</td></tr>
-</table>
+<!-- 14 -->
+<section id="delete">
+  <h2><span class="num">14</span>Delete things<a class="anchor" href="#delete">#</a></h2>
+  <div class="tw"><table>
+    <thead><tr><th>To</th><th>Do</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Delete reports</td><td>Delete the CSV files in the reports folder, or lower <code>retention_days</code> (applied after each scan).</td></tr>
+      <tr><td class="k">Clear the audit log</td><td>Delete <code>logs\audit.jsonl</code>. The next run starts a new one; run ids restart at 001 for the day.</td></tr>
+      <tr><td class="k">Remove a scope</td><td>Admin tool, Active Directory tab: untick it (or double-click it in the list), then Save.</td></tr>
+      <tr><td class="k">Drop a wordlist</td><td>Hashes of a deleted source file stay in the store. Delete the file from staging, delete <code>data\store\master.ntlm</code> and <code>master.ntlm.manifest.json</code>, then run <code>Hashslinger.exe --config ... merge</code>. The store is rebuilt from the files that remain.</td></tr>
+      <tr><td class="k">Reset the store</td><td>Delete <code>master.ntlm</code> and its manifest. The next scan or merge rebuilds it.</td></tr>
+      <tr><td class="k">Delete the plaintext originals</td><td>After merging you may delete the source files in staging. The store keeps working; they simply will not re-merge.</td></tr>
+      <tr><td class="k">Stop scheduled scans</td><td>Disable or delete <code>Hashslinger-Scheduled</code> in Task Scheduler, or uninstall with no switches.</td></tr>
+      <tr><td class="k">Remove a stuck lock</td><td>If no scan is running, delete <code>status\run.lock</code>. The lock is released automatically when a scan ends or its process dies.</td></tr>
+    </tbody>
+  </table></div>
+</section>
 
-<h2 id="trouble">Troubleshooting</h2>
-<table>
-  <tr><th>Symptom</th><th>Cause / fix</th></tr>
-  <tr><td>Replication access was denied</td><td>One of the two rights is missing, denied, or not on the domain root itself. The tool already passes explicit property sets so Schema rights are not needed. Run the service account checks; the effective-rights line and the live test say which.</td></tr>
-  <tr><td>"Only FIPS certified cryptographic algorithms ... MD5"</td><td>FIPS-only .NET. DSInternals needs MD5 and RC4 for replication, so the scan is blocked (setup and permissions are fine). Needs a policy decision for this server or a different host. Check <code>HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\FipsAlgorithmPolicy</code> Enabled=1.</td></tr>
-  <tr><td>0x80070534, "identity references could not be translated"</td><td>The server cannot resolve the account through a DC: TCP 445 and 135, <code>Test-ComputerSecureChannel</code>.</td></tr>
-  <tr><td>Access denied on a wordlist</td><td>File kept its old permissions. Copy it in (do not move) or <code>icacls &lt;folder&gt; /T /reset</code>. Finish also repairs this.</td></tr>
-  <tr><td>Step 4 quiet for a long time</td><td>Scope search then a bulk pull of the whole directory; progress lines show counts. Small scopes switch to per-account on their own.</td></tr>
-  <tr><td>Task will not start</td><td>Grant the service account "Log on as a batch job".</td></tr>
-  <tr><td>Scripts blocked / ask to confirm</td><td>Start from <code>Setup-Hashslinger.cmd</code> (it unblocks), or <code>Get-ChildItem &lt;folder&gt; -Recurse | Unblock-File</code>.</td></tr>
-  <tr><td>Search base not found</td><td>The Users container is <code>CN=Users</code>, not an OU. Pick it from the tree.</td></tr>
-  <tr><td>Setup says a scan is running</td><td>Wait, or <code>Stop-Process -Name Hashslinger</code>.</td></tr>
-  <tr><td>Need to send diagnostics</td><td>Admin tool, Run and logs, Create support bundle (settings, logs, versions; no reports or hashes).</td></tr>
-</table>
+<!-- 15 -->
+<section id="trouble">
+  <h2><span class="num">15</span>Troubleshooting<a class="anchor" href="#trouble">#</a></h2>
+  <div class="tw"><table>
+    <thead><tr><th>Symptom</th><th>Cause and fix</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Replication access was denied</td><td>One of the two rights is missing, denied, or not on the domain root itself. The tool already passes explicit property sets so Schema rights are not needed. Run the service account checks; the effective-rights line and the live test say which.</td></tr>
+      <tr><td class="k">"Only FIPS certified cryptographic algorithms ... MD5"</td><td>FIPS-only .NET. DSInternals needs MD5 and RC4 for replication, so the scan is blocked (setup and permissions are fine). Needs a policy decision for this server or a different host. Check <code>HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\FipsAlgorithmPolicy</code>, Enabled = 1.</td></tr>
+      <tr><td class="k">0x80070534, "identity references could not be translated"</td><td>The server cannot resolve the account through a DC: TCP 445 and 135, <code>Test-ComputerSecureChannel</code>.</td></tr>
+      <tr><td class="k">Access denied on a wordlist</td><td>The file kept its old permissions. Copy it in (do not move it), or run <code>icacls &lt;folder&gt; /T /reset</code>. Finish also repairs this.</td></tr>
+      <tr><td class="k">Step 4 quiet for a long time</td><td>Scope search, then a bulk pull of the whole directory; progress lines show counts. Small scopes switch to per-account on their own.</td></tr>
+      <tr><td class="k">Task will not start</td><td>Grant the service account "Log on as a batch job".</td></tr>
+      <tr><td class="k">Scripts blocked or ask to confirm</td><td>Start from <code>Setup-Hashslinger.cmd</code> (it unblocks), or <code>Get-ChildItem &lt;folder&gt; -Recurse | Unblock-File</code>.</td></tr>
+      <tr><td class="k">Search base not found</td><td>The Users container is <code>CN=Users</code>, not an OU. Pick it from the tree.</td></tr>
+      <tr><td class="k">Setup says a scan is running</td><td>Wait, or <code>Stop-Process -Name Hashslinger</code>.</td></tr>
+      <tr><td class="k">Need to send diagnostics</td><td>Admin tool, Run and logs, Create support bundle (settings, logs and versions; no reports or hashes).</td></tr>
+    </tbody>
+  </table></div>
+</section>
 
-</div></body>
+<footer>Hashslinger SOP. Press <b>/</b> to search, <b>Esc</b> to clear.</footer>
+</main>
+</div>
+
+<button id="top" class="btn totop" type="button" aria-label="Back to top">Top</button>
+
+<script>
+(function () {
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+  var root = document.documentElement;
+
+  // theme (remembered only if storage is available)
+  try { var t = localStorage.getItem('hs-theme'); if (t) root.setAttribute('data-theme', t); } catch (e) {}
+  $('#themeBtn').addEventListener('click', function () {
+    var cur = root.getAttribute('data-theme');
+    if (!cur) cur = (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+    var next = cur === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('hs-theme', next); } catch (e) {}
+  });
+  $('#printBtn').addEventListener('click', function () { window.print(); });
+
+  // menu toggle on small screens
+  $('#menuBtn').addEventListener('click', function () { $('#menuWrap').classList.toggle('open'); });
+
+  // highlight the section being read
+  var links = $$('.menu a[href^="#"]'), map = {};
+  links.forEach(function (a) { map[a.getAttribute('href').slice(1)] = a; });
+  var secs = $$('main section[id]');
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        links.forEach(function (a) { a.classList.remove('on'); });
+        var a = map[e.target.id];
+        if (a) { a.classList.add('on'); if (a.scrollIntoView && window.innerWidth > 980) a.scrollIntoView({ block: 'nearest' }); }
+      });
+    }, { rootMargin: '-8% 0px -82% 0px' });
+    secs.forEach(function (s) { io.observe(s); });
+  }
+  links.forEach(function (a) { a.addEventListener('click', function () { if (window.innerWidth <= 980) $('#menuWrap').classList.remove('open'); }); });
+
+  // search: filters the menu to the sections that contain the text
+  var q = $('#q'), nores = $('#nores'), text = {};
+  secs.forEach(function (s) { text[s.id] = (s.textContent || '').toLowerCase(); });
+  q.addEventListener('input', function () {
+    var v = q.value.trim().toLowerCase(), shown = 0;
+    links.forEach(function (a) {
+      var id = a.getAttribute('href').slice(1);
+      var ok = !v || (text[id] && text[id].indexOf(v) > -1) || a.textContent.toLowerCase().indexOf(v) > -1;
+      a.parentNode.style.display = ok ? '' : 'none';
+      if (ok) shown++;
+    });
+    $$('.menu .grp').forEach(function (g) {
+      var any = $$('li', g).some(function (li) { return li.style.display !== 'none'; });
+      g.style.display = any ? '' : 'none';
+    });
+    nores.style.display = shown ? 'none' : 'block';
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === '/' && document.activeElement !== q && !/input|textarea/i.test(document.activeElement.tagName)) { e.preventDefault(); $('#menuWrap').classList.add('open'); q.focus(); }
+    if (e.key === 'Escape' && document.activeElement === q) { q.value = ''; q.dispatchEvent(new Event('input')); q.blur(); }
+  });
+
+  // copy buttons on every code block
+  $$('pre').forEach(function (p) {
+    var b = document.createElement('button');
+    b.className = 'btn copy'; b.type = 'button'; b.textContent = 'Copy';
+    b.addEventListener('click', function () {
+      var t = p.querySelector('code').innerText;
+      function done() { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1400); }
+      function fallback() {
+        var ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); done(); } catch (e) {}
+        document.body.removeChild(ta);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, fallback); else fallback();
+    });
+    p.appendChild(b);
+  });
+
+  // back to top
+  var top = $('#top');
+  window.addEventListener('scroll', function () { top.style.display = window.scrollY > 700 ? 'block' : 'none'; });
+  top.addEventListener('click', function () { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+})();
+</script>
+</body>
 </html>
