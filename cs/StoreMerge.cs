@@ -266,26 +266,69 @@ namespace Hashslinger
 
         static IEnumerable<Hash128> IterLines(string path, string fmt)
         {
-            using (StreamReader sr = new StreamReader(path, new UTF8Encoding(false), true, 1 << 20))
+            foreach (string line in ReadLinesSmart(path))
             {
-                string line;
-                while ((line = sr.ReadLine()) != null)
+                if (line.Length == 0) continue;
+                if (fmt == "ntlm")
                 {
-                    if (line.Length == 0) continue;
-                    if (fmt == "ntlm")
+                    if (line.Length != 32 && !(line.Length > 32 && line[32] == ':')) continue;
+                    Hash128 h;
+                    if (Hash128.TryParseHex(line, 0, out h)) yield return h;
+                }
+                else if (fmt == "plaintext")
+                {
+                    yield return Ntlm.Hash(line);
+                }
+                else
+                {
+                    throw new StoreException("Unknown source format " + fmt);
+                }
+            }
+        }
+
+        /// <summary>Decode one line: UTF-8 when it is valid UTF-8, otherwise Windows-1252. Old lists such as rockyou hold
+        /// Latin-1 bytes; reading those as UTF-8 would turn them into U+FFFD and hash the wrong password.</summary>
+        static string DecodeLine(byte[] b, int start, int len, Encoding strict, Encoding legacy)
+        {
+            try { return strict.GetString(b, start, len); }
+            catch (DecoderFallbackException) { return legacy.GetString(b, start, len); }
+        }
+
+        public static IEnumerable<string> ReadLinesSmart(string path)
+        {
+            Encoding strict = new UTF8Encoding(false, true);
+            Encoding legacy = Encoding.GetEncoding(1252);
+            using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20))
+            {
+                byte[] buf = new byte[1 << 20];
+                byte[] line = new byte[4096];
+                int len = 0, n;
+                bool atStart = true;
+                while ((n = fs.Read(buf, 0, buf.Length)) > 0)
+                {
+                    for (int i = 0; i < n; i++)
                     {
-                        if (line.Length != 32 && !(line.Length > 32 && line[32] == ':')) continue;
-                        Hash128 h;
-                        if (Hash128.TryParseHex(line, 0, out h)) yield return h;
+                        byte c = buf[i];
+                        if (c != 10)
+                        {
+                            if (len == line.Length) Array.Resize(ref line, len * 2);
+                            line[len++] = c;
+                            continue;
+                        }
+                        int start = 0, end = len;
+                        if (atStart && end >= 3 && line[0] == 0xEF && line[1] == 0xBB && line[2] == 0xBF) start = 3;
+                        atStart = false;
+                        if (end > start && line[end - 1] == 13) end--;
+                        len = 0;
+                        yield return DecodeLine(line, start, end - start, strict, legacy);
                     }
-                    else if (fmt == "plaintext")
-                    {
-                        yield return Ntlm.Hash(line);
-                    }
-                    else
-                    {
-                        throw new StoreException("Unknown source format " + fmt);
-                    }
+                }
+                if (len > 0)
+                {
+                    int start = 0, end = len;
+                    if (atStart && end >= 3 && line[0] == 0xEF && line[1] == 0xBB && line[2] == 0xBF) start = 3;
+                    if (end > start && line[end - 1] == 13) end--;
+                    yield return DecodeLine(line, start, end - start, strict, legacy);
                 }
             }
         }
@@ -420,11 +463,10 @@ namespace Hashslinger
         {
             string name = Path.GetFileName(path);
             List<string> sample = new List<string>();
-            using (StreamReader sr = new StreamReader(path, new UTF8Encoding(false), true, 1 << 20))
+            foreach (string sl in ReadLinesSmart(path))
             {
-                string l;
-                while (sample.Count < 2000 && (l = sr.ReadLine()) != null)
-                    if (l.Length > 0) sample.Add(l);
+                if (sl.Length > 0) sample.Add(sl);
+                if (sample.Count >= 2000) break;
             }
             if (sample.Count == 0)
             {
@@ -492,11 +534,9 @@ namespace Hashslinger
             }
 
             long used = 0, skipped = 0;
-            using (StreamReader sr = new StreamReader(path, new UTF8Encoding(false), true, 1 << 20))
             {
-                string line;
                 bool firstLine = true;
-                while ((line = sr.ReadLine()) != null)
+                foreach (string line in ReadLinesSmart(path))
                 {
                     if (line.Length == 0) continue;
                     if (firstLine) { firstLine = false; if (hasHeader) continue; }

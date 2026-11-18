@@ -63,10 +63,17 @@ if (-not (Get-KdsRootKey)) {
 
 # create or update
 $existing = Get-ADServiceAccount -Filter "Name -eq '$Name'" -ErrorAction SilentlyContinue
+if ($existing -and $existing.ObjectClass -ne 'msDS-GroupManagedServiceAccount') {
+  Say 'FAIL' "'$Name' exists but is not a group managed service account ($($existing.ObjectClass)). Installing it could reset its password. Stopping."
+  exit 1
+}
 if ($PSCmdlet.ShouldProcess($Name, $(if ($existing) { 'Update who may retrieve the gMSA password' } else { 'Create gMSA' }))) {
   if ($existing) {
-    Set-ADServiceAccount -Identity $Name -PrincipalsAllowedToRetrieveManagedPassword $computers
-    Say 'OK' "Updated existing gMSA '$Name'."
+    # ADD to the existing list: replacing it would cut off servers that already use this account
+    $current = @((Get-ADServiceAccount -Identity $Name -Properties PrincipalsAllowedToRetrieveManagedPassword).PrincipalsAllowedToRetrieveManagedPassword)
+    $merged = @($current + @($computers | ForEach-Object { $_.DistinguishedName })) | Select-Object -Unique
+    Set-ADServiceAccount -Identity $Name -PrincipalsAllowedToRetrieveManagedPassword $merged
+    Say 'OK' "Updated existing gMSA '$Name': $($merged.Count) computer(s) may now retrieve its password (existing ones kept)."
   } else {
     New-ADServiceAccount -Name $Name -DNSHostName "$Name.$($dom.DNSRoot)" `
       -PrincipalsAllowedToRetrieveManagedPassword $computers -KerberosEncryptionType AES256 `

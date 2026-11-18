@@ -12,7 +12,7 @@ namespace Hashslinger
         public static object Parse(string s)
         {
             int i = 0;
-            object v = ParseValue(s, ref i);
+            object v = ParseValue(s, ref i, 0);
             SkipWs(s, ref i);
             if (i != s.Length) throw new FormatException("Trailing content after JSON value");
             return v;
@@ -28,13 +28,14 @@ namespace Hashslinger
             return string.CompareOrdinal(s, i, word, 0, word.Length) == 0;
         }
 
-        static object ParseValue(string s, ref int i)
+        static object ParseValue(string s, ref int i, int depth)
         {
+            if (depth > 64) throw new FormatException("JSON nested too deeply");
             SkipWs(s, ref i);
             if (i >= s.Length) throw new FormatException("Unexpected end of JSON");
             char c = s[i];
-            if (c == '{') return ParseObject(s, ref i);
-            if (c == '[') return ParseArray(s, ref i);
+            if (c == '{') return ParseObject(s, ref i, depth);
+            if (c == '[') return ParseArray(s, ref i, depth);
             if (c == '"') return ParseString(s, ref i);
             if (Match(s, i, "true")) { i += 4; return true; }
             if (Match(s, i, "false")) { i += 5; return false; }
@@ -48,7 +49,7 @@ namespace Hashslinger
             return d;
         }
 
-        static Dictionary<string, object> ParseObject(string s, ref int i)
+        static Dictionary<string, object> ParseObject(string s, ref int i, int depth)
         {
             Dictionary<string, object> o = new Dictionary<string, object>();
             i++; // {
@@ -62,7 +63,7 @@ namespace Hashslinger
                 SkipWs(s, ref i);
                 if (i >= s.Length || s[i] != ':') throw new FormatException("Expected ':'");
                 i++;
-                o[key] = ParseValue(s, ref i);
+                o[key] = ParseValue(s, ref i, depth + 1);
                 SkipWs(s, ref i);
                 if (i < s.Length && s[i] == ',') { i++; continue; }
                 if (i < s.Length && s[i] == '}') { i++; return o; }
@@ -70,7 +71,7 @@ namespace Hashslinger
             }
         }
 
-        static List<object> ParseArray(string s, ref int i)
+        static List<object> ParseArray(string s, ref int i, int depth)
         {
             List<object> a = new List<object>();
             i++; // [
@@ -78,7 +79,7 @@ namespace Hashslinger
             if (i < s.Length && s[i] == ']') { i++; return a; }
             while (true)
             {
-                a.Add(ParseValue(s, ref i));
+                a.Add(ParseValue(s, ref i, depth + 1));
                 SkipWs(s, ref i);
                 if (i < s.Length && s[i] == ',') { i++; continue; }
                 if (i < s.Length && s[i] == ']') { i++; return a; }

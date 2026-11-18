@@ -6,7 +6,7 @@
   THIS SCRIPT NEVER CREATES OR CHANGES ANYTHING IN ACTIVE DIRECTORY. It runs fine as a local administrator
   on the scan server (no Domain Admin needed).
     Phase Check    preflight only, no changes
-    Phase Local    folders under <root> (app, config, data, reports, logs, status, requests, extras), install to
+    Phase Local    folders under <root> (app, config, data, reports, logs, status, requests), install to
                    <root>\app, build the exe if missing, DSInternals + AD tools, unblock files, verify
                    (PowerShell syntax parse, exe selftest, AD-free smoke test, DC/OU reachability)
     Phase Finish   READ-ONLY checks of the service account you created by hand (exists, only this server may use it,
@@ -127,7 +127,7 @@ function Do-Local {
     Result 'No scan is running' 'FAIL' 'a scan is running (Hashslinger.exe). Wait for it or stop it, then run setup again.'; return
   }
   Step 'Folders'
-  foreach ($d in $Dir.bin, $Dir.config, $Dir.store, $Dir.staging, "$($Dir.staging)\HIBP", "$($Dir.staging)\rockyou", "$($Dir.staging)\custom", $Dir.logs, $Dir.output, $Dir.status, $Dir.requests, "$($Dir.root)\extras") {
+  foreach ($d in $Dir.bin, $Dir.config, $Dir.store, $Dir.staging, "$($Dir.staging)\HIBP", "$($Dir.staging)\rockyou", "$($Dir.staging)\custom", $Dir.logs, $Dir.output, $Dir.status, $Dir.requests) {
     New-Item -ItemType Directory -Force $d | Out-Null
   }
   Result 'Folders created' 'PASS' "root $($Dir.root)"
@@ -152,7 +152,7 @@ function Do-Local {
     }
     Copy-Item $srcExe $Dir.bin -Force
     New-Item -ItemType Directory -Force "$($Dir.bin)\powershell", "$($Dir.bin)\config", "$($Dir.bin)\docs" | Out-Null
-    Copy-Item "$srcRoot\extras\*" "$($Dir.root)\extras" -Force -ErrorAction SilentlyContinue   # optional gMSA helper scripts
+    # the Domain Admin helper scripts (extras\) deliberately stay in the package folder and are NOT installed on this server
     Copy-Item "$srcRoot\powershell\*.ps1" "$($Dir.bin)\powershell" -Force
     Copy-Item "$srcRoot\config\*" "$($Dir.bin)\config" -Force
     Copy-Item "$srcRoot\docs\*" "$($Dir.bin)\docs" -Force -ErrorAction SilentlyContinue
@@ -307,7 +307,7 @@ function Do-Finish {
   $domainNC = $dom.DistinguishedName
   $gmsaSam = "$($dom.NetBIOSName)\${gmsa}$"
   $svc = Get-ADServiceAccount -Filter "Name -eq '$gmsa' -or SamAccountName -eq '$gmsa' -or SamAccountName -eq '${gmsa}$'" -Properties PrincipalsAllowedToRetrieveManagedPassword -ErrorAction SilentlyContinue
-  if (-not $svc) { Result 'gMSA exists in AD' 'FAIL' "not found. Create the service account first (by hand, see the SOP section 'Create the service account'; helper scripts are in $($Dir.root)\extras), or fix the name in the Admin tool (Security and accounts)."; return }
+  if (-not $svc) { Result 'gMSA exists in AD' 'FAIL' "not found. Create the service account first (by hand, see the SOP section 'Create the service account'; helper scripts are in the extras folder of the package you installed from), or fix the name in the Admin tool (Security and accounts)."; return }
   Result 'gMSA exists in AD' 'PASS' "$($svc.SamAccountName) ($($svc.SID))"
   $gmsaSid = $svc.SID
   # use the REAL account name AD reports, and prove this server can resolve it (task scheduler and ACLs need that)
@@ -504,7 +504,7 @@ Install folder: $($Dir.root)
   data:     store $($Dir.store)    wordlists $($Dir.staging)
   reports:  $($Dir.output)
   logs:     $($Dir.logs)    status: $($Dir.status)
-  extras:   $($Dir.root)\extras   (optional gMSA helper scripts)
+  extras:   not installed here (the gMSA helper scripts stay in the package you installed from)
 Admin tool: $($Dir.root)\Hashslinger-Admin.cmd
 Progress:   powershell -File "$($Dir.bin)\powershell\Show-HashslingerProgress.ps1" -ConfigPath "$Config"
 Setup log:  $transcript

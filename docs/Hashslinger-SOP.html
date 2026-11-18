@@ -202,9 +202,8 @@
   data\staging\   HIBP\  rockyou\  custom\   (wordlist files)
   reports\        report_&lt;date&gt;.csv
   logs\           audit.jsonl, setup-*.log, SETUP-SUMMARY.txt
-  status\         status.json (live progress), run.lock (one scan at a time)
+  status\         status.json (live progress)
   requests\       analyst request drop box (only if an analyst group is used)
-  extras\         optional gMSA helper scripts
   Hashslinger-Admin.cmd   Hashslinger-Uninstall.cmd</code></pre>
   <div class="callout note"><b>Outside the folder</b>Two scheduled tasks (<code>Hashslinger-Scheduled</code>, <code>Hashslinger-OnDemand</code>), the DSInternals module (<code>%ProgramFiles%\WindowsPowerShell\Modules</code>), the RSAT AD tools feature, support bundles you create (Desktop), and the service account in AD.</div>
 </section>
@@ -225,7 +224,7 @@ New-ADServiceAccount -Name svc-hashslinger `
 # Two rights on the DOMAIN ROOT only, "this object only" (never forest, never schema):
 #   Replicating Directory Changes       1131f6aa-9c07-11d1-f79f-00c04fc2dcd2
 #   Replicating Directory Changes All   1131f6ad-9c07-11d1-f79f-00c04fc2dcd2
-# Helper: extras\Grant-HashslingerReplicationRights.ps1 -GmsaName svc-hashslinger   (use -WhatIf first)
+# Helper (stays in the package folder, never installed on the scan server): extras\Grant-HashslingerReplicationRights.ps1 -GmsaName svc-hashslinger   (use -WhatIf first)
 
 # On the scan server, elevated
 Install-ADServiceAccount svc-hashslinger
@@ -244,6 +243,14 @@ Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
     <li>Click <b>Check readiness</b> (changes nothing), then <b>Install</b>. Install is the local install followed by the service account checks.</li>
     <li>Setup does <b>not</b> start a scan. Run the first one like every manual scan: Admin tool, Run and logs, <b>Start a scan now</b>. It asks for your EDIPI and a reason or CTO number, then runs the scan as the service account. Watch it with Watch progress.</li>
   </ol>
+  <h3>Hardening the scan server</h3>
+  <ul>
+    <li><b>Crash dumps:</b> a crash dump of <code>Hashslinger.exe</code> or <code>powershell.exe</code> can contain account hashes, and Windows Error Reporting may send dumps off the server. Turn it off on this server: <code>reg add "HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting" /v Disabled /t REG_DWORD /d 1 /f</code>, and make sure no <code>LocalDumps</code> key exists under it.</li>
+    <li><b>PowerShell logging:</b> if module logging (event 4103) or transcription is on by policy, look at a sample log after the first scan and confirm no hash values appear. The engine writes accounts to a pipe, not the PowerShell output stream, but check on your build.</li>
+    <li><b>Local drives only:</b> the tool refuses paths on network shares (store, wordlists, reports, logs, status, requests, allowed report locations).</li>
+    <li><b>Program folders:</b> after install only Administrators and SYSTEM can change <code>app\</code>, <code>config\</code> and the install folder itself, and the exe starts PowerShell by its full System32 path. Check with <code>icacls &lt;install folder&gt;\app</code>: no entry for Users or Everyone with write access.</li>
+    <li><b>Domain Admin scripts</b> (<code>extras\</code>, <code>diagnostics\</code>) are not installed on the scan server. They stay in the package folder.</li>
+  </ul>
   <h3>Setup phases</h3>
   <p>The wizard runs these; you can run them yourself: <code>Setup-Hashslinger.cmd -Phase Check|Local|Finish|All -Config &lt;folder&gt;\config\hashslinger.json [-WhatIf]</code></p>
   <div class="tw"><table>
@@ -290,7 +297,7 @@ Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
   </table></div>
   <ul>
     <li>Watching a scan: the progress window shows the step, how long this step has run, how long since the last message from the engine, and a scrolling log. Step 4 reports sub-steps A (scope search), B (property test), C (replication) with counts, rate per second, elapsed time and a rough time left, every 5 seconds. The same log is in <code>status\status.json</code> (<code>log</code>).</li>
-    <li>One scan at a time (<code>status\run.lock</code>). A second start is refused and logged.</li>
+    <li>One scan at a time (<code>data\store\run.lock</code>, next to the store, so only the service account and administrators can touch it). A second start is refused and logged.</li>
     <li>The scheduled task runs <code>Hashslinger.exe --config ... scan</code> as the service account on the cadence, day and time in the settings.</li>
     <li>Memory is about 150 to 250 bytes per account plus 40 for sorting.</li>
   </ul>
@@ -495,7 +502,7 @@ Hashslinger-Uninstall.cmd -RemoveAll -SecureWipe    everything</code></pre>
       <tr><td class="k">Reset the store</td><td>Delete <code>master.ntlm</code> and its manifest. The next scan or merge rebuilds it.</td></tr>
       <tr><td class="k">Delete the plaintext originals</td><td>After merging you may delete the source files in staging. The store keeps working; they simply will not re-merge.</td></tr>
       <tr><td class="k">Stop scheduled scans</td><td>Disable or delete <code>Hashslinger-Scheduled</code> in Task Scheduler, or uninstall with no switches.</td></tr>
-      <tr><td class="k">Remove a stuck lock</td><td>If no scan is running, delete <code>status\run.lock</code>. The lock is released automatically when a scan ends or its process dies.</td></tr>
+      <tr><td class="k">Remove a stuck lock</td><td>If no scan is running, delete <code>data\store\run.lock</code>. The lock is released automatically when a scan ends or its process dies.</td></tr>
     </tbody>
   </table></div>
 </section>

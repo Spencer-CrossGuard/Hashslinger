@@ -87,6 +87,9 @@ $btnRun.Add_Click({
     foreach ($d in 'config', 'powershell', 'staging\HIBP', 'staging\rockyou', 'staging\custom', 'output', 'logs', 'store', 'status') {
       New-Item -ItemType Directory -Force (Join-Path $w $d) | Out-Null
     }
+    # keep the work folder (reports, logs, store) private to you, the administrators and SYSTEM
+    $me = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    & icacls.exe $w /inheritance:r /grant:r '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-18:(OI)(CI)F' "*${me}:(OI)(CI)F" | Out-Null
     Copy-Item (Join-Path $repo 'powershell\Get-AccountHashes.ps1') (Join-Path $w 'powershell') -Force
     if (-not (Test-Path (Join-Path $w 'config\pattern_rules.json'))) { Copy-Item (Join-Path $repo 'config\pattern_rules.json') (Join-Path $w 'config') }
 

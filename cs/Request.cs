@@ -14,6 +14,7 @@ namespace Hashslinger
         public string Edipi;
         public string Reason;
         public string RequestedBy;
+        public string FileOwnerSid;
         public string FileOwner; // NTFS owner of the request file = the account that really created it
     }
 
@@ -73,6 +74,12 @@ namespace Hashslinger
         }
 
         /// <summary>The Windows account that owns (so created) the request file: filled in by Windows, not by the requester.</summary>
+        public static string FileOwnerSidOf(string path)
+        {
+            try { return File.GetAccessControl(path).GetOwner(typeof(SecurityIdentifier)).Value; }
+            catch (Exception) { return null; }
+        }
+
         public static string FileOwnerOf(string path)
         {
             try { return File.GetAccessControl(path).GetOwner(typeof(NTAccount)).Value; }
@@ -83,7 +90,8 @@ namespace Hashslinger
         /// an EDIPI (10 digits) and a reason (10-500 chars) are mandatory and end up in the audit log.</summary>
         public static ScanRequest Load(Config cfg, string path)
         {
-            Dictionary<string, object> req = (Dictionary<string, object>)Json.Parse(File.ReadAllText(path, Encoding.UTF8));
+            Dictionary<string, object> req = Json.Parse(File.ReadAllText(path, Encoding.UTF8)) as Dictionary<string, object>;
+            if (req == null) throw new FormatException("a request must be a JSON object");
             string edipi = Json.Str(req, "edipi", "").Trim();
             string reason = Json.Str(req, "reason", "").Trim();
             string by = Json.Str(req, "requested_by", null);
@@ -102,6 +110,7 @@ namespace Hashslinger
             string owner = FileOwnerOf(path);
             ScanRequest r = new ScanRequest();
             r.FileOwner = owner;
+            r.FileOwnerSid = FileOwnerSidOf(path);
             r.Ou = ou; r.OutputDir = outDir; r.Edipi = edipi; r.Reason = reason; r.RequestedBy = by;
             return r;
         }

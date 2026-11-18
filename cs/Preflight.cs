@@ -35,7 +35,7 @@ namespace Hashslinger
         static bool BitLockerProtected(string path)
         {
             string drive = Path.GetPathRoot(Path.GetFullPath(path)).Substring(0, 1);
-            ProcessStartInfo psi = new ProcessStartInfo("powershell.exe",
+            ProcessStartInfo psi = new ProcessStartInfo(Config.DefaultPowerShell,
                 "-NoProfile -NonInteractive -Command \"(Get-BitLockerVolume -MountPoint '" + drive + ":').ProtectionStatus -eq 'On'\"");
             psi.RedirectStandardOutput = true;
             psi.UseShellExecute = false;

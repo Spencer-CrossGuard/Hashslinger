@@ -263,7 +263,7 @@ else {
   Get-ADDBAccount -All -DatabasePath $NtdsPath -BootKey $key | ForEach-Object {
     $a = $_
     $inScope = $false
-    foreach ($b in $bases) { if ($a.DistinguishedName.EndsWith($b, [StringComparison]::OrdinalIgnoreCase)) { $inScope = $true; break } }
+    foreach ($b in $bases) { if ($a.DistinguishedName -ieq $b -or $a.DistinguishedName.EndsWith(',' + $b, [StringComparison]::OrdinalIgnoreCase)) { $inScope = $true; break } }
     if (-not $inScope) { return }
     $type = ClassifyType $a.ServicePrincipalName $a.SamAccountName.EndsWith('$')
     if ($types -notcontains $type) { return }

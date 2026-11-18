@@ -60,7 +60,7 @@ is created inside it:
   status\     live progress file
   requests\   analyst request drop box (only if you use an analyst group)
   app-backups\  last 3 copies of app\, taken automatically before an upgrade or reinstall
-  extras\     optional gMSA helper scripts (a Domain Admin may use them; never required)
+  extras\     (package folder only, NOT installed on the scan server) optional gMSA helper scripts for a Domain Admin
   Hashslinger-Admin.cmd, Hashslinger-Uninstall.cmd
   Hashslinger-Admin.cmd   opens the Admin tool
 ```

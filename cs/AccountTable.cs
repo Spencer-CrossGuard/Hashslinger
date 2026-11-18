@@ -53,7 +53,10 @@ namespace Hashslinger
                 long n = (long)hashes.Length * 2;
                 if (n < (long)(i + 1) * 16) n = (long)(i + 1) * 16;
                 if (n > int.MaxValue) n = int.MaxValue;
-                Array.Resize(ref hashes, (int)n);
+                byte[] bigger = new byte[(int)n];
+                Buffer.BlockCopy(hashes, 0, bigger, 0, hashes.Length);
+                Array.Clear(hashes, 0, hashes.Length);   // the old copy of every hash so far must not linger in memory
+                hashes = bigger;
             }
             byte f = (byte)(a.Type << 4);
             if (a.HasNt) { f |= 1; a.Nt.CopyTo(hashes, i * 16); }

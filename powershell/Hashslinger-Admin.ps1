@@ -251,9 +251,7 @@ $btnFinish.Add_Click({
     Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-File', "`"$setupScript`"", '-Config', "`"$ConfigPath`"", '-Phase', 'Finish')
   }
 })
-$btnExtras = New-Object Windows.Forms.Button -Property @{ Text = 'Open extras (gMSA helper scripts)'; Left = 580; Top = [int]$tpSec.Tag; Width = 260; Height = 30 }
-$btnExtras.Add_Click({ $p = Join-Path $root 'extras'; if (Test-Path $p) { Start-Process explorer.exe $p } else { Msg "Not found: $p" } })
-$tpSec.Controls.AddRange(@($btnFinish, $btnExtras)); $tpSec.Tag = [int]$tpSec.Tag + 40
+$tpSec.Controls.Add($btnFinish); $tpSec.Tag = [int]$tpSec.Tag + 40
 Add-Note $tpSec 'Changing the service account, analyst group or scan server needs this re-apply step to take effect.'
 
 # ================================================================ tab: Wordlists

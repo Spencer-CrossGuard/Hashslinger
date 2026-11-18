@@ -50,7 +50,7 @@ namespace Hashslinger
         }
 
         public static RunResult Run(Config cfg, IAccountSource source, IList<string> ous, string outputDir,
-            string trigger, string requestedBy, string edipi, string reason, bool skipPreflight, string startedBy = null)
+            string trigger, string requestedBy, string edipi, string reason, bool skipPreflight, string startedBy = null, string startedBySid = null)
         {
             if (ous == null || ous.Count == 0) ous = cfg.TargetOus;
             foreach (string ou in ous)
@@ -64,22 +64,27 @@ namespace Hashslinger
             FileStream runLock;
             try
             {
-                runLock = new FileStream(Path.Combine(statusDir, "run.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                // the lock lives with the store (service account and administrators only), so a person who can read the
+                // status folder cannot hold it open and block every scan
+                string lockDir = Path.GetDirectoryName(Path.GetFullPath(cfg.HashStorePath));
+                Directory.CreateDirectory(lockDir);
+                runLock = new FileStream(Path.Combine(lockDir, "run.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
             }
             catch (IOException)
             {
-                log.Rejected("scan already running", edipi, reason, requestedBy, startedBy);
+                log.Rejected("scan already running", edipi, reason, requestedBy, startedBy, startedBySid);
                 throw new InvalidOperationException("A scan is already running. Open the progress viewer to watch it.");
             }
 
             string runId = log.NextRunId();
-            log.Start(runId, trigger, ous, requestedBy, edipi, reason, startedBy);
+            log.Start(runId, trigger, ous, requestedBy, edipi, reason, startedBy, startedBySid);
             Progress.Begin(cfg.StatusPath, runId, Environment.UserDomainName + "\\" + Environment.UserName, startedBy ?? requestedBy, ous);
 
             AccountTable table = new AccountTable();
             string status = "failed", error = null, outPath = null;
             int flagged = 0, accounts = 0;
             bool wipeOk = false;
+            HashIdx[] sorted = null;
             try
             {
                 Progress.Stage(1, "Preflight checks (run " + runId + ")");
@@ -108,7 +113,6 @@ namespace Hashslinger
                 Progress.Count(accounts);
                 Progress.Info(accounts + " accounts received in total");
                 Progress.Stage(5, "Matching against the hash store");
-                HashIdx[] sorted;
                 using (HashStore store = new HashStore(cfg.HashStorePath, ShouldIndex(cfg)))
                     sorted = Analyze(table, store, patterns, cfg.CheckDuplicates);
                 Progress.Stage(6, "Writing report");
@@ -125,6 +129,7 @@ namespace Hashslinger
             {
                 Progress.Stage(7, "Wiping memory and writing audit entry");
                 accounts = table.Count > accounts ? table.Count : accounts;
+                if (sorted != null) Array.Clear(sorted, 0, sorted.Length);   // the sorted copy of every account hash
                 wipeOk = table.Wipe();
                 bool tmpOk = true;
                 string dir = Path.GetDirectoryName(Path.GetFullPath(cfg.HashStorePath));

@@ -23,6 +23,11 @@ namespace Hashslinger
             return DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
         }
 
+        static string MySid()
+        {
+            try { return System.Security.Principal.WindowsIdentity.GetCurrent().User.Value; } catch (Exception) { return null; }
+        }
+
         static string Who()
         {
             return Environment.UserDomainName + "\\" + Environment.UserName;
@@ -61,7 +66,7 @@ namespace Hashslinger
             return today + "-" + (n + 1).ToString("D3", CultureInfo.InvariantCulture);
         }
 
-        public void Start(string runId, string trigger, IList<string> scope, string requestedBy, string edipi, string reason, string startedBy = null)
+        public void Start(string runId, string trigger, IList<string> scope, string requestedBy, string edipi, string reason, string startedBy = null, string startedBySid = null)
         {
             Dictionary<string, object> e = new Dictionary<string, object>();
             e["event"] = "start";
@@ -70,6 +75,7 @@ namespace Hashslinger
             e["trigger"] = trigger;
             e["run_as"] = Who();
             e["started_by"] = startedBy ?? Who();   // taken from Windows automatically, never typed in
+            e["started_by_sid"] = startedBySid ?? MySid();
             e["host"] = Environment.MachineName;
             e["requested_by"] = requestedBy;
             e["edipi"] = edipi;
@@ -78,13 +84,14 @@ namespace Hashslinger
             Append(e);
         }
 
-        public void Rejected(string why, string edipi, string reason, string requestedBy, string startedBy = null)
+        public void Rejected(string why, string edipi, string reason, string requestedBy, string startedBy = null, string startedBySid = null)
         {
             Dictionary<string, object> e = new Dictionary<string, object>();
             e["event"] = "rejected";
             e["time"] = Now();
             e["run_as"] = Who();
             e["started_by"] = startedBy ?? Who();
+            e["started_by_sid"] = startedBySid ?? MySid();
             e["host"] = Environment.MachineName;
             e["why"] = why;
             e["edipi"] = edipi;

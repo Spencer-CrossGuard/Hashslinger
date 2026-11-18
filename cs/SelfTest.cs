@@ -291,7 +291,7 @@ namespace Hashslinger
             RunResult res2 = Runner.Run(cfg, new FakeSource(), new List<string> { Ou }, null, "test", null, null, null, false);
             Check("second run id is 002", res2.RunId.EndsWith("-002"));
 
-            using (FileStream held = new FileStream(Path.Combine(Path.GetDirectoryName(cfg.StatusPath), "run.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+            using (FileStream held = new FileStream(Path.Combine(Path.GetDirectoryName(cfg.HashStorePath), "run.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
             {
                 bool refused = false;
                 try { Runner.Run(cfg, new FakeSource(), new List<string> { Ou }, null, "test", null, null, null, false); }

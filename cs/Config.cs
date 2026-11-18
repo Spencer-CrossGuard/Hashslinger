@@ -28,7 +28,15 @@ namespace Hashslinger
         public string PatternRulesPath = "config\\pattern_rules.json";
         public bool RequireEncryptedVolume = false;
         public int RetentionDays = 0;                // 0 = keep forever
-        public string PowerShellPath = "powershell.exe";
+        /// <summary>The system PowerShell by FULL path. A bare "powershell.exe" would be looked up in the exe's own folder
+        /// first, so anyone who could write there could run code as the scan account.</summary>
+        public static readonly string DefaultPowerShell = Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe");
+        public static string ResolvePowerShell(string p)
+        {
+            if (string.Equals(p, "powershell.exe", StringComparison.OrdinalIgnoreCase)) return DefaultPowerShell;
+            return p;
+        }
+        public string PowerShellPath = DefaultPowerShell;
         public string EngineScript = "powershell\\Get-AccountHashes.ps1";
         public List<string> EngineCommand = null;    // test hook; {ous} is replaced by the '|' joined OU list
         public int EngineTimeoutSeconds = 6 * 3600;
@@ -91,7 +99,8 @@ namespace Hashslinger
             c.AllowedOutputRoots = Json.StrList(raw, "allowed_output_roots");
             c.RequireEncryptedVolume = Json.Str(raw, "require_encrypted_volume", "false").ToLowerInvariant() == "true";
             c.RetentionDays = (int)Convert.ToDouble(Json.Str(raw, "retention_days", "0"), System.Globalization.CultureInfo.InvariantCulture);
-            c.PowerShellPath = Json.Str(raw, "powershell_path", c.PowerShellPath);
+            c.PowerShellPath = ResolvePowerShell(Json.Str(raw, "powershell_path", c.PowerShellPath));
+            if (!Path.IsPathRooted(c.PowerShellPath)) throw new ConfigException("powershell_path must be a full path");
             if (raw.ContainsKey("engine_command")) c.EngineCommand = Json.StrList(raw, "engine_command");
             c.EngineTimeoutSeconds = (int)Convert.ToDouble(Json.Str(raw, "engine_timeout_seconds", c.EngineTimeoutSeconds.ToString()), System.Globalization.CultureInfo.InvariantCulture);
             c.NtdsPath = Json.Str(raw, "ntds_path", "");
@@ -112,6 +121,10 @@ namespace Hashslinger
             if (TargetOus.Count == 0) throw new ConfigException("target_ous must list at least one OU distinguished name");
             foreach (string t in AccountTypes)
                 if (t != "User" && t != "Service" && t != "Computer") throw new ConfigException("bad account type " + t);
+            foreach (string lp in new[] { HashStorePath, StagingPath, LogPath, OutputPath, StatusPath, RequestDir })
+                if (lp.StartsWith("\\\\", StringComparison.Ordinal)) throw new ConfigException("paths must be on a local drive, not a network share: " + lp);
+            foreach (string ar in AllowedOutputRoots)
+                if (ar.StartsWith("\\\\", StringComparison.Ordinal)) throw new ConfigException("allowed_output_roots must be local drives, not a network share: " + ar);
             if (Mode == "offline" && (NtdsPath.Length == 0 || SystemHivePath.Length == 0))
                 throw new ConfigException("offline mode needs ntds_path and system_hive_path");
         }

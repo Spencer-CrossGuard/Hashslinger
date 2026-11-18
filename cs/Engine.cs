@@ -72,7 +72,7 @@ namespace Hashslinger
         {
             List<string> cmd = BuildCommand(cfg, ous);
             ProcessStartInfo psi = new ProcessStartInfo();
-            psi.FileName = cmd[0];
+            psi.FileName = Config.ResolvePowerShell(cmd[0]);
             StringBuilder args = new StringBuilder();
             for (int i = 1; i < cmd.Count; i++)
             {

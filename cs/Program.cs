@@ -79,7 +79,7 @@ namespace Hashslinger
             }
 
             IList<string> ous = ou != null ? new List<string> { ou } : null;
-            string by = null, edipi = null, reason = null, startedBy = null;
+            string by = null, edipi = null, reason = null, startedBy = null, startedBySid = null;
             if (requestFile != null)
             {
                 ScanRequest rq = null;
@@ -89,13 +89,13 @@ namespace Hashslinger
                 }
                 catch (RequestException e)
                 {
-                    new AuditLog(cfg.LogPath).Rejected(e.Message, e.Edipi, e.Reason, e.RequestedBy, Request.FileOwnerOf(requestFile));
+                    new AuditLog(cfg.LogPath).Rejected(e.Message, e.Edipi, e.Reason, e.RequestedBy, Request.FileOwnerOf(requestFile), Request.FileOwnerSidOf(requestFile));
                     Console.Error.WriteLine("scan failed: " + e.Message);
                     return 2;
                 }
-                catch (FormatException)
+                catch (Exception ex)   // malformed, wrong shape, too deeply nested, unreadable: refuse and log, never crash
                 {
-                    new AuditLog(cfg.LogPath).Rejected("malformed request file", null, null, null, Request.FileOwnerOf(requestFile));
+                    new AuditLog(cfg.LogPath).Rejected("malformed request file (" + ex.GetType().Name + ")", null, null, null, Request.FileOwnerOf(requestFile), Request.FileOwnerSidOf(requestFile));
                     Console.Error.WriteLine("scan failed: malformed request file");
                     return 2;
                 }
@@ -106,7 +106,7 @@ namespace Hashslinger
                 ous = new List<string> { rq.Ou };
                 outDir = rq.OutputDir;
                 trigger = "on-demand";
-                by = (rq.RequestedBy ?? "(not given)") + " | request file created by: " + (rq.FileOwner ?? "unknown"); edipi = rq.Edipi; reason = rq.Reason; startedBy = rq.FileOwner;
+                by = (rq.RequestedBy ?? "(not given)") + " | request file created by: " + (rq.FileOwner ?? "unknown"); edipi = rq.Edipi; reason = rq.Reason; startedBy = rq.FileOwner; startedBySid = rq.FileOwnerSid;
                 // an elevated admin's new files are owned by the Administrators group, which names no person
                 if (startedBy == null || startedBy.StartsWith("BUILTIN\\", StringComparison.OrdinalIgnoreCase) || startedBy.StartsWith("NT AUTHORITY\\", StringComparison.OrdinalIgnoreCase))
                     startedBy = (rq.RequestedBy ?? "unknown") + " (as stated in the request; file owner is " + (rq.FileOwner ?? "unknown") + ")";
@@ -133,12 +133,13 @@ namespace Hashslinger
 
             try
             {
-                RunResult res = Runner.Run(cfg, new PowerShellSource(), ous, outDir, trigger, by, edipi, reason, false, startedBy);
+                RunResult res = Runner.Run(cfg, new PowerShellSource(), ous, outDir, trigger, by, edipi, reason, false, startedBy, startedBySid);
                 Console.WriteLine(res.RunId + ": " + res.Accounts + " accounts, " + res.Flagged + " flagged -> " + res.Output);
                 return 0;
             }
             catch (RequestException e)
             {
+                new AuditLog(cfg.LogPath).Rejected(e.Message, e.Edipi, e.Reason, e.RequestedBy ?? by, startedBy, startedBySid);   // for example a bad --ou
                 Console.Error.WriteLine("scan failed: " + e.Message);
                 return 2;
             }
