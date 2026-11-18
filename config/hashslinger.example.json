@@ -1,26 +1,55 @@
 {
+  "install_root": "E:\\Hashslinger",
   "mode": "live",
   "replication": "bulk",
-  "check_duplicates": false,
-  "target_server": "dc01.contoso.com",
-  "target_ous": ["OU=Finance,DC=contoso,DC=com", "OU=Service Accounts,DC=contoso,DC=com"],
-  "account_types": ["User", "Service"],
+  "per_account_threshold": 5000,
+  "target_server": "dc1.corp.contoso.com",
+  "target_ous": [
+    "OU=Finance,DC=corp,DC=contoso,DC=com"
+  ],
+  "account_types": [
+    "User",
+    "Service"
+  ],
   "uac": {
     "require_flags": [],
-    "exclude_flags": ["SMARTCARD_REQUIRED"]
+    "exclude_flags": [
+      "SMARTCARD_REQUIRED"
+    ]
   },
-  "hash_store_path": "D:\\Hashslinger\\store\\master.ntlm",
-  "staging_path": "D:\\Hashslinger\\staging",
-  "log_path": "D:\\Hashslinger\\logs\\audit.jsonl",
-  "output_path": "D:\\Hashslinger\\output",
-  "allowed_output_roots": ["D:\\Hashslinger\\output"],
-  "request_dir": "D:\\Hashslinger\\requests",
-  "status_path": "D:\\Hashslinger\\status\\status.json",
-  "pattern_rules_path": "D:\\Hashslinger\\config\\pattern_rules.json",
+  "ntds_path": "",
+  "system_hive_path": "",
+  "check_duplicates": false,
+  "cadence": "Weekly",
+  "schedule_day": "Sunday",
+  "schedule_time": "02:00",
+  "retention_days": 90,
+  "engine_timeout_seconds": 86400,
+  "hash_store_path": "E:\\Hashslinger\\data\\store\\master.ntlm",
+  "staging_path": "E:\\Hashslinger\\data\\staging",
+  "log_path": "E:\\Hashslinger\\logs\\audit.jsonl",
+  "output_path": "E:\\Hashslinger\\reports",
+  "allowed_output_roots": [
+    "E:\\Hashslinger\\reports"
+  ],
+  "request_dir": "E:\\Hashslinger\\requests",
+  "status_path": "E:\\Hashslinger\\status\\status.json",
+  "pattern_rules_path": "E:\\Hashslinger\\config\\pattern_rules.json",
+  "engine_script": "E:\\Hashslinger\\app\\powershell\\Get-AccountHashes.ps1",
   "require_encrypted_volume": false,
   "authorized_edipis": [],
-  "retention_days": 90,
-  "cadence": "weekly",
-  "powershell_path": "powershell.exe",
-  "engine_script": "D:\\Hashslinger\\powershell\\Get-AccountHashes.ps1"
+  "gmsa_name": "svc-hashslinger",
+  "gmsa_precreated": false,
+  "run_server": "SCANHOST01",
+  "analyst_group": "",
+  "wordlists": {
+    "hibp": "",
+    "rockyou": "",
+    "custom": ""
+  },
+  "dsinternals_offline_path": "",
+  "min_free_space_gb": {
+    "store": 60,
+    "output": 5
+  }
 }

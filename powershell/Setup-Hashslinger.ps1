@@ -1,19 +1,19 @@
 <#
 .SYNOPSIS
-  Full setup, driven by an init config. Works from wherever the Hashslinger folder is dropped.
+  Setup engine, driven by the ONE settings file <root>\config\hashslinger.json (written by the Setup wizard,
+  edited later in the Admin tool). Works from wherever the Hashslinger folder is dropped.
 .DESCRIPTION
   THIS SCRIPT NEVER CREATES OR CHANGES ANYTHING IN ACTIVE DIRECTORY. It runs fine as a local administrator
-  on the scan server (no Domain Admin needed). Reads init config (drives, paths, AD scope, names), then:
+  on the scan server (no Domain Admin needed).
     Phase Check    preflight only, no changes
-    Phase Local    folders on the configured drives, install to <root>\bin, build the exe if missing,
-                   DSInternals + AD tools, unblock files, generate the runtime config, verify
+    Phase Local    folders under <root> (app, config, data, reports, logs, status, requests, handoff), install to
+                   <root>\app, build the exe if missing, DSInternals + AD tools, unblock files, verify
                    (PowerShell syntax parse, exe selftest, AD-free smoke test, DC/OU reachability)
-    Phase Handoff  write <root>\AD-HANDOFF\ for a Domain Admin: plain-language request + the gMSA script.
+    Phase Handoff  write <root>\handoff for a Domain Admin: plain-language request + the gMSA scripts.
                    The Domain Admin does the AD part by hand, separately.
     Phase Finish   after the Domain Admin is done: READ-ONLY checks that the gMSA and its rights exist,
-                   then local-only steps: install the gMSA here, folder permissions, scheduled tasks.
+                   then local-only steps: folder permissions, scheduled tasks, live test as the gMSA.
     Phase All      Local then Handoff
-  Re-running is safe: it backs up the previous runtime config.
   AD SAFETY: the scripts in powershell\ only READ AD. Anything that changes AD lives in ad-admin\ (for a Domain
   Admin to run by hand) and diagnostics\ (lab only). 'Hashslinger.exe selftest' re-verifies this on your machine.
 .NOTES
@@ -21,7 +21,7 @@
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
-  [string]$InitConfig,
+  [Alias('InitConfig')][string]$Config,
   [ValidateSet('Check', 'Local', 'Handoff', 'Finish', 'All')][string]$Phase = 'Local'
 )
 $ErrorActionPreference = 'Stop'
@@ -51,22 +51,14 @@ function Result([string]$name, [string]$status, [string]$detail = '') {
 }
 function Step([string]$m) { Write-Host ''; Write-Host "== $m" -ForegroundColor Cyan }
 
-# ---------------------------------------------------------------- init config
-if (-not $InitConfig) {
-  foreach ($c in @((Join-Path $srcRoot 'hashslinger.init.json'), (Join-Path $srcRoot 'config\hashslinger.init.json'))) {
-    if (Test-Path $c) { $InitConfig = $c; break }
-  }
-}
-if (-not $InitConfig) {
-  $target = Join-Path $srcRoot 'hashslinger.init.json'
-  Copy-Item (Join-Path $srcRoot 'config\hashslinger.init.example.json') $target
-  Write-Host "No init config found. Created $target from the example." -ForegroundColor Yellow
-  Write-Host 'Edit it (drives, DC, OUs, names), save, then run this setup again.'
-  Start-Process notepad.exe $target
+# ---------------------------------------------------------------- settings (ONE file: <root>\config\hashslinger.json)
+if (-not $Config -or -not (Test-Path $Config)) {
+  Write-Host 'No settings file found. Run Setup-Hashslinger.cmd (the wizard) first, or pass -Config <path to hashslinger.json>.' -ForegroundColor Red
   exit 1
 }
-Write-Host "Init config: $InitConfig"
-$init = Get-Content $InitConfig -Raw | ConvertFrom-Json
+$Config = (Resolve-Path $Config).Path
+Write-Host "Settings file: $Config"
+$init = Get-Content $Config -Raw | ConvertFrom-Json
 
 function Opt([string]$path, $default) {
   $o = $init
@@ -79,20 +71,24 @@ function Opt([string]$path, $default) {
   return $o
 }
 
-$root = Opt 'install_root' 'C:\Hashslinger'
+$root = Opt 'install_root' (Split-Path -Parent (Split-Path -Parent $Config))
 $Dir = @{
-  root = $root; bin = "$root\bin"; config = "$root\config"
-  store = Opt 'paths.store' "$root\store"; staging = Opt 'paths.staging' "$root\staging"
-  logs = Opt 'paths.logs' "$root\logs"; output = Opt 'paths.output' "$root\output"
-  status = Opt 'paths.status' "$root\status"; requests = Opt 'paths.requests' "$root\requests"
+  root = $root; bin = "$root\app"; config = "$root\config"
+  store = Split-Path -Parent (Opt 'hash_store_path' "$root\data\store\master.ntlm")
+  staging = Opt 'staging_path' "$root\data\staging"
+  logs = Split-Path -Parent (Opt 'log_path' "$root\logs\audit.jsonl")
+  output = Opt 'output_path' "$root\reports"
+  status = Split-Path -Parent (Opt 'status_path' "$root\status\status.json")
+  requests = Opt 'request_dir' "$root\requests"
+  handoff = "$root\handoff"
 }
 $exe = "$($Dir.bin)\Hashslinger.exe"
-$runtimeCfg = "$($Dir.config)\hashslinger.json"
-$dc = Opt 'ad.domain_controller' ''
-$ous = @(Opt 'ad.target_ous' @())
-$gmsa = Opt 'security.gmsa_name' 'svc-hashslinger'
-$runServer = Opt 'security.run_server' $env:COMPUTERNAME
-$analystGroup = Opt 'security.analyst_group' ''
+$runtimeCfg = $Config
+$dc = Opt 'target_server' ''
+$ous = @(Opt 'target_ous' @())
+$gmsa = Opt 'gmsa_name' 'svc-hashslinger'
+$runServer = Opt 'run_server' $env:COMPUTERNAME
+$analystGroup = Opt 'analyst_group' ''
 $minFree = @{ store = [double](Opt 'min_free_space_gb.store' 60); output = [double](Opt 'min_free_space_gb.output' 5) }
 
 # ---------------------------------------------------------------- phase: preflight
@@ -108,8 +104,8 @@ $csc = Join-Path $env:windir 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 Result 'C# compiler (csc.exe)' $(if (Test-Path $csc) { 'PASS' } else { 'WARN' }) $(if (Test-Path $csc) { $csc } else { 'not found; a prebuilt Hashslinger.exe must be in the folder' })
 $csName = (Get-CimInstance Win32_ComputerSystem)
 Result 'Domain joined' $(if ($csName.PartOfDomain) { 'PASS' } else { 'WARN' }) $csName.Domain
-if (-not $dc) { Result 'ad.domain_controller set' 'WARN' 'live scans need it' } else { Result 'ad.domain_controller set' 'PASS' $dc }
-if ($ous.Count -eq 0) { Result 'ad.target_ous set' 'FAIL' 'list at least one OU/DN' } else { Result 'ad.target_ous set' 'PASS' "$($ous.Count) scope(s)" }
+if (-not $dc) { Result 'Domain controller set' 'WARN' 'live scans need it (Admin tool > Active Directory)' } else { Result 'Domain controller set' 'PASS' $dc }
+if ($ous.Count -eq 0) { Result 'Scan scope set' 'FAIL' 'pick at least one OU to scan (Admin tool > Active Directory)' } else { Result 'Scan scope set' 'PASS' "$($ous.Count) scope(s)" }
 
 foreach ($k in 'store', 'staging', 'logs', 'output', 'status', 'requests') {
   $drive = [IO.Path]::GetPathRoot($Dir[$k])
@@ -123,14 +119,14 @@ foreach ($k in 'store', 'staging', 'logs', 'output', 'status', 'requests') {
 if ($Phase -eq 'Check') { Step 'Check only. No changes made.'; $results | Format-Table -AutoSize; exit 0 }
 if (($results | Where-Object Status -eq 'FAIL')) { Write-Host 'Fix the FAIL items above, then re-run.' -ForegroundColor Red; exit 1 }
 
-New-Item -ItemType Directory -Force $root | Out-Null
-$transcript = Join-Path $root ("setup-{0:yyyyMMdd-HHmmss}.log" -f (Get-Date))
+New-Item -ItemType Directory -Force $Dir.logs | Out-Null
+$transcript = Join-Path $Dir.logs ("setup-{0:yyyyMMdd-HHmmss}.log" -f (Get-Date))
 Start-Transcript -Path $transcript | Out-Null
 
 # ---------------------------------------------------------------- phase: Local
 function Do-Local {
   Step 'Folders'
-  foreach ($d in $Dir.bin, $Dir.config, $Dir.store, $Dir.staging, "$($Dir.staging)\HIBP", "$($Dir.staging)\rockyou", "$($Dir.staging)\custom", $Dir.logs, $Dir.output, $Dir.status, $Dir.requests) {
+  foreach ($d in $Dir.bin, $Dir.config, $Dir.store, $Dir.staging, "$($Dir.staging)\HIBP", "$($Dir.staging)\rockyou", "$($Dir.staging)\custom", $Dir.logs, $Dir.output, $Dir.status, $Dir.requests, $Dir.handoff) {
     New-Item -ItemType Directory -Force $d | Out-Null
   }
   Result 'Folders created' 'PASS' "root $($Dir.root)"
@@ -154,7 +150,13 @@ function Do-Local {
     Copy-Item "$srcRoot\docs\*" "$($Dir.bin)\docs" -Force -ErrorAction SilentlyContinue
     Copy-Item "$srcRoot\*.cmd", "$srcRoot\README.md" $Dir.bin -Force -ErrorAction SilentlyContinue
   }
-  Result 'Installed to bin' 'PASS' $Dir.bin
+  Result 'Installed to app' 'PASS' $Dir.bin
+  Set-Content (Join-Path $Dir.root 'Hashslinger-Admin.cmd') @'
+@echo off
+rem Hashslinger Admin: change any setting, run scans, manage wordlists.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0app\powershell\Hashslinger-Admin.ps1" -ConfigPath "%~dp0config\hashslinger.json"
+'@ -Encoding ASCII
+  Result 'Admin tool shortcut' 'PASS' (Join-Path $Dir.root 'Hashslinger-Admin.cmd')
   if (-not (Test-Path "$($Dir.config)\pattern_rules.json")) { Copy-Item "$srcRoot\config\pattern_rules.json" $Dir.config }
   Get-ChildItem $Dir.root, $srcRoot -Recurse -File -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue
   Result 'Files unblocked' 'PASS'
@@ -194,27 +196,8 @@ function Do-Local {
     Result "Wordlist $($pair[0])" 'PASS' 'copied to staging (inherits the folder permissions)'
   }
 
-  Step 'Runtime config'
-  if (Test-Path $runtimeCfg) { Copy-Item $runtimeCfg ("$runtimeCfg.bak-{0:yyyyMMddHHmmss}" -f (Get-Date)) }
-  $cfg = [ordered]@{
-    mode = Opt 'ad.mode' 'live'; replication = Opt 'ad.replication' 'bulk'
-    per_account_threshold = [int](Opt 'scan.per_account_threshold' 5000)
-    check_duplicates = [bool](Opt 'scan.check_duplicates' $false)
-    target_server = $dc; target_ous = @($ous); account_types = @(Opt 'ad.account_types' @('User', 'Service'))
-    uac = @{ exclude_flags = @(Opt 'ad.uac_exclude_flags' @('SMARTCARD_REQUIRED')) }
-    ntds_path = Opt 'ad.ntds_path' ''; system_hive_path = Opt 'ad.system_hive_path' ''
-    hash_store_path = "$($Dir.store)\master.ntlm"; staging_path = $Dir.staging
-    log_path = "$($Dir.logs)\audit.jsonl"; output_path = $Dir.output; allowed_output_roots = @($Dir.output)
-    request_dir = $Dir.requests; status_path = "$($Dir.status)\status.json"
-    pattern_rules_path = "$($Dir.config)\pattern_rules.json"
-    engine_script = "$($Dir.bin)\powershell\Get-AccountHashes.ps1"
-    require_encrypted_volume = [bool](Opt 'security.require_encrypted_volume' $false)
-    retention_days = [int](Opt 'scan.retention_days' 0)
-    engine_timeout_seconds = [int](Opt 'scan.engine_timeout_seconds' 86400)
-    authorized_edipis = @(Opt 'security.authorized_edipis' @())
-  }
-  $cfg | ConvertTo-Json -Depth 6 | Set-Content $runtimeCfg -Encoding UTF8
-  Result 'Runtime config written' 'PASS' $runtimeCfg
+  Step 'Settings'
+  Result 'Settings file' 'PASS' "$Config (change any setting in the Admin tool: $($Dir.root)\Hashslinger-Admin.cmd)"
 }
 
 # ---------------------------------------------------------------- verification
@@ -297,9 +280,9 @@ function Set-FolderAcl([string]$path, $gmsaSid, $analystSid, $analystRights, [st
 }
 
 function Do-Handoff {
-  if ([bool](Opt 'security.gmsa_precreated' $false)) { Result 'Domain Admin hand-off' 'SKIP' "gMSA '$gmsa' is marked as already created"; return }
+  if ([bool](Opt 'gmsa_precreated' $false)) { Result 'Domain Admin hand-off' 'SKIP' "gMSA '$gmsa' is marked as already created"; return }
   Step 'Hand-off package for a Domain Admin (nothing in AD is changed by this tool)'
-  $h = Join-Path $Dir.root 'AD-HANDOFF'
+  $h = $Dir.handoff
   New-Item -ItemType Directory -Force $h | Out-Null
   Copy-Item "$($Dir.bin)\ad-admin\*.ps1" $h -Force
   $domName = try { (Get-CimInstance Win32_ComputerSystem).Domain } catch { '(this domain)' }
@@ -314,14 +297,14 @@ function Do-Handoff {
 function Do-Finish {
   Step 'Finish: verify the AD prerequisites (read-only), then install locally'
   if ($env:COMPUTERNAME -ne $runServer.Split('.')[0] -and $env:COMPUTERNAME -ne $runServer) {
-    Result 'Running on the run server' 'FAIL' "this is $env:COMPUTERNAME, init says $runServer."; return
+    Result 'Running on the run server' 'FAIL' "this is $env:COMPUTERNAME, the settings say $runServer (Admin tool > Security and accounts)."; return
   }
   try { Import-Module ActiveDirectory -ErrorAction Stop } catch { Result 'ActiveDirectory module' 'FAIL' 'install RSAT-AD-PowerShell'; return }
   $dom = Get-ADDomain
   $domainNC = $dom.DistinguishedName
   $gmsaSam = "$($dom.NetBIOSName)\${gmsa}$"
   $svc = Get-ADServiceAccount -Filter "Name -eq '$gmsa' -or SamAccountName -eq '$gmsa' -or SamAccountName -eq '${gmsa}$'" -Properties PrincipalsAllowedToRetrieveManagedPassword -ErrorAction SilentlyContinue
-  if (-not $svc) { Result 'gMSA exists in AD' 'FAIL' "not found. Check the name in the init config (security.gmsa_name), or have a Domain Admin complete the request in $($Dir.root)\AD-HANDOFF."; return }
+  if (-not $svc) { Result 'gMSA exists in AD' 'FAIL' "not found. Check the name in the Admin tool (Security and accounts), or have a Domain Admin complete the request in $($Dir.handoff)."; return }
   Result 'gMSA exists in AD' 'PASS' "$($svc.SamAccountName) ($($svc.SID))"
   $gmsaSid = $svc.SID
   # use the REAL account name AD reports, and prove this server can resolve it (task scheduler and ACLs need that)
@@ -406,8 +389,10 @@ function Do-Finish {
   # scheduled tasks under the gMSA (local; no stored password)
   $principal = New-ScheduledTaskPrincipal -UserId $gmsaSam -LogonType Password -RunLevel Limited
   $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
-  $cadence = Opt 'scan.cadence' 'Weekly'
-  $trigger = if ($cadence -eq 'Monthly') { New-ScheduledTaskTrigger -Weekly -WeeksInterval 4 -DaysOfWeek Sunday -At 2am } else { New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At 2am }
+  $cadence = Opt 'cadence' 'Weekly'
+  $day = Opt 'schedule_day' 'Sunday'
+  $at = [datetime]::ParseExact([string](Opt 'schedule_time' '02:00'), 'HH:mm', $null)
+  $trigger = New-ScheduledTaskTrigger -Weekly -WeeksInterval $(if ($cadence -eq 'Monthly') { 4 } else { 1 }) -DaysOfWeek $day -At $at
   if ($PSCmdlet.ShouldProcess('Hashslinger tasks', 'Register')) {
     Register-ScheduledTask -TaskName 'Hashslinger-Scheduled' -Force -Principal $principal -Settings $settings -Trigger $trigger `
       -Action (New-ScheduledTaskAction -Execute $exe -Argument "--config `"$runtimeCfg`" scan" -WorkingDirectory $Dir.bin) | Out-Null
@@ -426,7 +411,7 @@ function Do-Finish {
 
   # ---- live test AS THE gMSA: the only check that proves the logon, the batch right and the replication rights all work
   Step 'Live test as the gMSA (replicates this server''s own computer object; prints no secrets)'
-  if (-not $dc) { Result 'Live replication test as the gMSA' 'WARN' 'ad.domain_controller is not set, skipped'; return }
+  if (-not $dc) { Result 'Live replication test as the gMSA' 'WARN' 'no domain controller is set (Admin tool > Active Directory), skipped'; return }
   if ($WhatIfPreference) { Result 'Live replication test as the gMSA' 'SKIP' 'preview (-WhatIf): nothing was registered, so nothing to test'; return }
   $probeOut = Join-Path $Dir.status 'gmsa-probe.txt'
   Remove-Item $probeOut -ErrorAction SilentlyContinue
@@ -478,18 +463,20 @@ if ($problemRows.Count) {
 Write-Host ('{0} passed, {1} skipped, {2} warning(s), {3} failed' -f @($results | Where-Object Status -eq 'PASS').Count, @($results | Where-Object Status -eq 'SKIP').Count, @($results | Where-Object Status -eq 'WARN').Count, @($results | Where-Object Status -eq 'FAIL').Count)
 $fail = @($results | Where-Object Status -eq 'FAIL').Count
 $warn = @($results | Where-Object Status -eq 'WARN').Count
-$summary = Join-Path $Dir.root 'SETUP-SUMMARY.txt'
+$summary = Join-Path $Dir.logs 'SETUP-SUMMARY.txt'
 @"
 Hashslinger setup summary ($(Get-Date))
-Program:   $($Dir.bin)\Hashslinger.exe
-Config:    $runtimeCfg  (generated from $InitConfig)
-Store:     $($Dir.store)    Staging: $($Dir.staging)
-Logs:      $($Dir.logs)     Output:  $($Dir.output)    Status: $($Dir.status)
-Progress:  powershell -File "$($Dir.bin)\powershell\Show-HashslingerProgress.ps1" -ConfigPath "$runtimeCfg"
-Launcher:  $($Dir.bin)\Start-HashslingerRun.cmd
-Analyst:   powershell -File "$($Dir.bin)\powershell\Start-HashslingerGui.ps1"
-Setup log: $transcript
-Result:    $fail FAIL, $warn WARN
+Install folder: $($Dir.root)
+  app:      $($Dir.bin)
+  settings: $Config   (the ONE settings file; edit it in the Admin tool)
+  data:     store $($Dir.store)    wordlists $($Dir.staging)
+  reports:  $($Dir.output)
+  logs:     $($Dir.logs)    status: $($Dir.status)
+  handoff:  $($Dir.handoff)
+Admin tool: $($Dir.root)\Hashslinger-Admin.cmd
+Progress:   powershell -File "$($Dir.bin)\powershell\Show-HashslingerProgress.ps1" -ConfigPath "$Config"
+Setup log:  $transcript
+Result:     $fail FAIL, $warn WARN
 "@ | Set-Content $summary
 Write-Host ''
 if ($fail) { Write-Host "$fail check(s) FAILED. See above and $transcript" -ForegroundColor Red; exit 1 }

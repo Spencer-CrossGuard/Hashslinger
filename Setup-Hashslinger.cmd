@@ -1,7 +1,7 @@
 @echo off
 rem Self-locating setup. Works from wherever this folder is dropped.
 rem   Double-click (no arguments) : guided wizard (recommended).
-rem   Advanced: Setup-Hashslinger.cmd -Phase Check|Local|Domain|All [-InitConfig path] [-WhatIf]
+rem   Advanced: Setup-Hashslinger.cmd -Phase Check|Local|Handoff|Finish|All -Config <folder>\config\hashslinger.json [-WhatIf]
 rem Policy is bypassed for the setup process only (your explicit run). Unblocks the folder first.
 set "HERE=%~dp0"
 if "%~1"=="" (

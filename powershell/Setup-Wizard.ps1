@@ -1,155 +1,146 @@
 <#
 .SYNOPSIS
-  Guided setup. A few plain questions, everything else is chosen for you.
+  Setup wizard: install Hashslinger on this server. Pick WHERE, the domain controller, WHAT to scan. Nothing else.
 .DESCRIPTION
-  Runs as a local administrator on the scan server. NO Domain Admin needed, and it NEVER changes Active
-  Directory. Detects the domain, DCs and drives; you pick the DC, the data drive and the OUs to scan
-  (optionally password list files). Install does the local install and writes a hand-off package for a
-  Domain Admin (AD-HANDOFF folder). When the Domain Admin has done their part, click Finish: it checks the
-  AD prerequisites read-only, then sets up folder permissions and scheduled tasks on this server.
-  Safe to re-run. Advanced: Setup-Hashslinger.cmd -Phase ... -InitConfig ...
+  Runs as a local administrator (no Domain Admin needed) and NEVER changes Active Directory.
+  You choose one folder; everything is created inside it (app, config, data, reports, logs, status, requests,
+  handoff). All settings go into ONE file, <folder>\config\hashslinger.json, which the Admin tool edits later.
+  Install = local install + a hand-off package for a Domain Admin. When they are done, click Finish.
+  Day-to-day changes are made in the Admin tool (<folder>\Hashslinger-Admin.cmd), not here.
 #>
 $ErrorActionPreference = 'Stop'
 $srcRoot = Split-Path -Parent $PSScriptRoot
 
-# ---- elevate
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
   Start-Process powershell.exe -Verb RunAs -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"")
   exit
 }
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
+. (Join-Path $PSScriptRoot 'HashslingerCommon.ps1')
 
-# ---- detect (best effort; every field can still be typed or fixed by hand)
-$domainName = ''; $domainDn = ''; $dcList = @(); $dcDefault = ''; $ouList = @(); $adNote = ''
-try {
-  Import-Module ActiveDirectory -ErrorAction Stop
-  $dom = Get-ADDomain
-  $domainName = $dom.DNSRoot; $domainDn = $dom.DistinguishedName
-  $dcList = @(Get-ADDomainController -Filter * | Select-Object -ExpandProperty HostName | Sort-Object)
-  try { $dcDefault = (Get-ADDomainController -Discover).HostName | Select-Object -First 1 } catch { }
-  $ouList = @($domainDn, "CN=Users,$domainDn") + @(Get-ADOrganizationalUnit -Filter * | Select-Object -ExpandProperty DistinguishedName | Sort-Object)
-} catch { $adNote = 'The Active Directory tools were not found yet. Setup will install them, then run this wizard again to pick OUs.' }
-$drives = @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | Sort-Object FreeSpace -Descending |
-  ForEach-Object { '{0}  ({1} GB free)' -f $_.DeviceID, [math]::Round($_.FreeSpace / 1GB) })
+# ---- detect (read-only)
+$ad = Get-HsAdScope
 $needDsOffline = -not (Get-Module -ListAvailable -Name DSInternals)
+$best = Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | Sort-Object FreeSpace -Descending | Select-Object -First 1
+$defaultRoot = if ($best) { Join-Path ($best.DeviceID + '\') 'Hashslinger' } else { 'C:\Hashslinger' }
 
 # ---- form
-$form = New-Object Windows.Forms.Form -Property @{ Text = 'Hashslinger setup'; Width = 760; Height = 960; MinimumSize = New-Object Drawing.Size(740, 800); StartPosition = 'CenterScreen'; Font = New-Object Drawing.Font('Segoe UI', 9) }
-function Lbl($text, $x, $y, $w = 660, $h = 20, $bold = $false) {
+$form = New-Object Windows.Forms.Form -Property @{ Text = 'Hashslinger setup'; Width = 920; Height = 960; MinimumSize = New-Object Drawing.Size(900, 700); StartPosition = 'CenterScreen'; AutoScroll = $true; Font = New-Object Drawing.Font('Segoe UI', 9) }
+function Lbl($text, $x, $y, $w = 860, $h = 20, $bold = $false) {
   $l = New-Object Windows.Forms.Label -Property @{ Text = $text; Left = $x; Top = $y; Width = $w; Height = $h }
   if ($bold) { $l.Font = New-Object Drawing.Font('Segoe UI', 10, [Drawing.FontStyle]::Bold) }
   $form.Controls.Add($l); $l
 }
-[void](Lbl 'Set up Hashslinger on this server' 15 10 660 26 $true)
-[void](Lbl ("This server: {0}   |   Domain: {1}" -f $env:COMPUTERNAME, $(if ($domainName) { $domainName } else { '(not detected)' })) 15 40)
+[void](Lbl 'Set up Hashslinger on this server' 15 8 860 26 $true)
+[void](Lbl ("This server: {0}   |   Domain: {1}" -f $env:COMPUTERNAME, $(if ($ad.Domain) { $ad.Domain } else { '(not detected)' })) 15 36)
 
-[void](Lbl '1. Domain controller to read from' 15 70)
-$cmbDc = New-Object Windows.Forms.ComboBox -Property @{ Left = 15; Top = 92; Width = 400; DropDownStyle = 'DropDown' }
-foreach ($d in $dcList) { [void]$cmbDc.Items.Add($d) }
-$cmbDc.Text = $dcDefault
-$form.Controls.Add($cmbDc)
+# 1. where
+[void](Lbl '1. Where should Hashslinger be installed? Pick the drive and folder.' 15 64 860 20 $true)
+$txtRoot = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 88; Width = 720; Text = $defaultRoot }
+$btnRoot = New-Object Windows.Forms.Button -Property @{ Text = 'Browse...'; Left = 745; Top = 86; Width = 120; Height = 26 }
+$lblPlan = Lbl '' 15 116 860 36
+$form.Controls.AddRange(@($txtRoot, $btnRoot))
 
-[void](Lbl '2. Drive for the data (needs about 60 GB if you use the HIBP list)' 15 126)
-$cmbDrive = New-Object Windows.Forms.ComboBox -Property @{ Left = 15; Top = 148; Width = 250; DropDownStyle = 'DropDownList' }
-foreach ($d in $drives) { [void]$cmbDrive.Items.Add($d) }
-if ($cmbDrive.Items.Count) { $cmbDrive.SelectedIndex = 0 }
-$form.Controls.Add($cmbDrive)
-[void](Lbl 'Service account (gMSA) name' 300 126 380)
-$txtGmsa = New-Object Windows.Forms.TextBox -Property @{ Left = 300; Top = 148; Width = 190; Text = 'svc-hashslinger' }
-$chkPre = New-Object Windows.Forms.CheckBox -Property @{ Text = 'Already created (has the rights)'; Left = 500; Top = 147; Width = 190 }
-$form.Controls.AddRange(@($txtGmsa, $chkPre))
+# 2. DC + service account
+[void](Lbl '2. Domain controller to read from' 15 160 380 20 $true)
+$cmbDc = New-Object Windows.Forms.ComboBox -Property @{ Left = 15; Top = 184; Width = 380; DropDownStyle = 'DropDown' }
+foreach ($d in $ad.DCs) { [void]$cmbDc.Items.Add($d) }
+$cmbDc.Text = $ad.DcDefault
+[void](Lbl 'Service account (gMSA) name' 420 160 300 20 $true)
+$txtGmsa = New-Object Windows.Forms.TextBox -Property @{ Left = 420; Top = 184; Width = 250; Text = 'svc-hashslinger' }
+$chkPre = New-Object Windows.Forms.CheckBox -Property @{ Text = 'Already created by a Domain Admin'; Left = 680; Top = 184; Width = 220 }
+$form.Controls.AddRange(@($cmbDc, $txtGmsa, $chkPre))
 
-[void](Lbl ('3. Which parts of the directory to scan (everything underneath is included). Type to search. ' + $adNote) 15 182 670 34)
-$txtSearch = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 216; Width = 400 }
-$lblSel = Lbl '' 425 219 160
-$btnClearSel = New-Object Windows.Forms.Button -Property @{ Text = 'Clear selection'; Left = 590; Top = 214; Width = 95; Height = 24 }
-$lst = New-Object Windows.Forms.CheckedListBox -Property @{ Left = 15; Top = 244; Width = 670; Height = 144; CheckOnClick = $true }
-$form.Controls.AddRange(@($txtSearch, $btnClearSel, $lst))
+# 3. scope tree
+[void](Lbl ('3. What should be scanned? Expand the tree, tick OUs (everything underneath is included). ' + $(if ($ad.Error) { 'AD could not be read: add DNs by hand below.' } else { '' })) 15 220 860 20 $true)
+New-HsOuPicker -Parent $form -X 15 -Y 246 -Width 850 -Height 400 -Dns $ad.Dns
 
-# The list can be filtered, so the ticked OUs live in $script:picked (not in the list control).
-$script:allOus = @($ouList)
-$script:picked = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
-$script:rebuilding = $false
-function Update-SelLabel { $lblSel.Text = '{0} selected | {1}/{2} shown' -f $script:picked.Count, $lst.Items.Count, $script:allOus.Count }
-function Refresh-OuList {
-  $script:rebuilding = $true
-  $lst.BeginUpdate()
-  $lst.Items.Clear()
-  $q = $txtSearch.Text.Trim()
-  foreach ($o in $script:allOus) {
-    if ($q -eq '' -or $o.IndexOf($q, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
-      $i = $lst.Items.Add($o)
-      if ($script:picked.Contains($o)) { $lst.SetItemChecked($i, $true) }
-    }
-  }
-  $lst.EndUpdate()
-  $script:rebuilding = $false
-  Update-SelLabel
-}
-$lst.Add_ItemCheck({
-  param($sender, $e)
-  if ($script:rebuilding) { return }
-  $dn = [string]$lst.Items[$e.Index]
-  if ($e.NewValue -eq [Windows.Forms.CheckState]::Checked) { [void]$script:picked.Add($dn) } else { [void]$script:picked.Remove($dn) }
-  Update-SelLabel
-})
-$txtSearch.Add_TextChanged({ Refresh-OuList })
-$btnClearSel.Add_Click({ $script:picked.Clear(); Refresh-OuList })
-Refresh-OuList
-
-[void](Lbl '4. Password lists (optional, you can add them later in the staging folder)' 15 400)
-$txtRock = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 424; Width = 560 }
-$btnRock = New-Object Windows.Forms.Button -Property @{ Text = 'rockyou...'; Left = 585; Top = 422; Width = 100 }
-$txtHibp = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 454; Width = 560 }
-$btnHibp = New-Object Windows.Forms.Button -Property @{ Text = 'HIBP...'; Left = 585; Top = 452; Width = 100 }
-$form.Controls.AddRange(@($txtRock, $btnRock, $txtHibp, $btnHibp))
-$btnRock.Add_Click({ $d = New-Object Windows.Forms.OpenFileDialog; if ($d.ShowDialog() -eq 'OK') { $txtRock.Text = $d.FileName } })
-$btnHibp.Add_Click({ $d = New-Object Windows.Forms.OpenFileDialog; if ($d.ShowDialog() -eq 'OK') { $txtHibp.Text = $d.FileName } })
-
-$txtDs = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 506; Width = 560; Visible = $needDsOffline }
-$btnDs = New-Object Windows.Forms.Button -Property @{ Text = 'Browse...'; Left = 585; Top = 504; Width = 100; Visible = $needDsOffline }
-$lblDs = Lbl 'DSInternals is not installed. If this server has no internet, pick a copied DSInternals module folder (otherwise leave blank).' 15 484 670 20
+# 4. optional wordlists
+[void](Lbl '4. Password lists (optional; you can add more later in the Admin tool)' 15 660 860 20 $true)
+$txtRock = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 684; Width = 720 }
+$btnRock = New-Object Windows.Forms.Button -Property @{ Text = 'rockyou...'; Left = 745; Top = 682; Width = 120; Height = 26 }
+$txtHibp = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 714; Width = 720 }
+$btnHibp = New-Object Windows.Forms.Button -Property @{ Text = 'HIBP...'; Left = 745; Top = 712; Width = 120; Height = 26 }
+$txtDs = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 774; Width = 720; Visible = $needDsOffline }
+$btnDs = New-Object Windows.Forms.Button -Property @{ Text = 'Browse...'; Left = 745; Top = 772; Width = 120; Height = 26; Visible = $needDsOffline }
+$lblDs = Lbl 'DSInternals is not installed. No internet here? Pick a copied DSInternals module folder (otherwise leave blank).' 15 748 860 20
 $lblDs.Visible = $needDsOffline
-$form.Controls.AddRange(@($txtDs, $btnDs))
-$btnDs.Add_Click({ $d = New-Object Windows.Forms.FolderBrowserDialog; if ($d.ShowDialog() -eq 'OK') { $txtDs.Text = $d.SelectedPath } })
+$form.Controls.AddRange(@($txtRock, $btnRock, $txtHibp, $btnHibp, $txtDs, $btnDs))
 
-$initFile = Join-Path $srcRoot 'hashslinger.init.json'
-$btnGo = New-Object Windows.Forms.Button -Property @{ Text = 'Install'; Left = 15; Top = 545; Width = 100; Height = 36 }
-$btnSummary = New-Object Windows.Forms.Button -Property @{ Text = 'Summary'; Left = 125; Top = 545; Width = 90; Height = 36; Enabled = $false }
-$btnHand = New-Object Windows.Forms.Button -Property @{ Text = 'Domain Admin hand-off'; Left = 225; Top = 545; Width = 170; Height = 36; Enabled = (Test-Path $initFile) }
-$btnFinish = New-Object Windows.Forms.Button -Property @{ Text = 'Finish (after DA)'; Left = 405; Top = 545; Width = 130; Height = 36; Enabled = (Test-Path $initFile) }
-$btnScan = New-Object Windows.Forms.Button -Property @{ Text = 'Run first scan'; Left = 545; Top = 545; Width = 140; Height = 36; Enabled = $false }
-$form.Controls.AddRange(@($btnGo, $btnSummary, $btnHand, $btnFinish, $btnScan))
-$lblResult = Lbl 'Ready. Pick the options above and click Install.' 15 590 670 24 $true
-$bar = New-Object Windows.Forms.ProgressBar -Property @{ Left = 15; Top = 616; Width = 540; Height = 16; Anchor = 'Top,Left,Right' }
-$btnLog = New-Object Windows.Forms.Button -Property @{ Text = 'Open full log'; Left = 565; Top = 612; Width = 120; Height = 24; Anchor = 'Top,Right' }
-$form.Controls.AddRange(@($bar, $btnLog))
-$btnLog.Add_Click({
-  $l = Get-ChildItem (Join-Path $env:SystemDrive 'Hashslinger') -Filter 'setup-*.log' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-  if ($l) { Start-Process notepad.exe $l.FullName } else { [void][Windows.Forms.MessageBox]::Show('No setup log yet. Click Install first.') }
-})
-$log = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 640; Width = 705; Height = 270; Multiline = $true; ReadOnly = $true; ScrollBars = 'Vertical'; WordWrap = $true; Anchor = 'Top,Bottom,Left,Right'; Font = New-Object Drawing.Font('Consolas', 9.5) }
-$form.Controls.Add($log)
+# actions
+$btnCheck = New-Object Windows.Forms.Button -Property @{ Text = '1. Check readiness'; Left = 15; Top = 812; Width = 150; Height = 36 }
+$btnGo = New-Object Windows.Forms.Button -Property @{ Text = '2. Install'; Left = 173; Top = 812; Width = 110; Height = 36 }
+$btnHand = New-Object Windows.Forms.Button -Property @{ Text = 'Domain Admin hand-off'; Left = 291; Top = 812; Width = 170; Height = 36; Enabled = $false }
+$btnFinish = New-Object Windows.Forms.Button -Property @{ Text = '3. Finish (after DA)'; Left = 469; Top = 812; Width = 150; Height = 36; Enabled = $false }
+$btnScan = New-Object Windows.Forms.Button -Property @{ Text = 'Run first scan'; Left = 627; Top = 812; Width = 120; Height = 36; Enabled = $false }
+$btnAdmin = New-Object Windows.Forms.Button -Property @{ Text = 'Open Admin tool'; Left = 755; Top = 812; Width = 110; Height = 36; Enabled = $false }
+$form.Controls.AddRange(@($btnCheck, $btnGo, $btnHand, $btnFinish, $btnScan, $btnAdmin))
+$lblResult = Lbl 'Ready. Choose the options above, then click Check readiness or Install.' 15 856 860 24 $true
+$bar = New-Object Windows.Forms.ProgressBar -Property @{ Left = 15; Top = 884; Width = 850; Height = 16 }
+$btnLog = New-Object Windows.Forms.Button -Property @{ Text = 'Open full log'; Left = 745; Top = 904; Width = 120; Height = 24 }
+$log = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 906; Width = 720; Height = 260; Multiline = $true; ReadOnly = $true; ScrollBars = 'Vertical'; WordWrap = $true; Font = New-Object Drawing.Font('Consolas', 9.5) }
+$form.Controls.AddRange(@($bar, $btnLog, $log))
 
-$script:summaryPath = $null
-$script:installRoot = Join-Path $env:SystemDrive 'Hashslinger'
 function Log([string]$m) { $log.AppendText($m + "`r`n") }
 function Pump { [Windows.Forms.Application]::DoEvents() }
-
-# Run Setup-Hashslinger as a child, streaming its output into the log box. Returns the exit code.
+function Resolve-Root([string]$text) {
+  $t = $text.Trim().TrimEnd('\')
+  if (-not $t) { return $null }
+  if ((Split-Path $t -Leaf) -eq 'Hashslinger') { return $t }
+  return (Join-Path $t 'Hashslinger')
+}
 $script:fails = @()
 function Fail-Text([string]$default) {
   if ($script:fails.Count) { $t = ($script:fails[0] -replace '^\[FAIL\]\s*', ''); if ($t.Length -gt 240) { $t = $t.Substring(0, 240) + '...' }; return $t }
   return $default
 }
-function Invoke-Setup([string]$initPath, [string]$phase) {
+
+function Update-Plan {
+  $r = Resolve-Root $txtRoot.Text
+  if (-not $r) { $lblPlan.Text = 'Pick a folder.'; return }
+  $drv = [IO.Path]::GetPathRoot($r)
+  try { $di = New-Object IO.DriveInfo($drv); $free = '{0:N0} GB free on {1}' -f ($di.AvailableFreeSpace / 1GB), $drv } catch { $free = "drive not found: $drv" }
+  $lblPlan.Text = "Will install to: $r   ($free)`r`nInside: app, config, data (store + wordlists), reports, logs, status, requests, handoff. Everything stays under this one folder."
+}
+
+function Load-Existing {
+  $r = Resolve-Root $txtRoot.Text
+  if (-not $r) { return }
+  $p = Join-Path $r 'config\hashslinger.json'
+  if (-not (Test-Path $p)) { return }
+  try {
+    $cfg = Read-HsConfig $p
+    if ($cfg['target_server']) { $cmbDc.Text = [string]$cfg['target_server'] }
+    $txtGmsa.Text = [string]$cfg['gmsa_name']; $chkPre.Checked = [bool]$cfg['gmsa_precreated']
+    Set-HsOuSelection @($cfg['target_ous'])
+    $txtRock.Text = [string]$cfg['wordlists']['rockyou']; $txtHibp.Text = [string]$cfg['wordlists']['hibp']
+    $btnHand.Enabled = $true; $btnFinish.Enabled = $true; $btnAdmin.Enabled = (Test-Path (Join-Path $r 'Hashslinger-Admin.cmd'))
+    Log "Loaded the existing settings from $p"
+  } catch { Log ('Could not read the existing settings: ' + $_.Exception.Message) }
+}
+
+function Save-Settings([string]$root) {
+  $cfgPath = Join-Path $root 'config\hashslinger.json'
+  $cfg = Read-HsConfig $cfgPath
+  $cfg['install_root'] = $root
+  $cfg['target_server'] = $cmbDc.Text.Trim()
+  $cfg['target_ous'] = @(Get-HsOuSelection)
+  $cfg['gmsa_name'] = $txtGmsa.Text.Trim()
+  $cfg['gmsa_precreated'] = [bool]$chkPre.Checked
+  $cfg['run_server'] = $env:COMPUTERNAME
+  $cfg['wordlists']['rockyou'] = $txtRock.Text.Trim()
+  $cfg['wordlists']['hibp'] = $txtHibp.Text.Trim()
+  $cfg['dsinternals_offline_path'] = $txtDs.Text.Trim()
+  Save-HsConfig $cfg $cfgPath
+  return $cfgPath
+}
+
+# Run Setup-Hashslinger as a child, streaming its output into the log box. Returns the exit code.
+function Invoke-Setup([string]$cfgPath, [string]$phase) {
   $script:fails = @()
   $psi = New-Object Diagnostics.ProcessStartInfo
   $psi.FileName = 'powershell.exe'
-  $a = "-NoProfile -ExecutionPolicy Bypass -File `"$PSScriptRoot\Setup-Hashslinger.ps1`" -InitConfig `"$initPath`" -Phase $phase"
-  $psi.Arguments = $a
+  $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSScriptRoot\Setup-Hashslinger.ps1`" -Config `"$cfgPath`" -Phase $phase"
   $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true; $psi.CreateNoWindow = $true
   $q = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]'
   $proc = New-Object Diagnostics.Process
@@ -169,78 +160,95 @@ function Invoke-Setup([string]$initPath, [string]$phase) {
   return $proc.ExitCode
 }
 
-$btnHand.Add_Click({ $h = Join-Path $script:installRoot 'AD-HANDOFF'; if (Test-Path $h) { Start-Process explorer.exe $h } else { [void][Windows.Forms.MessageBox]::Show('Click Install first. It creates the hand-off folder.') } })
-$btnFinish.Add_Click({
-  try {
-    $btnFinish.Enabled = $false; $bar.Style = 'Marquee'; $log.Clear()
-    $lblResult.ForeColor = [Drawing.Color]::Black; $lblResult.Text = 'Checking the Active Directory prerequisites and finishing...'
-    $rc = Invoke-Setup $initFile 'Finish'
-    $script:summaryPath = Join-Path $script:installRoot 'SETUP-SUMMARY.txt'; $btnSummary.Enabled = (Test-Path $script:summaryPath)
-    if ($rc -eq 0) { $lblResult.ForeColor = [Drawing.Color]::SeaGreen; $lblResult.Text = 'All done. You can run the first scan now.'; $btnScan.Enabled = $true }
-    else { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Not finished: ' + (Fail-Text 'see the log below.') }
+function Test-Inputs {
+  $root = Resolve-Root $txtRoot.Text
+  if (-not $root -or -not $cmbDc.Text.Trim() -or -not $txtGmsa.Text.Trim() -or @(Get-HsOuSelection).Count -eq 0) {
+    [void][Windows.Forms.MessageBox]::Show('Please choose an install folder, a domain controller, the service account name, and at least one thing to scan.')
+    return $null
   }
-  catch { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Error: ' + $_.Exception.Message; Log ('ERROR: ' + $_.Exception.Message) }
-  finally { $bar.Style = 'Continuous'; $btnFinish.Enabled = $true }
+  return $root
+}
+function Busy([bool]$on) {
+  foreach ($b in $btnCheck, $btnGo, $btnFinish) { $b.Enabled = -not $on }
+  $bar.Style = $(if ($on) { 'Marquee' } else { 'Continuous' })
+}
+
+$btnRoot.Add_Click({
+  $d = New-Object Windows.Forms.FolderBrowserDialog
+  $d.Description = 'Choose where Hashslinger should live. A folder named Hashslinger is created inside it.'
+  if ($d.ShowDialog() -eq 'OK') { $txtRoot.Text = Resolve-Root $d.SelectedPath; Update-Plan; Load-Existing }
 })
-$btnSummary.Add_Click({ if ($script:summaryPath -and (Test-Path $script:summaryPath)) { Start-Process notepad.exe $script:summaryPath } })
+$txtRoot.Add_TextChanged({ Update-Plan })
+$txtRoot.Add_Leave({ Load-Existing })
+$btnRock.Add_Click({ $d = New-Object Windows.Forms.OpenFileDialog; if ($d.ShowDialog() -eq 'OK') { $txtRock.Text = $d.FileName } })
+$btnHibp.Add_Click({ $d = New-Object Windows.Forms.OpenFileDialog; if ($d.ShowDialog() -eq 'OK') { $txtHibp.Text = $d.FileName } })
+$btnDs.Add_Click({ $d = New-Object Windows.Forms.FolderBrowserDialog; if ($d.ShowDialog() -eq 'OK') { $txtDs.Text = $d.SelectedPath } })
+$btnLog.Add_Click({
+  $r = Resolve-Root $txtRoot.Text
+  $l = if ($r) { Get-ChildItem (Join-Path $r 'logs') -Filter 'setup-*.log' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1 }
+  if ($l) { Start-Process notepad.exe $l.FullName } else { [void][Windows.Forms.MessageBox]::Show('No setup log yet.') }
+})
+$btnHand.Add_Click({ $r = Resolve-Root $txtRoot.Text; $h = Join-Path $r 'handoff'; if (Test-Path $h) { Start-Process explorer.exe $h } else { [void][Windows.Forms.MessageBox]::Show('Click Install first. It creates the hand-off folder.') } })
+$btnAdmin.Add_Click({ $r = Resolve-Root $txtRoot.Text; Start-Process (Join-Path $r 'Hashslinger-Admin.cmd') })
 $btnScan.Add_Click({
   try {
+    $r = Resolve-Root $txtRoot.Text
     Start-ScheduledTask -TaskName 'Hashslinger-Scheduled'
-    $cfg = Join-Path $script:installRoot 'config\hashslinger.json'
-    Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$(Join-Path $script:installRoot 'bin\powershell\Show-HashslingerProgress.ps1')`"", '-ConfigPath', "`"$cfg`"")
+    Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$(Join-Path $r 'app\powershell\Show-HashslingerProgress.ps1')`"", '-ConfigPath', "`"$(Join-Path $r 'config\hashslinger.json')`"")
   } catch { [void][Windows.Forms.MessageBox]::Show('Could not start the scan: ' + $_.Exception.Message) }
+})
+
+$btnCheck.Add_Click({
+  try {
+    $root = Test-Inputs; if (-not $root) { return }
+    Busy $true; $log.Clear(); $lblResult.ForeColor = [Drawing.Color]::Black; $lblResult.Text = 'Checking this server (nothing is changed)...'
+    $cfgPath = Save-Settings $root
+    $rc = Invoke-Setup $cfgPath 'Check'
+    if ($rc -eq 0) { $lblResult.ForeColor = [Drawing.Color]::SeaGreen; $lblResult.Text = 'Ready to install. No blocking problems found.' }
+    else { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Fix this first: ' + (Fail-Text 'see the log below.') }
+  }
+  catch { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Error: ' + $_.Exception.Message; Log ('ERROR: ' + $_.Exception.Message) }
+  finally { Busy $false }
 })
 
 $btnGo.Add_Click({
   try {
-    $dc = $cmbDc.Text.Trim()
-    $driveSel = [string]$cmbDrive.SelectedItem
-    $ous = @(); foreach ($d in $script:picked) { $ous += [string]$d }
-    if (-not $dc -or -not $driveSel -or $ous.Count -eq 0) { [void][Windows.Forms.MessageBox]::Show('Please choose a domain controller, a drive, and at least one scan location.'); return }
-    $btnGo.Enabled = $false; $bar.Style = 'Marquee'; $log.Clear()
-    $lblResult.ForeColor = [Drawing.Color]::Black; $lblResult.Text = 'Working...'
-
-    $drive = $driveSel.Substring(0, 2)
-    $script:installRoot = Join-Path $env:SystemDrive 'Hashslinger'
-    $dataRoot = Join-Path $drive 'Hashslinger'
-    $gmsaName = $txtGmsa.Text.Trim()
-    if (-not $gmsaName) { [void][Windows.Forms.MessageBox]::Show('Enter the service account (gMSA) name.'); return }
-    $init = [ordered]@{
-      install_root = $script:installRoot
-      paths = [ordered]@{ store = "$dataRoot\store"; staging = "$dataRoot\staging"; logs = "$dataRoot\logs"; output = "$dataRoot\output"; status = "$($script:installRoot)\status"; requests = "$($script:installRoot)\requests" }
-      ad = [ordered]@{ mode = 'live'; domain_controller = $dc; target_ous = @($ous); account_types = @('User', 'Service'); uac_exclude_flags = @('SMARTCARD_REQUIRED'); replication = 'bulk' }
-      scan = [ordered]@{ check_duplicates = $false; cadence = 'Weekly'; retention_days = 90; engine_timeout_seconds = 86400 }
-      security = [ordered]@{ gmsa_name = $gmsaName; gmsa_precreated = [bool]$chkPre.Checked; run_server = $env:COMPUTERNAME; analyst_group = ''; authorized_edipis = @(); require_encrypted_volume = $false }
-      wordlists = [ordered]@{ hibp = $txtHibp.Text.Trim(); rockyou = $txtRock.Text.Trim(); custom = '' }
-      dsinternals_offline_path = $txtDs.Text.Trim()
-      min_free_space_gb = @{ store = 60; output = 5 }
-    }
-    $initPath = Join-Path $srcRoot 'hashslinger.init.json'
-    $init | ConvertTo-Json -Depth 6 | Set-Content $initPath -Encoding UTF8
-    Log "Settings saved to $initPath"
-
-    # ---- install on this server, then write the hand-off for a Domain Admin (no AD changes anywhere)
-    $lblResult.Text = 'Installing on this server...'
-    $rc = Invoke-Setup $initPath 'Local'
-    $script:summaryPath = Join-Path $script:installRoot 'SETUP-SUMMARY.txt'
-    $btnSummary.Enabled = (Test-Path $script:summaryPath)
+    $root = Test-Inputs; if (-not $root) { return }
+    Busy $true; $log.Clear(); $lblResult.ForeColor = [Drawing.Color]::Black; $lblResult.Text = 'Installing on this server...'
+    $cfgPath = Save-Settings $root
+    $rc = Invoke-Setup $cfgPath 'Local'
     if ($rc -ne 0) { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'The install has a problem: ' + (Fail-Text 'see the log below.'); return }
+    $btnAdmin.Enabled = $true
     if ($chkPre.Checked) {
-      # the gMSA already exists: skip the Domain Admin hand-off and go straight to the read-only checks + local finish
       $lblResult.Text = 'Installed. Checking the existing service account and finishing...'
-      $rc = Invoke-Setup $initPath 'Finish'
-      $btnFinish.Enabled = $true
+      $rc = Invoke-Setup $cfgPath 'Finish'
       if ($rc -eq 0) { $lblResult.ForeColor = [Drawing.Color]::SeaGreen; $lblResult.Text = 'All done. You can run the first scan now.'; $btnScan.Enabled = $true }
       else { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Not finished: ' + (Fail-Text 'see the log below.') }
     } else {
-      [void](Invoke-Setup $initPath 'Handoff')
-      $btnHand.Enabled = $true; $btnFinish.Enabled = $true
+      [void](Invoke-Setup $cfgPath 'Handoff')
+      $btnHand.Enabled = $true
       $lblResult.ForeColor = [Drawing.Color]::SeaGreen
       $lblResult.Text = 'Installed. Next: give the hand-off folder to a Domain Admin, then click Finish.'
     }
+    $btnFinish.Enabled = $true
   }
   catch { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Error: ' + $_.Exception.Message; Log ('ERROR: ' + $_.Exception.Message) }
-  finally { $bar.Style = 'Continuous'; $btnGo.Enabled = $true }
+  finally { $bar.Style = 'Continuous'; $btnCheck.Enabled = $true; $btnGo.Enabled = $true }
 })
 
+$btnFinish.Add_Click({
+  try {
+    $root = Resolve-Root $txtRoot.Text
+    Busy $true; $log.Clear(); $lblResult.ForeColor = [Drawing.Color]::Black; $lblResult.Text = 'Checking the Active Directory prerequisites and finishing...'
+    $cfgPath = Save-Settings $root
+    $rc = Invoke-Setup $cfgPath 'Finish'
+    if ($rc -eq 0) { $lblResult.ForeColor = [Drawing.Color]::SeaGreen; $lblResult.Text = 'All done. You can run the first scan now.'; $btnScan.Enabled = $true; $btnAdmin.Enabled = $true }
+    else { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Not finished: ' + (Fail-Text 'see the log below.') }
+  }
+  catch { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Error: ' + $_.Exception.Message; Log ('ERROR: ' + $_.Exception.Message) }
+  finally { Busy $false }
+})
+
+Update-Plan
+Load-Existing
 [void]$form.ShowDialog()

@@ -45,60 +45,40 @@ Options (each needs your security / ISSO approval, none is applied by this tool)
 3. A native engine whose `Hashslinger.exe.config` opts only that process out of .NET FIPS enforcement
    (`enforceFIPSPolicy`). Not built; unverified with DSInternals' replication code.
 
-## Easy setup (recommended)
+## Setup and administration (two separate tools)
 
-Two roles, and **Hashslinger never creates or changes anything in Active Directory**:
+**One folder, one settings file.** You choose where Hashslinger lives (drive and folder, with a folder picker); everything
+is created inside it:
 
-- **Server operator** (local administrator on the scan server, NOT a Domain Admin):
-  1. Drop the Hashslinger folder on the scan server and double-click **Setup-Hashslinger.cmd**.
-  2. Pick the domain controller, the data drive, and the OUs to scan (optionally password list files).
-  3. Click **Install**. It installs locally and writes `<root>\AD-HANDOFF\` for the Domain Admin.
-- **Domain Admin** (once, by hand): follow `README-FOR-DOMAIN-ADMIN.txt` in that folder: a KDS root key, a
-  gMSA that only the scan server can use, and the two directory replication rights on the domain root.
-  `New-HashslingerGmsa.ps1` (in the same folder, copied from `ad-admin\`) does it with a `-WhatIf` preview, or do it in ADUC/ADSI Edit.
-- **Server operator again:** click **Finish**. It checks, read-only, that the AD pieces exist, then sets
-  folder permissions and the scheduled tasks on the server. Then **Run first scan**.
+```
+<your folder>\Hashslinger\
+  app\        the program and scripts
+  config\     hashslinger.json = the ONE settings file, pattern_rules.json
+  data\       store\ (the merged hash store) and staging\ (wordlists: HIBP, rockyou, custom)
+  reports\    the CSV from each scan
+  logs\       audit log, setup logs, SETUP-SUMMARY.txt
+  status\     live progress file
+  requests\   analyst request drop box (only if you use an analyst group)
+  handoff\    the package for the Domain Admin
+  Hashslinger-Admin.cmd   opens the Admin tool
+```
 
-**Existing gMSA:** if your Domain Admin already created the account, type its name in the wizard and tick
-"Already created" (or set `security.gmsa_name` and `security.gmsa_precreated: true` in the init config). Setup
-then skips the hand-off and runs the read-only checks and local finish straight away. It still verifies the
-account exists, that this server may retrieve its password, and that it has the two replication rights.
+**1. Setup wizard** (`Setup-Hashslinger.cmd`, double-click, local administrator is enough, no Domain Admin):
+pick the install folder, the domain controller, the service account name, and tick what to scan in a **nested tree that
+looks like AD** (search keeps the parents visible; ticking an OU includes everything underneath). *Check readiness*
+tells you in plain language what would fail; *Install* installs and writes the Domain Admin hand-off; *Finish* (after the
+Domain Admin has done their part) checks the AD prerequisites read-only, applies folder permissions, registers the tasks.
+Tick "Already created" if the service account already exists and the hand-off is skipped.
 
-The wizard and Finish step are untested (no Windows host available when written); report anything odd.
-The sections below describe the advanced, scriptable path (`-Phase Check|Local|Handoff|Finish|All`).
+**2. Admin tool** (`<folder>\Hashslinger-Admin.cmd`): change **any** setting, with an explanation under each one:
+where files live, the domain controller, mode, replication, account types, UAC flags, the nested scope tree, duplicate
+checking, schedule (day, time, how often), retention, timeouts, service account, analyst group, EDIPIs, BitLocker
+requirement. Also: add wordlists, merge them, start and watch scans, open the newest report, last-scan timings, readiness
+re-check, and a **support bundle** (settings and logs only, no hashes) you can send for help. A backup of the settings is
+kept on every save. Changes apply to the next scan.
 
-## Setup (advanced, scriptable)
-
-1. Drop the whole Hashslinger folder anywhere.
-2. Double-click `Setup-Hashslinger.cmd`. First run creates `hashslinger.init.json` from
-   `config/hashslinger.init.example.json` and opens it. Set the install root, **drives/paths** (store,
-   staging, logs, output, status, requests can each be on a different drive), DC, OUs, gMSA/analyst
-   group names, optional wordlist source files, and save.
-3. Run it again. `-Phase Local` (default) does everything except AD changes: folders, install to
-   `<root>\bin`, build the exe, DSInternals + AD tools, unblock, runtime config, then verifies (script
-   syntax parse, exe selftest, AD-free smoke test, DC and OU reachability) and prints a PASS/WARN/FAIL board.
-4. `-Phase Handoff` writes `<root>\AD-HANDOFF\` (a plain-language request plus the `ad-admin` scripts) for a
-   Domain Admin, who does the AD part by hand. Setup itself never creates or edits anything in AD.
-5. After the Domain Admin is done, `-Phase Finish` (on the scan server, local admin is enough): read-only
-   checks that the gMSA and its two replication rights exist, installs the gMSA locally, applies least-privilege
-   folder ACLs, and registers the scheduled and on-demand tasks. `-Phase Check` changes nothing.
-
-The setup log is `<root>\setup-<timestamp>.log` and `<root>\SETUP-SUMMARY.txt` lists every path and command.
-Handoff/Finish steps are untested against a live domain. If a scan request arrives while one is running it is
-logged as rejected, so resubmit when the viewer shows the run finished.
-
-**Replication rights only (for the Domain Admin):** `ad-admin\Grant-HashslingerReplicationRights.ps1 -GmsaName <name>` grants just the two
-rights on the domain root to an existing gMSA (idempotent, `-WhatIf` previews, verifies afterwards).
-
-**gMSA script (for the Domain Admin only):** `ad-admin\New-HashslingerGmsa.ps1` creates the gMSA
-(`-RunServer <scan server>` is required, `-WhatIf` previews, optional `-GrantReplicationRights`). Setup never
-runs it. Untested against a live domain.
-
-**Access model:** with `security.analyst_group` empty (the example default), only the gMSA, the local
-Administrators group on the scan server, and SYSTEM can read or write any Hashslinger folder or start the
-tasks. Set a group only if you want analysts to use the request GUI (it grants them: start the on-demand task,
-create-only requests, read output/status/config, modify staging). No group is ever given replication rights
-or access to the hash store or audit log.
+**Hashslinger never creates or changes anything in Active Directory.** The Domain Admin does the AD part once, by hand, from
+the `handoff` folder (the scripts live in `ad-admin\`).
 
 ## Build (no SDK, no install)
 
