@@ -109,7 +109,7 @@
   /* ---------- small screens ---------- */
   @media (max-width: 980px) {
     .layout { grid-template-columns:1fr; }
-    aside.side { position:static; height:auto; border-right:0; border-bottom:1px solid var(--line); padding-bottom:12px; }
+    aside.side { position:sticky; top:0; z-index:20; height:auto; max-height:100vh; overflow-y:auto; border-right:0; border-bottom:1px solid var(--line); padding-bottom:12px; }
     #menuBtn { display:inline-block; }
     .menu-wrap { display:none; }
     .menu-wrap.open { display:block; }
@@ -540,6 +540,14 @@ Hashslinger-Uninstall.cmd -RemoveAll -SecureWipe    everything</code></pre>
   // menu toggle on small screens
   $('#menuBtn').addEventListener('click', function () { $('#menuWrap').classList.toggle('open'); });
 
+  // scroll only the menu panel (never the page) so the active link stays visible
+  function keepInView(a) {
+    var side = $('aside.side');
+    if (window.innerWidth <= 980 || side.scrollHeight <= side.clientHeight) return;
+    var r = a.getBoundingClientRect(), s = side.getBoundingClientRect();
+    if (r.top < s.top + 60) side.scrollTop -= (s.top + 60 - r.top);
+    else if (r.bottom > s.bottom - 20) side.scrollTop += (r.bottom - s.bottom + 20);
+  }
   // highlight the section being read
   var links = $$('.menu a[href^="#"]'), map = {};
   links.forEach(function (a) { map[a.getAttribute('href').slice(1)] = a; });
@@ -550,7 +558,7 @@ Hashslinger-Uninstall.cmd -RemoveAll -SecureWipe    everything</code></pre>
         if (!e.isIntersecting) return;
         links.forEach(function (a) { a.classList.remove('on'); });
         var a = map[e.target.id];
-        if (a) { a.classList.add('on'); if (a.scrollIntoView && window.innerWidth > 980) a.scrollIntoView({ block: 'nearest' }); }
+        if (a) { a.classList.add('on'); keepInView(a); }
       });
     }, { rootMargin: '-8% 0px -82% 0px' });
     secs.forEach(function (s) { io.observe(s); });
