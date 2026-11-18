@@ -23,7 +23,7 @@ try {
   $ouList = @($domainDn, "CN=Users,$domainDn") + @(Get-ADOrganizationalUnit -Filter * | Select-Object -ExpandProperty DistinguishedName | Sort-Object)
 } catch { $adNote = 'Could not read AD (type DNs in the box below).' }
 
-$form = New-Object Windows.Forms.Form -Property @{ Text = 'Hashslinger'; Width = 700; Height = 640; StartPosition = 'CenterScreen' }
+$form = New-Object Windows.Forms.Form -Property @{ Text = 'Hashslinger'; Width = 700; Height = 700; StartPosition = 'CenterScreen' }
 function Add-Label($text, $x, $y, $w = 300) { $l = New-Object Windows.Forms.Label -Property @{ Text = $text; Left = $x; Top = $y; Width = $w }; $form.Controls.Add($l); $l }
 function Add-Text($x, $y, $w, $text = '') { $t = New-Object Windows.Forms.TextBox -Property @{ Left = $x; Top = $y; Width = $w; Text = $text }; $form.Controls.Add($t); $t }
 
@@ -51,12 +51,17 @@ $form.Controls.Add($chkDup)
 $btnStaging = New-Object Windows.Forms.Button -Property @{ Text = 'Open wordlist (staging) folder'; Left = 430; Top = 329; Width = 240 }
 $form.Controls.Add($btnStaging)
 
-$btnRun = New-Object Windows.Forms.Button -Property @{ Text = 'Set up and start scan'; Left = 15; Top = 372; Width = 200; Height = 32 }
+[void](Add-Label 'EDIPI (10 digits)' 15 368 150)
+$txtEdipi = Add-Text 15 388 150
+$txtEdipi.MaxLength = 10
+[void](Add-Label 'Reason for this scan / CTO number' 190 368 300)
+$txtReason = Add-Text 190 388 480
+$btnRun = New-Object Windows.Forms.Button -Property @{ Text = 'Set up and start scan'; Left = 15; Top = 424; Width = 200; Height = 32 }
 $form.Controls.Add($btnRun)
-$lblStage = Add-Label 'Ready.' 15 416 655
-$bar = New-Object Windows.Forms.ProgressBar -Property @{ Left = 15; Top = 440; Width = 655; Height = 18; Style = 'Continuous' }
+$lblStage = Add-Label 'Ready.' 15 468 655
+$bar = New-Object Windows.Forms.ProgressBar -Property @{ Left = 15; Top = 492; Width = 655; Height = 18; Style = 'Continuous' }
 $form.Controls.Add($bar)
-$log = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 466; Width = 655; Height = 125; Multiline = $true; ReadOnly = $true; ScrollBars = 'Vertical'; Font = New-Object Drawing.Font('Consolas', 9) }
+$log = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 518; Width = 655; Height = 110; Multiline = $true; ReadOnly = $true; ScrollBars = 'Vertical'; Font = New-Object Drawing.Font('Consolas', 9) }
 $form.Controls.Add($log)
 
 $script:statusPath = $null; $script:cfgPath = $null
@@ -73,6 +78,7 @@ $btnRun.Add_Click({
     foreach ($i in $lst.CheckedItems) { $ous += [string]$i }
     foreach ($l in ($txtExtra.Text -split "`r?`n")) { if ($l.Trim()) { $ous += $l.Trim() } }
     $ous = @($ous | Select-Object -Unique)
+    if ($txtEdipi.Text.Trim() -notmatch '^[0-9]{10}$' -or $txtReason.Text.Trim().Length -lt 10) { [void][Windows.Forms.MessageBox]::Show('Enter your 10-digit EDIPI and a reason / CTO number (at least 10 characters). They are written to the audit log.'); return }
     if (-not $server -or -not $w -or $ous.Count -eq 0) { [void][Windows.Forms.MessageBox]::Show('Enter a domain controller, a work folder, and at least one OU/DN.'); return }
 
     $btnRun.Enabled = $false; $bar.Style = 'Marquee'; $log.Clear()
@@ -115,7 +121,7 @@ $btnRun.Add_Click({
     $script:statusPath = "$w\status\status.json"
 
     Setup-Status 'Starting the scan (it keeps running if you close this window)'
-    Start-Process -FilePath $exe -ArgumentList '--config', "`"$($script:cfgPath)`"", 'scan' -WorkingDirectory $repo -WindowStyle Hidden
+    Start-Process -FilePath $exe -ArgumentList '--config', "`"$($script:cfgPath)`"", 'scan', '--edipi', $txtEdipi.Text.Trim(), '--reason', "`"$($txtReason.Text.Trim().Replace('"', "'"))`"" -WorkingDirectory $repo -WindowStyle Hidden
     $form.Close()
   }
   catch { $lblStage.Text = 'Error: ' + $_.Exception.Message; Log ('ERROR: ' + $_.Exception.Message); $btnRun.Enabled = $true }

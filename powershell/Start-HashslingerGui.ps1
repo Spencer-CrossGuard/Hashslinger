@@ -14,17 +14,17 @@ Add-Type -AssemblyName System.Windows.Forms
 $cfg = Get-Content $ConfigPath -Raw | ConvertFrom-Json
 $taskName = 'Hashslinger-OnDemand'
 
-$form = New-Object Windows.Forms.Form -Property @{ Text = 'Hashslinger'; Width = 520; Height = 350; FormBorderStyle = 'FixedDialog'; MaximizeBox = $false }
+$form = New-Object Windows.Forms.Form -Property @{ Text = 'Hashslinger: start a scan'; Width = 520; Height = 350; FormBorderStyle = 'FixedDialog'; MaximizeBox = $false }
 $ouLbl = New-Object Windows.Forms.Label -Property @{ Text = 'Organizational Unit'; Left = 15; Top = 15; Width = 200 }
 $ou = New-Object Windows.Forms.ComboBox -Property @{ Left = 15; Top = 38; Width = 470; DropDownStyle = 'DropDownList' }
 $cfg.target_ous | ForEach-Object { [void]$ou.Items.Add($_) }
 if ($ou.Items.Count) { $ou.SelectedIndex = 0 }
 $outLbl = New-Object Windows.Forms.Label -Property @{ Text = 'Output folder'; Left = 15; Top = 70; Width = 200 }
-$out = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 93; Width = 380; ReadOnly = $true }
+$out = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 93; Width = 380; ReadOnly = $true; Text = [string]$cfg.output_path }
 $browse = New-Object Windows.Forms.Button -Property @{ Text = 'Browse...'; Left = 405; Top = 91; Width = 80 }
 $edLbl = New-Object Windows.Forms.Label -Property @{ Text = 'EDIPI (10 digits)'; Left = 15; Top = 125; Width = 200 }
 $ed = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 146; Width = 150; MaxLength = 10 }
-$rsLbl = New-Object Windows.Forms.Label -Property @{ Text = 'Reason for this run (ticket / justification)'; Left = 15; Top = 178; Width = 300 }
+$rsLbl = New-Object Windows.Forms.Label -Property @{ Text = 'Reason for this scan / CTO number (at least 10 characters)'; Left = 15; Top = 178; Width = 420 }
 $rs = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 199; Width = 470; MaxLength = 500 }
 $run = New-Object Windows.Forms.Button -Property @{ Text = 'Run Scan'; Left = 15; Top = 240; Width = 120; Enabled = $false }
 $prog = New-Object Windows.Forms.Button -Property @{ Text = 'View progress'; Left = 15; Top = 275; Width = 120 }
@@ -47,8 +47,9 @@ $run.Add_Click({
     Start-ScheduledTask -TaskName $taskName
     $status.Text = 'Scan requested. Check the output folder and audit log for results.'
   } catch {
-    $status.Text = 'Could not start the scan. Contact the DCO lead.'
+    $status.Text = 'Could not start the scan: ' + $_.Exception.Message + ' (is the on-demand task enabled? Admin tool > Scan options)'
   }
 })
+Check
 $form.Controls.AddRange(@($ouLbl, $ou, $outLbl, $out, $browse, $edLbl, $ed, $rsLbl, $rs, $run, $prog, $status))
 [void]$form.ShowDialog()

@@ -57,7 +57,7 @@ New-HsOuPicker -Parent $form -X 15 -Y 246 -Width 850 -Height 300 -Dns $ad.Dns
 
 # 4. which tasks run scans (right-hand column)
 [void](Lbl '4. What runs the scans?' 885 220 270 20 $true)
-$chkSched = New-Object Windows.Forms.CheckBox -Property @{ Text = 'Scheduled scan'; Left = 885; Top = 246; Width = 270; Checked = $true }
+$chkSched = New-Object Windows.Forms.CheckBox -Property @{ Text = 'Scheduled scan (unattended)'; Left = 885; Top = 246; Width = 270; Checked = $true }
 [void](Lbl 'How often' 903 274 250 18)
 $cmbCad = New-Object Windows.Forms.ComboBox -Property @{ Left = 903; Top = 294; Width = 240; DropDownStyle = 'DropDownList' }
 [void]$cmbCad.Items.AddRange(@('Daily', 'Weekly', 'Monthly (every 4 weeks)')); $cmbCad.SelectedIndex = 1
@@ -66,10 +66,10 @@ $cmbDay = New-Object Windows.Forms.ComboBox -Property @{ Left = 903; Top = 344; 
 [void]$cmbDay.Items.AddRange(@('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')); $cmbDay.SelectedItem = 'Sunday'
 [void](Lbl 'Start time (24h, HH:mm)' 903 374 250 18)
 $txtTime = New-Object Windows.Forms.TextBox -Property @{ Left = 903; Top = 394; Width = 90; Text = '02:00' }
-$chkOnDemand = New-Object Windows.Forms.CheckBox -Property @{ Text = 'On-demand scans (analysts request them)'; Left = 885; Top = 434; Width = 280; Height = 36 }
+$chkOnDemand = New-Object Windows.Forms.CheckBox -Property @{ Text = 'Manual / on-demand scans (asks for EDIPI and a reason)'; Left = 885; Top = 434; Width = 280; Height = 36; Checked = $true }
 [void](Lbl 'Analyst group (optional)' 903 474 250 18)
 $txtAnalyst = New-Object Windows.Forms.TextBox -Property @{ Left = 903; Top = 494; Width = 240 }
-[void](Lbl 'Both can be on. Change these later in the Admin tool.' 885 526 280 34)
+[void](Lbl 'Anyone starting a scan by hand must give an EDIPI and a reason / CTO number; that path needs this task. Scheduled scans run on their own.' 885 526 280 64)
 $form.Controls.AddRange(@($chkSched, $cmbCad, $cmbDay, $txtTime, $chkOnDemand, $txtAnalyst))
 function Update-TaskControls {
   foreach ($c in $cmbCad, $txtTime) { $c.Enabled = $chkSched.Checked }
@@ -211,15 +211,16 @@ function Test-Inputs {
 }
 function Show-NextSteps {
   Log ''
-  Log '==== SETUP FINISHED. The first scan is NOT started from here, so it runs exactly like every later scan. ===='
-  if ($chkSched.Checked) {
-    Log 'To run the first scan now: open Task Scheduler, find Hashslinger-Scheduled, right-click it and choose Run.'
-    Log '  (or in an elevated PowerShell: Start-ScheduledTask -TaskName Hashslinger-Scheduled)'
-    Log 'Watch it: Admin tool > Run and logs > Watch progress. It then repeats on the schedule you chose.'
-  }
+  Log '==== SETUP FINISHED. No scan was started from here, so the first scan runs exactly like every later one. ===='
   if ($chkOnDemand.Checked) {
-    Log 'On-demand: analysts open app\powershell\Start-HashslingerGui.ps1 (they enter their EDIPI and a reason). It starts the Hashslinger-OnDemand task.'
+    Log 'FIRST SCAN: open the Admin tool (Hashslinger-Admin.cmd) > Run and logs > Start a scan now.'
+    Log '  It asks for your EDIPI and the reason / CTO number (both are written to the audit log), then runs the scan as the service account.'
+    Log '  Analysts use the same window: app\powershell\Start-HashslingerGui.ps1.'
+    Log 'Watch it: Admin tool > Run and logs > Watch progress.'
+  } else {
+    Log 'Manual scans are turned off, so nobody can start a scan by hand with an EDIPI and reason. Turn on "On-demand scans" in the Admin tool (Scan options) and click Re-apply.'
   }
+  if ($chkSched.Checked) { Log 'The scheduled scan (task Hashslinger-Scheduled) runs on its own on the schedule you chose. It is logged as scheduled, with no person.' }
 }
 function Busy([bool]$on) {
   foreach ($b in $btnCheck, $btnGo, $btnFinish) { $b.Enabled = -not $on }

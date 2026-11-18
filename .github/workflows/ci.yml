@@ -30,7 +30,7 @@ jobs:
           Set-Content "$t\staging\custom\c.txt" 'SharedSecretXyz!9'
           .\Hashslinger.exe --config "$t\config\test.json" merge
           if ($LASTEXITCODE) { throw "merge failed" }
-          .\Hashslinger.exe --config "$t\config\test.json" scan
+          .\Hashslinger.exe --config "$t\config\test.json" scan --scheduled
           if ($LASTEXITCODE) { throw "scan failed" }
           Get-Content "$t\output\*.csv"
           Get-Content "$t\logs\audit.jsonl"

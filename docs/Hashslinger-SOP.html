@@ -242,7 +242,7 @@ Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
     <li>Pick the install folder, the DC and the service account name. Tick the scope in the tree: ticking an OU includes everything below it, and search keeps parents visible. Optional: rockyou and HIBP files, an offline DSInternals folder.</li>
     <li>Choose how scans run (step 4 in the wizard): a scheduled scan (how often, day, start time), on-demand scans for analysts (optional analyst group), or both.</li>
     <li>Click <b>Check readiness</b> (changes nothing), then <b>Install</b>. Install is the local install followed by the service account checks.</li>
-    <li>Setup does <b>not</b> start a scan. Run the first one the same way every scan runs: Task Scheduler, <code>Hashslinger-Scheduled</code>, Run (or <code>Start-ScheduledTask Hashslinger-Scheduled</code>). Watch it in Admin tool, Run and logs, Watch progress.</li>
+    <li>Setup does <b>not</b> start a scan. Run the first one like every manual scan: Admin tool, Run and logs, <b>Start a scan now</b>. It asks for your EDIPI and a reason or CTO number, then runs the scan as the service account. Watch it with Watch progress.</li>
   </ol>
   <h3>Setup phases</h3>
   <p>The wizard runs these; you can run them yourself: <code>Setup-Hashslinger.cmd -Phase Check|Local|Finish|All -Config &lt;folder&gt;\config\hashslinger.json [-WhatIf]</code></p>
@@ -309,11 +309,12 @@ Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
       <tr><td class="k">Scan options</td><td>Duplicate checking, cadence, day and time (offers to update the scheduled task), retention days, scan timeout.</td></tr>
       <tr><td class="k">Security and accounts</td><td>Service account name, scan server, analyst group, EDIPI allowlist, BitLocker requirement, offline module folder, <b>Re-apply permissions and scheduled tasks</b> (runs Finish), open extras.</td></tr>
       <tr><td class="k">Wordlists</td><td>Add files (copied into the right folder), counts and sizes, merge now, store size.</td></tr>
-      <tr><td class="k">Run and logs</td><td>Start a scan, watch progress, open the newest report, the reports folder, the audit log, re-run readiness checks, self-test, support bundle (settings and logs only), this SOP, last scan with time per stage.</td></tr>
+      <tr><td class="k">Run and logs</td><td>Start a scan (asks for your EDIPI and a reason or CTO number), watch progress, open the newest report, the reports folder, the audit log, re-run readiness checks, self-test, support bundle (settings and logs only), this SOP, last scan with time per stage.</td></tr>
     </tbody>
   </table></div>
   <h3>Command line</h3>
-<pre><code>Hashslinger.exe --config &lt;json&gt; scan [--ou &lt;dn&gt;] [--output-dir &lt;dir&gt;] [--trigger &lt;t&gt;] [--request &lt;file&gt; | --request-dir &lt;dir&gt;]
+<pre><code>Hashslinger.exe --config &lt;json&gt; scan [--ou &lt;dn&gt;] [--output-dir &lt;dir&gt;] [--trigger &lt;t&gt;] [--request &lt;file&gt; | --request-dir &lt;dir&gt;] [--scheduled] [--edipi &lt;10 digits&gt; --reason &lt;text&gt;]
+Run by a person at a console, scan asks for the EDIPI and a reason or CTO number (or takes --edipi and --reason). --scheduled is only for the unattended task.
 Hashslinger.exe --config &lt;json&gt; merge             merge new staging files into the store now
 Hashslinger.exe --config &lt;json&gt; info              store record count
 Hashslinger.exe selftest                          built-in checks (includes the AD-read-only and no-network scan of the scripts)
@@ -324,8 +325,8 @@ Exit codes: 0 ok, 1 usage, 2 failed (also logged)</code></pre>
     <thead><tr><th>Script</th><th>Does</th></tr></thead>
     <tbody>
       <tr><td class="k">Show-HashslingerProgress.ps1</td><td>Read-only live progress window from <code>status.json</code> (stage, detail, accounts, heartbeat). Works for any user with read access, independent of who started the scan.</td></tr>
-      <tr><td class="k">Start-HashslingerGui.ps1</td><td>Optional analyst request window. EDIPI and reason go into a request file; the on-demand task (as the service account) validates and runs it, and logs the EDIPI, reason and the account that created the file.</td></tr>
-      <tr><td class="k">Start-HashslingerRun.ps1</td><td>Runs a scan as YOUR account (needs replication rights). Dev and lab use.</td></tr>
+      <tr><td class="k">Start-HashslingerGui.ps1</td><td>The scan request window, used by analysts and admins alike. It asks for the EDIPI and the reason or CTO number; both go into a request file; the on-demand task (as the service account) validates and runs it, and logs the EDIPI, reason and the account that created the file.</td></tr>
+      <tr><td class="k">Start-HashslingerRun.ps1</td><td>Runs a scan as YOUR account (needs replication rights). Dev and lab use. Asks for the EDIPI and reason too.</td></tr>
       <tr><td class="k">Uninstall-Hashslinger.ps1</td><td>See section 13.</td></tr>
     </tbody>
   </table></div>
@@ -349,7 +350,7 @@ Exit codes: 0 ok, 1 usage, 2 failed (also logged)</code></pre>
       <tr><td class="k">uac.exclude_flags</td><td>SMARTCARD_REQUIRED</td><td>Skip accounts with ANY of these userAccountControl flags (names or numbers).</td></tr>
       <tr><td class="k">uac.require_flags</td><td>none</td><td>Accounts must have ALL of these.</td></tr>
       <tr><td class="k">check_duplicates</td><td>false</td><td>Flag shared passwords (Medium). Can add many rows on a large directory.</td></tr>
-      <tr><td class="k">enable_scheduled, enable_ondemand</td><td>true, false</td><td>Which scan tasks exist. <code>Hashslinger-Scheduled</code> runs on the schedule; <code>Hashslinger-OnDemand</code> is started by analyst requests. Both can be on. Applied by the Finish step (the Admin tool offers to run it).</td></tr>
+      <tr><td class="k">enable_scheduled, enable_ondemand</td><td>true, true</td><td>Which scan tasks exist. <code>Hashslinger-Scheduled</code> runs unattended on the schedule (logged as scheduled, no person). <code>Hashslinger-OnDemand</code> is how every scan started by a person runs, with an EDIPI and a reason. Applied by the Finish step (the Admin tool offers to run it).</td></tr>
       <tr><td class="k">cadence, schedule_day, schedule_time</td><td>Weekly, Sunday, 02:00</td><td>Daily, Weekly or Monthly (every 4 weeks). Daily ignores the day.</td></tr>
       <tr><td class="k">retention_days</td><td>90</td><td>Reports older than this are securely deleted after each scan. 0 keeps everything.</td></tr>
       <tr><td class="k">engine_timeout_seconds</td><td>86400</td><td>A scan running longer is stopped and logged as failed.</td></tr>
@@ -417,7 +418,7 @@ Exit codes: 0 ok, 1 usage, 2 failed (also logged)</code></pre>
   <div class="tw"><table>
     <thead><tr><th>File</th><th>Contents</th></tr></thead>
     <tbody>
-      <tr><td class="k">logs\audit.jsonl</td><td>One JSON object per line. <code>start</code>: run_id, time, trigger, run_as, host, requested_by, edipi, reason, scope. <code>end</code>: run_id, time, status, accounts_processed, output, wipe_confirmed, error, timings_ms (stage1 to stage7). <code>rejected</code>: a refused request or a second concurrent scan, with why.</td></tr>
+      <tr><td class="k">logs\audit.jsonl</td><td>One JSON object per line. <code>start</code>: run_id, time, trigger, run_as, host, requested_by, edipi, reason, scope. <code>trigger</code> is <code>scheduled</code> (unattended, no person), <code>on-demand</code> (request window) or <code>manual</code> (a person ran the exe at a console). <code>end</code>: run_id, time, status, accounts_processed, output, wipe_confirmed, error, timings_ms (stage1 to stage7). <code>rejected</code>: a refused request or a second concurrent scan, with why.</td></tr>
       <tr><td class="k">status\status.json</td><td>Live: state (running, success, failed), run_id, stage, message, detail, accounts_received, run_as, requested_by, host, scope, output, error. Rewritten about every 5 seconds while running (heartbeat).</td></tr>
       <tr><td class="k">logs\setup-*.log, SETUP-SUMMARY.txt</td><td>Transcript and summary of each setup run.</td></tr>
       <tr><td class="k">config\hashslinger.json.bak-*</td><td>Previous settings, last 10 kept.</td></tr>

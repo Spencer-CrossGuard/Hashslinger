@@ -6,7 +6,7 @@
    `C:\HashslingerTest\`, and `config\test.example.json` -> `C:\HashslingerTest\config\test.json`.
 4. Put `password` on its own line in `staging\rockyou\r.txt`, and `SharedSecretXyz!9` in `staging\custom\c.txt`.
 5. `Hashslinger.exe --config C:\HashslingerTest\config\test.json merge`  (expect 2 files merged)
-6. `Hashslinger.exe --config C:\HashslingerTest\config\test.json scan`
+6. `Hashslinger.exe --config C:\HashslingerTest\config\test.json scan --scheduled`
 7. Check `output\report_<date>.csv`. Expected 6 flagged rows: alice (rockyou, High), carol (pattern),
    dave and erin (custom + duplicate), frank (No password set), gina (reversible + LM). bob is absent.
    No hash values anywhere in the file.

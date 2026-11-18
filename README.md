@@ -118,7 +118,8 @@ pipeline with a fake account source, audit logging, wipe, and request validation
 
 ```
 Hashslinger.exe --config hashslinger.json merge     # merge staging/<HIBP|rockyou|custom>/* into the store
-Hashslinger.exe --config hashslinger.json scan      # all configured OUs, one replication pass
+Hashslinger.exe --config hashslinger.json scan      # asks for an EDIPI and a reason / CTO number, then scans all configured OUs
+Hashslinger.exe --config hashslinger.json scan --scheduled   # unattended (what the scheduled task runs): no prompt, logged as scheduled
 Hashslinger.exe --config hashslinger.json scan --ou "OU=Finance,DC=contoso,DC=com"
 ```
 

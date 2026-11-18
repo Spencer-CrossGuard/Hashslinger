@@ -33,6 +33,45 @@ namespace Hashslinger
 
     public static class Request
     {
+        /// <summary>Every scan started by a person needs a 10-digit EDIPI (on the allowed list, if one is set) and a
+        /// reason or CTO number of 10 to 500 characters. Both go into the audit log.</summary>
+        public static void CheckPerson(Config cfg, string edipi, string reason, string by)
+        {
+            edipi = (edipi ?? "").Trim();
+            reason = (reason ?? "").Trim();
+            if (!Regex.IsMatch(edipi, "^[0-9]{10}$"))
+                throw new RequestException("EDIPI must be exactly 10 digits", edipi, reason, by);
+            if (cfg.AuthorizedEdipis.Count > 0 && !cfg.AuthorizedEdipis.Contains(edipi))
+                throw new RequestException("EDIPI is not authorized to request scans", edipi, reason, by);
+            if (reason.Length < 10 || reason.Length > 500)
+                throw new RequestException("a reason or CTO number of 10 to 500 characters is required", edipi, reason, by);
+        }
+
+        /// <summary>Ask the person at the console for their EDIPI and the reason / CTO number (three tries).
+        /// Values already supplied on the command line are checked, not asked for again.</summary>
+        public static void AskPerson(Config cfg, ref string edipi, ref string reason, bool interactive, string who)
+        {
+            if (!interactive)
+            {
+                CheckPerson(cfg, edipi, reason, who);
+                return;
+            }
+            Console.WriteLine("This scan is attributed to a person and logged. Windows account: " + who);
+            for (int tries = 0; ; tries++)
+            {
+                if (string.IsNullOrEmpty(edipi)) { Console.Write("EDIPI (10 digits): "); edipi = (Console.ReadLine() ?? "").Trim(); }
+                if (string.IsNullOrEmpty(reason)) { Console.Write("Reason for this scan / CTO number: "); reason = (Console.ReadLine() ?? "").Trim(); }
+                try { CheckPerson(cfg, edipi, reason, who); return; }
+                catch (RequestException e)
+                {
+                    if (tries >= 2) throw;
+                    Console.WriteLine("  " + e.Message);
+                    edipi = null;
+                    reason = null;
+                }
+            }
+        }
+
         /// <summary>Validate an analyst request. Only config-listed OUs and allowed output roots are accepted;
         /// an EDIPI (10 digits) and a reason (10-500 chars) are mandatory and end up in the audit log.</summary>
         public static ScanRequest Load(Config cfg, string path)
@@ -41,13 +80,7 @@ namespace Hashslinger
             string edipi = Json.Str(req, "edipi", "").Trim();
             string reason = Json.Str(req, "reason", "").Trim();
             string by = Json.Str(req, "requested_by", null);
-
-            if (!Regex.IsMatch(edipi, "^[0-9]{10}$"))
-                throw new RequestException("EDIPI must be exactly 10 digits", edipi, reason, by);
-            if (cfg.AuthorizedEdipis.Count > 0 && !cfg.AuthorizedEdipis.Contains(edipi))
-                throw new RequestException("EDIPI is not authorized to request scans", edipi, reason, by);
-            if (reason.Length < 10 || reason.Length > 500)
-                throw new RequestException("a reason of 10 to 500 characters is required", edipi, reason, by);
+            CheckPerson(cfg, edipi, reason, by);
             string ou = Json.Str(req, "ou", "");
             if (!cfg.TargetOus.Contains(ou))
                 throw new RequestException("requested OU is not in the configured list", edipi, reason, by);

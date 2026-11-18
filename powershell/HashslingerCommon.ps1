@@ -26,7 +26,7 @@ function Get-HsDefaultConfig([string]$Root) {
     system_hive_path = ''
     check_duplicates = $false
     enable_scheduled = $true
-    enable_ondemand = $false
+    enable_ondemand = $true
     cadence = 'Weekly'
     schedule_day = 'Sunday'
     schedule_time = '02:00'

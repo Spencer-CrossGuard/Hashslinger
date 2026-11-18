@@ -12,7 +12,10 @@ namespace Hashslinger
             "  bench [accounts] [storeRecords]       time the C# side at scale with synthetic data (no AD)\n" +
             "  --config <file> merge                 merge staging/<HIBP|rockyou|custom>/* into the hash store\n" +
             "  --config <file> info                  show hash store record count\n" +
-            "  --config <file> scan [--ou <dn>] [--output-dir <dir>] [--trigger <t>] [--request <file> | --request-dir <dir>]\n";
+            "  --config <file> scan [--ou <dn>] [--output-dir <dir>] [--trigger <t>] [--request <file> | --request-dir <dir>]\n" +
+            "                                        [--scheduled] [--edipi <10 digits> --reason <text>]\n" +
+            "      A scan started by a person asks for an EDIPI and a reason / CTO number (or take them from --edipi/--reason).\n" +
+            "      --scheduled is for the unattended scheduled task only: no person, logged as scheduled.\n";
 
         public static int Main(string[] args)
         {
@@ -50,11 +53,16 @@ namespace Hashslinger
             if (cmd != "scan") { Console.Error.Write(Usage); return 1; }
 
             string ou = null, outDir = null, trigger = "scheduled", requestFile = null, requestDir = null;
+            string edipiArg = null, reasonArg = null;
+            bool scheduledFlag = false;
             for (int i = 3; i < args.Length; i++)
             {
-                if (i + 1 >= args.Length) { Console.Error.Write(Usage); return 1; }
                 string a = args[i];
-                if (a == "--ou") ou = args[++i];
+                if (a == "--scheduled") { scheduledFlag = true; continue; }
+                if (i + 1 >= args.Length) { Console.Error.Write(Usage); return 1; }
+                if (a == "--edipi") edipiArg = args[++i];
+                else if (a == "--reason") reasonArg = args[++i];
+                else if (a == "--ou") ou = args[++i];
                 else if (a == "--output-dir") outDir = args[++i];
                 else if (a == "--trigger") trigger = args[++i];
                 else if (a == "--request") requestFile = args[++i];
@@ -99,6 +107,25 @@ namespace Hashslinger
                 outDir = rq.OutputDir;
                 trigger = "on-demand";
                 by = (rq.RequestedBy ?? "(not given)") + " | request file created by: " + (rq.FileOwner ?? "unknown"); edipi = rq.Edipi; reason = rq.Reason;
+            }
+
+            if (requestFile == null)
+            {
+                // a person at the console (or passing --edipi/--reason) must identify themselves; the unattended
+                // scheduled task (--scheduled, or any non-interactive start) is logged as scheduled with no person
+                bool interactive = Environment.UserInteractive && !Console.IsInputRedirected;
+                if (edipiArg != null || reasonArg != null || (!scheduledFlag && interactive))
+                {
+                    string who = Environment.UserDomainName + "\\" + Environment.UserName;
+                    try { Request.AskPerson(cfg, ref edipiArg, ref reasonArg, interactive, who); }
+                    catch (RequestException e)
+                    {
+                        new AuditLog(cfg.LogPath).Rejected(e.Message, e.Edipi, e.Reason, who);
+                        Console.Error.WriteLine("scan not started: " + e.Message);
+                        return 2;
+                    }
+                    edipi = edipiArg; reason = reasonArg; by = who; trigger = "manual";
+                }
             }
 
             try

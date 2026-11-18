@@ -243,7 +243,7 @@ function Do-Verify {
     engine_command = @('powershell.exe', '-NoProfile', '-File', "$($Dir.bin)\powershell\Fake-Engine.ps1", '-SearchBases', '{ous}')
   }
   $vc | ConvertTo-Json -Depth 5 | Set-Content "$v\verify.json" -Encoding UTF8
-  $so = & $exe --config "$v\verify.json" scan 2>&1
+  $so = & $exe --config "$v\verify.json" scan --scheduled 2>&1
   $csv = Get-ChildItem "$v\output\*.csv" -ErrorAction SilentlyContinue | Select-Object -First 1
   if ($LASTEXITCODE -ne 0 -or -not $csv) { Result 'Smoke test (fake engine)' 'FAIL' (($so | Out-String).Trim() + '  (blocked script policy? run Unblock-File on the bin folder)') }
   else {
@@ -408,7 +408,7 @@ function Do-Finish {
   $day = Opt 'schedule_day' 'Sunday'
   $at = [datetime]::ParseExact([string](Opt 'schedule_time' '02:00'), 'HH:mm', $null)
   $enableSched = [bool](Opt 'enable_scheduled' $true)
-  $enableOnDemand = [bool](Opt 'enable_ondemand' ([bool]$analystGroup))
+  $enableOnDemand = [bool](Opt 'enable_ondemand' $true)
   $trigger = switch ($cadence) {
     'Daily'   { New-ScheduledTaskTrigger -Daily -At $at }
     'Monthly' { New-ScheduledTaskTrigger -Weekly -WeeksInterval 4 -DaysOfWeek $day -At $at }
@@ -418,7 +418,7 @@ function Do-Finish {
   if ($PSCmdlet.ShouldProcess('Hashslinger tasks', 'Register')) {
     if ($enableSched) {
       Register-ScheduledTask -TaskName 'Hashslinger-Scheduled' -Force -Principal $principal -Settings $settings -Trigger $trigger `
-        -Action (New-ScheduledTaskAction -Execute $exe -Argument "--config `"$runtimeCfg`" scan" -WorkingDirectory $Dir.bin) | Out-Null
+        -Action (New-ScheduledTaskAction -Execute $exe -Argument "--config `"$runtimeCfg`" scan --scheduled" -WorkingDirectory $Dir.bin) | Out-Null
       Result 'Scheduled scan task registered' 'PASS' "Hashslinger-Scheduled, $when, as $gmsaSam"
     } else {
       if (Get-ScheduledTask -TaskName 'Hashslinger-Scheduled' -ErrorAction SilentlyContinue) { Unregister-ScheduledTask -TaskName 'Hashslinger-Scheduled' -Confirm:$false }
