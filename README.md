@@ -73,6 +73,9 @@ hand-off package. *Install* installs locally and then runs the **service account
 account exists, only this server may use it, it is not in a privileged group, it has the two replication rights on the
 domain root, then folder permissions, scheduled tasks, and a live replication test AS the account). If a check fails, fix it
 and click *Re-run service account checks*.
+In the wizard you also choose what runs scans: a **scheduled scan** (daily, weekly or monthly, day and start time), **manual / on-demand scans**
+(every scan started by a person asks for an EDIPI and a reason / CTO number), or both. Setup does not start a scan: run the first one from
+the Admin tool (*Run and logs*, *Start a scan now*), exactly like every later manual scan.
 
 **2. Admin tool** (`<folder>\Hashslinger-Admin.cmd`): change **any** setting, with an explanation under each one:
 where files live, the domain controller, mode, replication, account types, UAC flags, the nested scope tree, duplicate

@@ -397,7 +397,7 @@ $btnSave.Add_Click({
     if (@(Get-HsOuSelection).Count -eq 0) { $errs += 'Pick at least one thing to scan (Active Directory tab).' }
     if (-not (Get-Field 'enable_scheduled') -and -not (Get-Field 'enable_ondemand')) { $errs += 'Turn on at least one of: scheduled scan, on-demand scans (Scan options tab).' }
     if ((Get-Field 'account_types').Count -eq 0) { $errs += 'Tick at least one account type.' }
-    try { [void][datetime]::ParseExact((Get-Field 'schedule_time'), 'HH:mm', $null) } catch { $errs += 'Start time must look like 02:00.' }
+    if (Get-Field 'enable_scheduled') { try { [void][datetime]::ParseExact((Get-Field 'schedule_time'), 'HH:mm', $null) } catch { $errs += 'Start time must look like 02:00.' } }
     if ($errs.Count) { Msg ("Not saved:`r`n`r`n - " + ($errs -join "`r`n - ")); return }
 
     $old = Read-HsConfig $ConfigPath
