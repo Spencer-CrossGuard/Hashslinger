@@ -123,6 +123,9 @@ Start-Transcript -Path $transcript | Out-Null
 
 # ---------------------------------------------------------------- phase: Local
 function Do-Local {
+  if (Get-Process -Name Hashslinger -ErrorAction SilentlyContinue) {
+    Result 'No scan is running' 'FAIL' 'a scan is running (Hashslinger.exe). Wait for it or stop it, then run setup again.'; return
+  }
   Step 'Folders'
   foreach ($d in $Dir.bin, $Dir.config, $Dir.store, $Dir.staging, "$($Dir.staging)\HIBP", "$($Dir.staging)\rockyou", "$($Dir.staging)\custom", $Dir.logs, $Dir.output, $Dir.status, $Dir.requests, "$($Dir.root)\extras") {
     New-Item -ItemType Directory -Force $d | Out-Null
@@ -140,6 +143,13 @@ function Do-Local {
     Result 'Build exe' 'PASS' 'built with in-box csc.exe'
   } else { Result 'Build exe' 'SKIP' 'Hashslinger.exe already present' }
   if ((Resolve-Path $srcRoot).Path -ne (Resolve-Path $Dir.bin).Path) {
+    if (Test-Path "$($Dir.bin)\Hashslinger.exe") {
+      $bk = "$($Dir.root)\app-backups\app-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+      New-Item -ItemType Directory -Force $bk | Out-Null
+      Copy-Item "$($Dir.bin)\*" $bk -Recurse -Force
+      Get-ChildItem "$($Dir.root)\app-backups" -Directory | Sort-Object Name -Descending | Select-Object -Skip 3 | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      Result 'Previous app files backed up' 'PASS' $bk
+    }
     Copy-Item $srcExe $Dir.bin -Force
     New-Item -ItemType Directory -Force "$($Dir.bin)\powershell", "$($Dir.bin)\config", "$($Dir.bin)\docs" | Out-Null
     Copy-Item "$srcRoot\extras\*" "$($Dir.root)\extras" -Force -ErrorAction SilentlyContinue   # optional gMSA helper scripts
@@ -155,6 +165,12 @@ rem Hashslinger Admin: change any setting, run scans, manage wordlists.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0app\powershell\Hashslinger-Admin.ps1" -ConfigPath "%~dp0config\hashslinger.json"
 '@ -Encoding ASCII
   Result 'Admin tool shortcut' 'PASS' (Join-Path $Dir.root 'Hashslinger-Admin.cmd')
+  Set-Content (Join-Path $Dir.root 'Hashslinger-Uninstall.cmd') @'
+@echo off
+rem Hashslinger uninstall. No switches = remove scheduled tasks only (files stay). See the SOP for the switches.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0app\powershell\Uninstall-Hashslinger.ps1" -Config "%~dp0config\hashslinger.json" %*
+pause
+'@ -Encoding ASCII
   if (-not (Test-Path "$($Dir.config)\pattern_rules.json")) { Copy-Item "$srcRoot\config\pattern_rules.json" $Dir.config }
   Get-ChildItem $Dir.root, $srcRoot -Recurse -File -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue
   Result 'Files unblocked' 'PASS'

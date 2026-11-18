@@ -59,7 +59,9 @@ is created inside it:
   logs\       audit log, setup logs, SETUP-SUMMARY.txt
   status\     live progress file
   requests\   analyst request drop box (only if you use an analyst group)
+  app-backups\  last 3 copies of app\, taken automatically before an upgrade or reinstall
   extras\     optional gMSA helper scripts (a Domain Admin may use them; never required)
+  Hashslinger-Admin.cmd, Hashslinger-Uninstall.cmd
   Hashslinger-Admin.cmd   opens the Admin tool
 ```
 
@@ -82,6 +84,10 @@ kept on every save. Changes apply to the next scan.
 **Hashslinger never creates or changes anything in Active Directory.** The gMSA is created by hand; the optional helper
 scripts are in `extras\`. The full procedure is the **SOP**: `docs\Hashslinger-SOP.html` (opens in any browser; also reachable
 from the Admin tool, *Run and logs*, *Open the SOP*).
+
+**Upgrade / reinstall / uninstall:** see the SOP. Short version: run the new package's `Setup-Hashslinger.cmd` against the same folder
+(settings and data are kept, the old `app\` is backed up); `Hashslinger-Uninstall.cmd` removes the scheduled tasks (files stay),
+with switches `-RemoveData -RemoveReports -RemoveLogs -RemoveApp -RemoveAll -SecureWipe` to delete things.
 
 **Results file:** column 1 is `sAMAccountName` (the engine falls back to a read-only LDAP lookup if DSInternals returns it
 empty, and the report falls back to the CN, so it is never blank).
