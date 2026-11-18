@@ -225,8 +225,11 @@ $tpAd.Tag = $pickerY + 480
 $tpScan = New-Tab 'Scan options'
 Add-Heading $tpScan 'What each scan checks'
 Add-Row $tpScan 'check_duplicates' 'Duplicate passwords' 'bool' 'Flag accounts that share a password with another account. Off by default; on a large directory it can add many rows.'
+Add-Heading $tpScan 'Which tasks run scans'
+Add-Row $tpScan 'enable_scheduled' 'Scheduled scan' 'bool' 'Register the Hashslinger-Scheduled task (runs on the schedule below).'
+Add-Row $tpScan 'enable_ondemand' 'On-demand scans' 'bool' 'Register the Hashslinger-OnDemand task (analysts request scans with their EDIPI and a reason). Needs the analyst group on the Security tab to be useful.'
 Add-Heading $tpScan 'Schedule'
-Add-Row $tpScan 'cadence' 'How often' 'choice' @('Weekly', 'Monthly') 'Monthly runs every 4 weeks.'
+Add-Row $tpScan 'cadence' 'How often' 'choice' @('Daily', 'Weekly', 'Monthly') 'Daily ignores the day. Monthly runs every 4 weeks.'
 Add-Row $tpScan 'schedule_day' 'Day' 'choice' @('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')
 Add-Row $tpScan 'schedule_time' 'Start time (24h, HH:mm)' 'text' $null 'After saving, you are asked whether to apply the schedule to the scheduled task now.'
 Add-Heading $tpScan 'Limits and cleanup'
@@ -381,8 +384,11 @@ function New-SupportBundle {
 function Apply-Schedule {
   $day = [string]$script:cfg['schedule_day']
   $at = [datetime]::ParseExact([string]$script:cfg['schedule_time'], 'HH:mm', $null)
-  $weeks = if ($script:cfg['cadence'] -eq 'Monthly') { 4 } else { 1 }
-  $trigger = New-ScheduledTaskTrigger -Weekly -WeeksInterval $weeks -DaysOfWeek $day -At $at
+  $trigger = switch ([string]$script:cfg['cadence']) {
+    'Daily'   { New-ScheduledTaskTrigger -Daily -At $at }
+    'Monthly' { New-ScheduledTaskTrigger -Weekly -WeeksInterval 4 -DaysOfWeek $day -At $at }
+    default   { New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek $day -At $at }
+  }
   Set-ScheduledTask -TaskName 'Hashslinger-Scheduled' -Trigger $trigger | Out-Null
 }
 
@@ -391,6 +397,7 @@ $btnSave.Add_Click({
     $errs = @()
     if ((Get-Field 'mode') -eq 'live' -and -not (Get-Field 'target_server')) { $errs += 'Pick the domain controller (Active Directory tab).' }
     if (@(Get-HsOuSelection).Count -eq 0) { $errs += 'Pick at least one thing to scan (Active Directory tab).' }
+    if (-not (Get-Field 'enable_scheduled') -and -not (Get-Field 'enable_ondemand')) { $errs += 'Turn on at least one of: scheduled scan, on-demand scans (Scan options tab).' }
     if ((Get-Field 'account_types').Count -eq 0) { $errs += 'Tick at least one account type.' }
     try { [void][datetime]::ParseExact((Get-Field 'schedule_time'), 'HH:mm', $null) } catch { $errs += 'Start time must look like 02:00.' }
     if ($errs.Count) { Msg ("Not saved:`r`n`r`n - " + ($errs -join "`r`n - ")); return }
@@ -407,8 +414,14 @@ $btnSave.Add_Click({
     $lblStatus.Text = ('Saved {0:HH:mm:ss}. Changes apply to the next scan. A backup of the previous settings was kept.' -f (Get-Date))
 
     $schedChanged = ($old['cadence'] -ne $new['cadence']) -or ($old['schedule_day'] -ne $new['schedule_day']) -or ($old['schedule_time'] -ne $new['schedule_time'])
-    if ($schedChanged -and [Windows.Forms.MessageBox]::Show('The schedule changed. Update the scheduled task now?', 'Hashslinger Admin', 'YesNo') -eq 'Yes') {
-      try { Apply-Schedule; $lblStatus.Text = 'Saved, and the scheduled task was updated.' } catch { Msg ('Saved, but the scheduled task could not be updated: ' + $_.Exception.Message) }
+    $tasksChanged = ([bool]$old['enable_scheduled'] -ne [bool]$new['enable_scheduled']) -or ([bool]$old['enable_ondemand'] -ne [bool]$new['enable_ondemand'])
+    if ($tasksChanged) {
+      if ([Windows.Forms.MessageBox]::Show('You changed which tasks run scans. Apply it now? This runs the Finish step (it registers or removes the scheduled tasks and re-checks the service account).', 'Hashslinger Admin', 'YesNo') -eq 'Yes') {
+        Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-File', "`"$setupScript`"", '-Config', "`"$ConfigPath`"", '-Phase', 'Finish')
+      }
+    }
+    elseif ($schedChanged -and [Windows.Forms.MessageBox]::Show('The schedule changed. Update the scheduled task now?', 'Hashslinger Admin', 'YesNo') -eq 'Yes') {
+      try { Apply-Schedule; $lblStatus.Text = 'Saved, and the scheduled task was updated.' } catch { Msg ('Saved, but the scheduled task could not be updated (is it registered? use Re-apply on the Security tab): ' + $_.Exception.Message) }
     }
     Refresh-Wordlists
   } catch { Msg ('Could not save: ' + $_.Exception.Message) }

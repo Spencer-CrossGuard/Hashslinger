@@ -204,7 +204,7 @@ at or below `per_account_threshold` (default 5000), replicates only those accoun
 
 ## Defaults I chose (change freely)
 
-- Live replication; offline ntds.dit as `"mode": "offline"`. Weekly cadence (`-Cadence Monthly` in the installer).
+- Live replication; offline ntds.dit as `"mode": "offline"`. Scheduled scan weekly on Sunday at 02:00 (the setup wizard and Admin tool set daily, weekly or monthly, the day and time; on-demand scans are optional).
 - "Password-enabled" means smart-card-required is NOT set. Default `uac.exclude_flags` is
   `["SMARTCARD_REQUIRED"]`; disabled accounts are still audited.
 - CSV lands in `output_path`; retention is `retention_days` (0 or unset = keep forever).

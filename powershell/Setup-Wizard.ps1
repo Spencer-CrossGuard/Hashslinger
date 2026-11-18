@@ -26,7 +26,7 @@ $best = Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | Sort-Object Fr
 $defaultRoot = if ($best) { Join-Path ($best.DeviceID + '\') 'Hashslinger' } else { 'C:\Hashslinger' }
 
 # ---- form
-$form = New-Object Windows.Forms.Form -Property @{ Text = 'Hashslinger setup'; Width = 920; Height = 990; MinimumSize = New-Object Drawing.Size(900, 700); StartPosition = 'CenterScreen'; AutoScroll = $true; Font = New-Object Drawing.Font('Segoe UI', 9) }
+$form = New-Object Windows.Forms.Form -Property @{ Text = 'Hashslinger setup'; Width = 1190; Height = 990; MinimumSize = New-Object Drawing.Size(900, 700); StartPosition = 'CenterScreen'; AutoScroll = $true; Font = New-Object Drawing.Font('Segoe UI', 9) }
 function Lbl($text, $x, $y, $w = 860, $h = 20, $bold = $false) {
   $l = New-Object Windows.Forms.Label -Property @{ Text = $text; Left = $x; Top = $y; Width = $w; Height = $h }
   if ($bold) { $l.Font = New-Object Drawing.Font('Segoe UI', 10, [Drawing.FontStyle]::Bold) }
@@ -55,8 +55,32 @@ $form.Controls.AddRange(@($cmbDc, $txtGmsa))
 [void](Lbl ('3. What should be scanned? Expand the tree, tick OUs (everything underneath is included). ' + $(if ($ad.Error) { 'AD could not be read: add DNs by hand below.' } else { '' })) 15 220 860 20 $true)
 New-HsOuPicker -Parent $form -X 15 -Y 246 -Width 850 -Height 300 -Dns $ad.Dns
 
-# 4. optional wordlists
-[void](Lbl '4. Password lists (optional; you can add more later in the Admin tool)' 15 566 860 20 $true)
+# 4. which tasks run scans (right-hand column)
+[void](Lbl '4. What runs the scans?' 885 220 270 20 $true)
+$chkSched = New-Object Windows.Forms.CheckBox -Property @{ Text = 'Scheduled scan'; Left = 885; Top = 246; Width = 270; Checked = $true }
+[void](Lbl 'How often' 903 274 250 18)
+$cmbCad = New-Object Windows.Forms.ComboBox -Property @{ Left = 903; Top = 294; Width = 240; DropDownStyle = 'DropDownList' }
+[void]$cmbCad.Items.AddRange(@('Daily', 'Weekly', 'Monthly (every 4 weeks)')); $cmbCad.SelectedIndex = 1
+$lblDay = Lbl 'On which day' 903 324 250 18
+$cmbDay = New-Object Windows.Forms.ComboBox -Property @{ Left = 903; Top = 344; Width = 240; DropDownStyle = 'DropDownList' }
+[void]$cmbDay.Items.AddRange(@('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')); $cmbDay.SelectedItem = 'Sunday'
+[void](Lbl 'Start time (24h, HH:mm)' 903 374 250 18)
+$txtTime = New-Object Windows.Forms.TextBox -Property @{ Left = 903; Top = 394; Width = 90; Text = '02:00' }
+$chkOnDemand = New-Object Windows.Forms.CheckBox -Property @{ Text = 'On-demand scans (analysts request them)'; Left = 885; Top = 434; Width = 280; Height = 36 }
+[void](Lbl 'Analyst group (optional)' 903 474 250 18)
+$txtAnalyst = New-Object Windows.Forms.TextBox -Property @{ Left = 903; Top = 494; Width = 240 }
+[void](Lbl 'Both can be on. Change these later in the Admin tool.' 885 526 280 34)
+$form.Controls.AddRange(@($chkSched, $cmbCad, $cmbDay, $txtTime, $chkOnDemand, $txtAnalyst))
+function Update-TaskControls {
+  foreach ($c in $cmbCad, $txtTime) { $c.Enabled = $chkSched.Checked }
+  $cmbDay.Enabled = $chkSched.Checked -and ($cmbCad.SelectedIndex -ne 0)
+  $txtAnalyst.Enabled = $chkOnDemand.Checked
+}
+$chkSched.Add_CheckedChanged({ Update-TaskControls }); $chkOnDemand.Add_CheckedChanged({ Update-TaskControls }); $cmbCad.Add_SelectedIndexChanged({ Update-TaskControls })
+Update-TaskControls
+
+# 5. optional wordlists
+[void](Lbl '5. Password lists (optional; you can add more later in the Admin tool)' 15 566 860 20 $true)
 $txtRock = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 590; Width = 720 }
 $btnRock = New-Object Windows.Forms.Button -Property @{ Text = 'rockyou...'; Left = 745; Top = 588; Width = 120; Height = 26 }
 $txtHibp = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 620; Width = 720 }
@@ -71,9 +95,8 @@ $form.Controls.AddRange(@($txtRock, $btnRock, $txtHibp, $btnHibp, $txtDs, $btnDs
 $btnCheck = New-Object Windows.Forms.Button -Property @{ Text = '1. Check readiness'; Left = 15; Top = 718; Width = 170; Height = 36 }
 $btnGo = New-Object Windows.Forms.Button -Property @{ Text = '2. Install'; Left = 193; Top = 718; Width = 130; Height = 36 }
 $btnFinish = New-Object Windows.Forms.Button -Property @{ Text = 'Re-run service account checks'; Left = 331; Top = 718; Width = 220; Height = 36; Enabled = $false }
-$btnScan = New-Object Windows.Forms.Button -Property @{ Text = 'Run first scan'; Left = 559; Top = 718; Width = 150; Height = 36; Enabled = $false }
-$btnAdmin = New-Object Windows.Forms.Button -Property @{ Text = 'Open Admin tool'; Left = 717; Top = 718; Width = 148; Height = 36; Enabled = $false }
-$form.Controls.AddRange(@($btnCheck, $btnGo, $btnFinish, $btnScan, $btnAdmin))
+$btnAdmin = New-Object Windows.Forms.Button -Property @{ Text = 'Open Admin tool'; Left = 559; Top = 718; Width = 160; Height = 36; Enabled = $false }
+$form.Controls.AddRange(@($btnCheck, $btnGo, $btnFinish, $btnAdmin))
 $lblResult = Lbl 'Ready. Choose the options above, then click Check readiness or Install.' 15 764 860 24 $true
 $bar = New-Object Windows.Forms.ProgressBar -Property @{ Left = 15; Top = 792; Width = 850; Height = 16 }
 $btnLog = New-Object Windows.Forms.Button -Property @{ Text = 'Open full log'; Left = 745; Top = 816; Width = 120; Height = 24 }
@@ -113,6 +136,11 @@ function Load-Existing {
     $txtGmsa.Text = [string]$cfg['gmsa_name']
     Set-HsOuSelection @($cfg['target_ous'])
     $txtRock.Text = [string]$cfg['wordlists']['rockyou']; $txtHibp.Text = [string]$cfg['wordlists']['hibp']
+    $chkSched.Checked = [bool]$cfg['enable_scheduled']; $chkOnDemand.Checked = [bool]$cfg['enable_ondemand']
+    $ci = @{ Daily = 0; Weekly = 1; Monthly = 2 }[[string]$cfg['cadence']]; if ($null -ne $ci) { $cmbCad.SelectedIndex = $ci }
+    if ($cmbDay.Items.Contains([string]$cfg['schedule_day'])) { $cmbDay.SelectedItem = [string]$cfg['schedule_day'] }
+    $txtTime.Text = [string]$cfg['schedule_time']; $txtAnalyst.Text = [string]$cfg['analyst_group']
+    Update-TaskControls
     $btnFinish.Enabled = $true; $btnAdmin.Enabled = (Test-Path (Join-Path $r 'Hashslinger-Admin.cmd'))
     Log "Loaded the existing settings from $p"
   } catch { Log ('Could not read the existing settings: ' + $_.Exception.Message) }
@@ -130,6 +158,12 @@ function Save-Settings([string]$root, [switch]$Temp) {
   $cfg['wordlists']['rockyou'] = $txtRock.Text.Trim()
   $cfg['wordlists']['hibp'] = $txtHibp.Text.Trim()
   $cfg['dsinternals_offline_path'] = $txtDs.Text.Trim()
+  $cfg['enable_scheduled'] = [bool]$chkSched.Checked
+  $cfg['enable_ondemand'] = [bool]$chkOnDemand.Checked
+  $cfg['cadence'] = @('Daily', 'Weekly', 'Monthly')[[Math]::Max(0, $cmbCad.SelectedIndex)]
+  $cfg['schedule_day'] = [string]$cmbDay.SelectedItem
+  $cfg['schedule_time'] = $txtTime.Text.Trim()
+  $cfg['analyst_group'] = $(if ($chkOnDemand.Checked) { $txtAnalyst.Text.Trim() } else { '' })
   Save-HsConfig $cfg $cfgPath
   return $cfgPath
 }
@@ -165,7 +199,27 @@ function Test-Inputs {
     [void][Windows.Forms.MessageBox]::Show('Please choose an install folder, a domain controller, the service account name, and at least one thing to scan.')
     return $null
   }
+  if (-not $chkSched.Checked -and -not $chkOnDemand.Checked) {
+    [void][Windows.Forms.MessageBox]::Show('Choose at least one way to run scans: scheduled, on-demand, or both.')
+    return $null
+  }
+  if ($chkSched.Checked) {
+    try { [void][datetime]::ParseExact($txtTime.Text.Trim(), 'HH:mm', $null) }
+    catch { [void][Windows.Forms.MessageBox]::Show('The start time must look like 02:00 (24 hour clock).'); return $null }
+  }
   return $root
+}
+function Show-NextSteps {
+  Log ''
+  Log '==== SETUP FINISHED. The first scan is NOT started from here, so it runs exactly like every later scan. ===='
+  if ($chkSched.Checked) {
+    Log 'To run the first scan now: open Task Scheduler, find Hashslinger-Scheduled, right-click it and choose Run.'
+    Log '  (or in an elevated PowerShell: Start-ScheduledTask -TaskName Hashslinger-Scheduled)'
+    Log 'Watch it: Admin tool > Run and logs > Watch progress. It then repeats on the schedule you chose.'
+  }
+  if ($chkOnDemand.Checked) {
+    Log 'On-demand: analysts open app\powershell\Start-HashslingerGui.ps1 (they enter their EDIPI and a reason). It starts the Hashslinger-OnDemand task.'
+  }
 }
 function Busy([bool]$on) {
   foreach ($b in $btnCheck, $btnGo, $btnFinish) { $b.Enabled = -not $on }
@@ -188,14 +242,6 @@ $btnLog.Add_Click({
   if ($l) { Start-Process notepad.exe $l.FullName } else { [void][Windows.Forms.MessageBox]::Show('No setup log yet.') }
 })
 $btnAdmin.Add_Click({ $r = Resolve-Root $txtRoot.Text; Start-Process (Join-Path $r 'Hashslinger-Admin.cmd') })
-$btnScan.Add_Click({
-  try {
-    $r = Resolve-Root $txtRoot.Text
-    Start-ScheduledTask -TaskName 'Hashslinger-Scheduled'
-    Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$(Join-Path $r 'app\powershell\Show-HashslingerProgress.ps1')`"", '-ConfigPath', "`"$(Join-Path $r 'config\hashslinger.json')`"")
-  } catch { [void][Windows.Forms.MessageBox]::Show('Could not start the scan: ' + $_.Exception.Message) }
-})
-
 $btnCheck.Add_Click({
   try {
     $root = Test-Inputs; if (-not $root) { return }
@@ -220,7 +266,7 @@ $btnGo.Add_Click({
     $btnFinish.Enabled = $true
     $lblResult.Text = 'Installed. Checking the service account, permissions and scheduled tasks...'
     $rc = Invoke-Setup $cfgPath 'Finish'
-    if ($rc -eq 0) { $lblResult.ForeColor = [Drawing.Color]::SeaGreen; $lblResult.Text = 'All done. You can run the first scan now.'; $btnScan.Enabled = $true }
+    if ($rc -eq 0) { $lblResult.ForeColor = [Drawing.Color]::SeaGreen; $lblResult.Text = 'Setup finished. Next step: run the scan task (see the log below).'; Show-NextSteps }
     else { $lblResult.ForeColor = [Drawing.Color]::DarkOrange; $lblResult.Text = 'Installed, but the service account checks need attention: ' + (Fail-Text 'see the log below.') + '  Fix it, then click Re-run service account checks.' }
   }
   catch { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Error: ' + $_.Exception.Message; Log ('ERROR: ' + $_.Exception.Message) }
@@ -233,7 +279,7 @@ $btnFinish.Add_Click({
     Busy $true; $log.Clear(); $lblResult.ForeColor = [Drawing.Color]::Black; $lblResult.Text = 'Checking the Active Directory prerequisites and finishing...'
     $cfgPath = Save-Settings $root
     $rc = Invoke-Setup $cfgPath 'Finish'
-    if ($rc -eq 0) { $lblResult.ForeColor = [Drawing.Color]::SeaGreen; $lblResult.Text = 'All done. You can run the first scan now.'; $btnScan.Enabled = $true; $btnAdmin.Enabled = $true }
+    if ($rc -eq 0) { $lblResult.ForeColor = [Drawing.Color]::SeaGreen; $lblResult.Text = 'Setup finished. Next step: run the scan task (see the log below).'; $btnAdmin.Enabled = $true; Show-NextSteps }
     else { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Not finished: ' + (Fail-Text 'see the log below.') }
   }
   catch { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Error: ' + $_.Exception.Message; Log ('ERROR: ' + $_.Exception.Message) }

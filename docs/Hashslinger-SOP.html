@@ -240,7 +240,9 @@ Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
     <li>Create the service account (section 3).</li>
     <li>Copy the package to the scan server and double-click <code>Setup-Hashslinger.cmd</code> (local administrator).</li>
     <li>Pick the install folder, the DC and the service account name. Tick the scope in the tree: ticking an OU includes everything below it, and search keeps parents visible. Optional: rockyou and HIBP files, an offline DSInternals folder.</li>
+    <li>Choose how scans run (step 4 in the wizard): a scheduled scan (how often, day, start time), on-demand scans for analysts (optional analyst group), or both.</li>
     <li>Click <b>Check readiness</b> (changes nothing), then <b>Install</b>. Install is the local install followed by the service account checks.</li>
+    <li>Setup does <b>not</b> start a scan. Run the first one the same way every scan runs: Task Scheduler, <code>Hashslinger-Scheduled</code>, Run (or <code>Start-ScheduledTask Hashslinger-Scheduled</code>). Watch it in Admin tool, Run and logs, Watch progress.</li>
   </ol>
   <h3>Setup phases</h3>
   <p>The wizard runs these; you can run them yourself: <code>Setup-Hashslinger.cmd -Phase Check|Local|Finish|All -Config &lt;folder&gt;\config\hashslinger.json [-WhatIf]</code></p>
@@ -347,7 +349,8 @@ Exit codes: 0 ok, 1 usage, 2 failed (also logged)</code></pre>
       <tr><td class="k">uac.exclude_flags</td><td>SMARTCARD_REQUIRED</td><td>Skip accounts with ANY of these userAccountControl flags (names or numbers).</td></tr>
       <tr><td class="k">uac.require_flags</td><td>none</td><td>Accounts must have ALL of these.</td></tr>
       <tr><td class="k">check_duplicates</td><td>false</td><td>Flag shared passwords (Medium). Can add many rows on a large directory.</td></tr>
-      <tr><td class="k">cadence, schedule_day, schedule_time</td><td>Weekly, Sunday, 02:00</td><td>Weekly or Monthly (every 4 weeks).</td></tr>
+      <tr><td class="k">enable_scheduled, enable_ondemand</td><td>true, false</td><td>Which scan tasks exist. <code>Hashslinger-Scheduled</code> runs on the schedule; <code>Hashslinger-OnDemand</code> is started by analyst requests. Both can be on. Applied by the Finish step (the Admin tool offers to run it).</td></tr>
+      <tr><td class="k">cadence, schedule_day, schedule_time</td><td>Weekly, Sunday, 02:00</td><td>Daily, Weekly or Monthly (every 4 weeks). Daily ignores the day.</td></tr>
       <tr><td class="k">retention_days</td><td>90</td><td>Reports older than this are securely deleted after each scan. 0 keeps everything.</td></tr>
       <tr><td class="k">engine_timeout_seconds</td><td>86400</td><td>A scan running longer is stopped and logged as failed.</td></tr>
       <tr><td class="k">hash_store_path, staging_path, log_path, output_path, request_dir, status_path, pattern_rules_path, engine_script</td><td>under install_root</td><td>Locations.</td></tr>

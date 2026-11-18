@@ -407,20 +407,38 @@ function Do-Finish {
   $cadence = Opt 'cadence' 'Weekly'
   $day = Opt 'schedule_day' 'Sunday'
   $at = [datetime]::ParseExact([string](Opt 'schedule_time' '02:00'), 'HH:mm', $null)
-  $trigger = New-ScheduledTaskTrigger -Weekly -WeeksInterval $(if ($cadence -eq 'Monthly') { 4 } else { 1 }) -DaysOfWeek $day -At $at
+  $enableSched = [bool](Opt 'enable_scheduled' $true)
+  $enableOnDemand = [bool](Opt 'enable_ondemand' ([bool]$analystGroup))
+  $trigger = switch ($cadence) {
+    'Daily'   { New-ScheduledTaskTrigger -Daily -At $at }
+    'Monthly' { New-ScheduledTaskTrigger -Weekly -WeeksInterval 4 -DaysOfWeek $day -At $at }
+    default   { New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek $day -At $at }
+  }
+  $when = switch ($cadence) { 'Daily' { "daily at $($at.ToString('HH:mm'))" } 'Monthly' { "every 4 weeks on $day at $($at.ToString('HH:mm'))" } default { "weekly on $day at $($at.ToString('HH:mm'))" } }
   if ($PSCmdlet.ShouldProcess('Hashslinger tasks', 'Register')) {
-    Register-ScheduledTask -TaskName 'Hashslinger-Scheduled' -Force -Principal $principal -Settings $settings -Trigger $trigger `
-      -Action (New-ScheduledTaskAction -Execute $exe -Argument "--config `"$runtimeCfg`" scan" -WorkingDirectory $Dir.bin) | Out-Null
-    Register-ScheduledTask -TaskName 'Hashslinger-OnDemand' -Force -Principal $principal -Settings $settings `
-      -Action (New-ScheduledTaskAction -Execute $exe -Argument "--config `"$runtimeCfg`" scan --request-dir `"$($Dir.requests)`"" -WorkingDirectory $Dir.bin) | Out-Null
-    Result 'Scheduled tasks registered' 'PASS' "$cadence scan + on-demand, both as $gmsaSam"
-    if ($analystSam) {
-      try {
-        $asid = (Get-ADGroup $analystGroup).SID.Value
-        $svcCom = New-Object -ComObject Schedule.Service; $svcCom.Connect()
-        $svcCom.GetFolder('\').GetTask('Hashslinger-OnDemand').SetSecurityDescriptor("D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;$asid)", 0)
-        Result 'Analysts may start the on-demand task' 'PASS' $analystGroup
-      } catch { Result 'Analysts may start the on-demand task' 'WARN' $_.Exception.Message }
+    if ($enableSched) {
+      Register-ScheduledTask -TaskName 'Hashslinger-Scheduled' -Force -Principal $principal -Settings $settings -Trigger $trigger `
+        -Action (New-ScheduledTaskAction -Execute $exe -Argument "--config `"$runtimeCfg`" scan" -WorkingDirectory $Dir.bin) | Out-Null
+      Result 'Scheduled scan task registered' 'PASS' "Hashslinger-Scheduled, $when, as $gmsaSam"
+    } else {
+      if (Get-ScheduledTask -TaskName 'Hashslinger-Scheduled' -ErrorAction SilentlyContinue) { Unregister-ScheduledTask -TaskName 'Hashslinger-Scheduled' -Confirm:$false }
+      Result 'Scheduled scan task' 'SKIP' 'not enabled in the settings (no Hashslinger-Scheduled task)'
+    }
+    if ($enableOnDemand) {
+      Register-ScheduledTask -TaskName 'Hashslinger-OnDemand' -Force -Principal $principal -Settings $settings `
+        -Action (New-ScheduledTaskAction -Execute $exe -Argument "--config `"$runtimeCfg`" scan --request-dir `"$($Dir.requests)`"" -WorkingDirectory $Dir.bin) | Out-Null
+      Result 'On-demand scan task registered' 'PASS' "Hashslinger-OnDemand, started by analyst requests, as $gmsaSam"
+      if ($analystSam) {
+        try {
+          $asid = (Get-ADGroup $analystGroup).SID.Value
+          $svcCom = New-Object -ComObject Schedule.Service; $svcCom.Connect()
+          $svcCom.GetFolder('\').GetTask('Hashslinger-OnDemand').SetSecurityDescriptor("D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;$asid)", 0)
+          Result 'Analysts may start the on-demand task' 'PASS' $analystGroup
+        } catch { Result 'Analysts may start the on-demand task' 'WARN' $_.Exception.Message }
+      }
+    } else {
+      if (Get-ScheduledTask -TaskName 'Hashslinger-OnDemand' -ErrorAction SilentlyContinue) { Unregister-ScheduledTask -TaskName 'Hashslinger-OnDemand' -Confirm:$false }
+      Result 'On-demand scan task' 'SKIP' 'not enabled in the settings (no Hashslinger-OnDemand task)'
     }
   }
 
