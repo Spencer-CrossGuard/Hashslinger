@@ -270,7 +270,7 @@ function Do-Verify {
 }
 
 # ---------------------------------------------------------------- folder permissions helper
-function Set-FolderAcl([string]$path, $gmsaSid, $analystSid, $analystRights, [string]$analystInherit = 'ContainerInherit,ObjectInherit') {
+function Set-FolderAcl([string]$path, $gmsaSid, $analystSid, $analystRights, [string]$analystInherit = 'ContainerInherit,ObjectInherit', [string]$gmsaRights = 'FullControl') {
   $acl = New-Object Security.AccessControl.DirectorySecurity
   $acl.SetAccessRuleProtection($true, $false)
   $full = [Security.AccessControl.FileSystemRights]::FullControl
@@ -280,8 +280,11 @@ function Set-FolderAcl([string]$path, $gmsaSid, $analystSid, $analystRights, [st
   $admins = New-Object Security.Principal.SecurityIdentifier('S-1-5-32-544')   # BUILTIN\Administrators
   $system = New-Object Security.Principal.SecurityIdentifier('S-1-5-18')       # NT AUTHORITY\SYSTEM
   $everyone = New-Object Security.Principal.SecurityIdentifier('S-1-1-0')      # Everyone
+  # The service account gets only what it needs: read-only on program and settings folders (otherwise anyone who could
+  # change those files could run code as the replication account), write only where it must write.
   foreach ($who in @($gmsaSid, $admins, $system)) {
-    try { $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($who, $full, $inh, 'None', 'Allow'))) }
+    $r = if ($who -eq $gmsaSid) { [Security.AccessControl.FileSystemRights]$gmsaRights } else { $full }
+    try { $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($who, $r, $inh, 'None', 'Allow'))) }
     catch { throw "Could not add identity $who to the permissions of ${path}: $($_.Exception.Message)" }
   }
   if ($analystSid -and $analystRights) {
@@ -376,8 +379,10 @@ function Do-Finish {
   $analystSam = $null; $analystSid = $null
   if ($analystGroup) { try { $grp = Get-ADGroup $analystGroup; $analystSid = $grp.SID; $analystSam = "$($dom.NetBIOSName)\$analystGroup" } catch { Result 'Analyst group' 'WARN' "group '$analystGroup' not found; ignoring"; $analystSam = $null; $analystSid = $null } }
   $plan = @(
+    @($Dir.root, $null, 'ContainerInherit,ObjectInherit', 'ReadAndExecute'),      # keeps ordinary users from replacing the program folders
+    @($Dir.bin, $null, 'ContainerInherit,ObjectInherit', 'ReadAndExecute'),       # program and scripts: the service account only reads them
     @($Dir.store, $null, 'ContainerInherit,ObjectInherit'),
-    @($Dir.config, 'ReadAndExecute', 'ContainerInherit,ObjectInherit'),
+    @($Dir.config, 'ReadAndExecute', 'ContainerInherit,ObjectInherit', 'ReadAndExecute'),
     @($Dir.staging, 'Modify', 'ContainerInherit,ObjectInherit'),
     @($Dir.logs, $null, 'ContainerInherit,ObjectInherit'),
     @($Dir.output, 'ReadAndExecute', 'ContainerInherit,ObjectInherit'),
@@ -385,7 +390,7 @@ function Do-Finish {
     @($Dir.requests, 'CreateFiles', 'None')
   )
   foreach ($entry in $plan) {
-    if ($PSCmdlet.ShouldProcess($entry[0], 'Restrict ACL')) { Set-FolderAcl $entry[0] $gmsaSid $analystSid $entry[1] $entry[2] }
+    if ($PSCmdlet.ShouldProcess($entry[0], 'Restrict ACL')) { if ($entry.Count -gt 3) { Set-FolderAcl $entry[0] $gmsaSid $analystSid $entry[1] $entry[2] $entry[3] } else { Set-FolderAcl $entry[0] $gmsaSid $analystSid $entry[1] $entry[2] } }
   }
   # Files that were moved/linked in earlier keep their old permissions and the gMSA could not read them.
   # Reset them to the permissions inherited from their (now locked-down) folder.

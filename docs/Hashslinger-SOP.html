@@ -264,7 +264,7 @@ Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
       <tr><td class="k">Not in a privileged group</td><td>Warning: remove it from Domain, Enterprise or Schema Admins or Administrators.</td></tr>
       <tr><td class="k">Replication rights (effective, read-only)</td><td>Warning: one of the two rights is missing, denied, or does not apply to the domain root itself. Computed from the ACL and the account's token groups, so group-granted rights count.</td></tr>
       <tr><td class="k"><code>Test-ADServiceAccount</code></td><td>Account not installed on this server (section 3, last step).</td></tr>
-      <tr><td class="k">Folder permissions</td><td>Applied by SID to the service account, local Administrators and SYSTEM; existing files in staging and store are reset to inherit. An analyst group gets limited access only if one is set.</td></tr>
+      <tr><td class="k">Folder permissions</td><td>Applied by SID to the service account, local Administrators and SYSTEM. The service account can only READ the program (<code>app\</code>) and settings (<code>config\</code>) folders and write to data, reports, logs and status, so nobody who can edit program files can run code as it. The install folder itself is locked to Administrators too; existing files in staging and store are reset to inherit. An analyst group gets limited access only if one is set.</td></tr>
       <tr><td class="k">Scheduled tasks</td><td>Registered under the service account, no stored password.</td></tr>
       <tr><td class="k">Live test as the service account</td><td>Replicates this server's own computer object as the service account. Reports the exact error and a likely cause (denied, FIPS, RPC, batch right, Schema).</td></tr>
     </tbody>
