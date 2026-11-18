@@ -101,7 +101,8 @@ namespace Hashslinger
                     if (a.Lm) r |= Reason.Lm;
                     if (r != 0) table.AddReasons(idx, r);
                     received++;
-                    if (received % 10000 == 0) { Progress.Count(received); Progress.Info(received + " accounts received (" + (long)(received / Math.Max(0.001, ingestClock.Elapsed.TotalSeconds)) + "/s)"); }
+                    if (received % 100 == 0) Progress.Count(received);
+                    if (received % 10000 == 0) { Progress.Info(received + " accounts received (" + (long)(received / Math.Max(0.001, ingestClock.Elapsed.TotalSeconds)) + "/s)"); }
                 });
                 accounts = table.Count;
                 Progress.Count(accounts);

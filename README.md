@@ -165,7 +165,7 @@ default password can add many rows, so enable it deliberately.
 
 Bulk replication pulls the whole domain and discards everything out of scope, so it costs the same for 2 accounts as for
 all of them, and sends out-of-scope hashes to the scan server. The engine therefore counts the in-scope accounts first and,
-at or below `per_account_threshold` (default 5000), replicates only those accounts. Larger scopes use the single bulk pull.
+at or below `per_account_threshold` (default 5000), replicates only those accounts, using `workers` (default 4) parallel DC connections. Larger scopes use the single bulk pull.
 
 ## Scale (millions of accounts)
 

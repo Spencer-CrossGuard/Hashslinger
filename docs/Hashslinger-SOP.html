@@ -287,6 +287,7 @@ Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
     </tbody>
   </table></div>
   <ul>
+    <li>Watching a scan: the progress window shows the step, how long this step has run, how long since the last message from the engine, and a scrolling log. Step 4 reports sub-steps A (scope search), B (property test), C (replication) with counts, rate per second, elapsed time and a rough time left, every 5 seconds. The same log is in <code>status\status.json</code> (<code>log</code>).</li>
     <li>One scan at a time (<code>status\run.lock</code>). A second start is refused and logged.</li>
     <li>The scheduled task runs <code>Hashslinger.exe --config ... scan</code> as the service account on the cadence, day and time in the settings.</li>
     <li>Memory is about 150 to 250 bytes per account plus 40 for sorting.</li>
@@ -338,6 +339,7 @@ Exit codes: 0 ok, 1 usage, 2 failed (also logged)</code></pre>
       <tr><td class="k">install_root</td><td>chosen folder</td><td>Where everything lives.</td></tr>
       <tr><td class="k">mode</td><td>live</td><td><code>live</code> replicates from a DC; <code>offline</code> reads <code>ntds_path</code> with the SYSTEM hive <code>system_hive_path</code>.</td></tr>
       <tr><td class="k">replication</td><td>bulk</td><td><code>bulk</code> or <code>per-account</code>.</td></tr>
+      <tr><td class="k">workers</td><td>4</td><td>Parallel connections to the DC when accounts are replicated one by one (small scopes). 1 turns it off. Raise carefully: each one loads the DC.</td></tr>
       <tr><td class="k">per_account_threshold</td><td>5000</td><td>At or below this many in-scope accounts bulk uses per-account.</td></tr>
       <tr><td class="k">target_server</td><td>none</td><td>DC to read from.</td></tr>
       <tr><td class="k">target_ous</td><td>none</td><td>List of DNs. Each is searched as a subtree.</td></tr>

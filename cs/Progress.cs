@@ -22,6 +22,14 @@ namespace Hashslinger
         static System.Diagnostics.Stopwatch stageClock = new System.Diagnostics.Stopwatch();
         static int curStage;
         static long[] stageMs = new long[Stages + 1];
+        static List<string> log = new List<string>();
+
+        static void AddLog(string s)
+        {
+            log.Add(DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture) + "  " + s);
+            if (log.Count > 60) log.RemoveAt(0);
+            if (st != null) { st["log"] = new List<string>(log); st["detail_utc"] = Now(); }
+        }
 
         static string Now()
         {
@@ -52,6 +60,10 @@ namespace Hashslinger
                 st["scope"] = new List<string>(scope);
                 st["output"] = null;
                 st["error"] = null;
+                st["stage_started_utc"] = Now();
+                st["detail_utc"] = Now();
+                log = new List<string>();
+                st["log"] = new List<string>();
                 WriteLocked();
                 if (heartbeat != null) heartbeat.Dispose();
                 heartbeat = new Timer(delegate(object o) { Beat(); }, null, 5000, 5000);
@@ -91,7 +103,7 @@ namespace Hashslinger
                 stageMs[curStage] += stageClock.ElapsedMilliseconds;
                 stageClock.Restart();
                 curStage = n;
-                if (st != null) { st["stage"] = n; st["message"] = msg; st["detail"] = ""; WriteLocked(); }
+                if (st != null) { st["stage"] = n; st["message"] = msg; st["detail"] = ""; st["stage_started_utc"] = Now(); AddLog("[" + n + "/" + Stages + "] " + msg); WriteLocked(); }
             }
             if (Quiet) return;
             Console.WriteLine("[" + n + "/" + Stages + "] " + msg);
@@ -102,7 +114,7 @@ namespace Hashslinger
         {
             lock (gate)
             {
-                if (st != null) { st["detail"] = msg; WriteLocked(); }
+                if (st != null) { st["detail"] = msg; AddLog(msg); WriteLocked(); }
             }
             if (Quiet) return;
             Console.WriteLine("      " + msg);

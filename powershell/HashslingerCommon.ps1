@@ -17,6 +17,7 @@ function Get-HsDefaultConfig([string]$Root) {
     mode = 'live'
     replication = 'bulk'
     per_account_threshold = 5000
+    workers = 4
     target_server = ''
     target_ous = @()
     account_types = @('User', 'Service')

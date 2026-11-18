@@ -33,6 +33,8 @@ param(
   # Bulk mode pulls the WHOLE domain and drops everything out of scope, so a small scope would cost as much as a full
   # scan (and would receive out-of-scope hashes). At or below this many in-scope accounts, per-account is used instead.
   [int]$PerAccountThreshold = 5000,
+  # Parallel replication workers for per-account mode (each is its own connection to the DC). 1 = no parallelism.
+  [int]$Workers = 4,
   [string]$ReplProperties = 'GenericAccountInfo,NTHash,LMHash,SupplementalCredentials'
 )
 $ErrorActionPreference = 'Stop'
@@ -48,34 +50,52 @@ $out = [Console]::Out
 # be mistaken for an account line (account lines have 6 tab-separated fields and never start with this).
 function Status([string]$m) { $out.WriteLine('##HS## ' + $m) }
 
-function ToHex($b) { if ($b) { [BitConverter]::ToString([byte[]]$b).Replace('-', '') } else { '' } }
-function Clean([string]$s) { $s -replace '[\t\r\n]', ' ' }
-
-# sAMAccountName must never be blank in the report. Normally DSInternals supplies it; if not, read it from AD (LDAP, read-only).
-function Get-SamFromLdap($guid) {
-  if ($Mode -ne 'live' -or -not $Server -or -not $guid) { return '' }
-  try {
-    $hex = (([Guid]$guid).ToByteArray() | ForEach-Object { '\' + $_.ToString('x2') }) -join ''
-    $ds = New-Object System.DirectoryServices.DirectorySearcher
-    $ds.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$Server")
-    $ds.Filter = "(objectGUID=$hex)"
-    [void]$ds.PropertiesToLoad.Add('samaccountname')
-    $r = $ds.FindOne()
-    if ($r -and $r.Properties['samaccountname'].Count) { return [string]$r.Properties['samaccountname'][0] }
-  } catch { }
-  return ''
+# Formatting helpers live in one block so the parallel workers (separate runspaces) use the exact same code.
+$global:HsMode = $Mode; $global:HsServer = $Server
+$sharedBlock = {
+  function ToHex($b) { if ($b) { [BitConverter]::ToString([byte[]]$b).Replace('-', '') } else { '' } }
+  function Clean([string]$s) { $s -replace '[\t\r\n]', ' ' }
+  # sAMAccountName must never be blank in the report. Normally DSInternals supplies it; if not, read it from AD (LDAP, read-only).
+  function Get-SamFromLdap($guid) {
+    if ($global:HsMode -ne 'live' -or -not $global:HsServer -or -not $guid) { return '' }
+    try {
+      $hex = (([Guid]$guid).ToByteArray() | ForEach-Object { '\' + $_.ToString('x2') }) -join ''
+      $ds = New-Object System.DirectoryServices.DirectorySearcher
+      $ds.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$($global:HsServer)")
+      $ds.Filter = "(objectGUID=$hex)"
+      [void]$ds.PropertiesToLoad.Add('samaccountname')
+      $r = $ds.FindOne()
+      if ($r -and $r.Properties['samaccountname'].Count) { return [string]$r.Properties['samaccountname'][0] }
+    } catch { }
+    return ''
+  }
+  function FormatLine($acct, [string]$type) {
+    $sam = [string]$acct.SamAccountName
+    if (-not $sam) { $sam = Get-SamFromLdap $acct.Guid }
+    if (-not $sam) { $sam = '(unknown)' }
+    $clear = ($null -ne $acct.SupplementalCredentials) -and ($null -ne $acct.SupplementalCredentials.ClearText)
+    $uac = [int]$acct.UserAccountControl
+    $rev = if ($clear -or (($uac -band 0x80) -ne 0)) { '1' } else { '0' }
+    $lm = if ($null -ne $acct.LMHash) { '1' } else { '0' }
+    (Clean $sam) + "`t" + (Clean $acct.DistinguishedName) + "`t" + $type + "`t" + (ToHex $acct.NTHash) + "`t" + $lm + "`t" + $rev
+  }
 }
+. $sharedBlock
+function Emit($acct, [string]$type) { $out.WriteLine((FormatLine $acct $type)) }
 
-function Emit($acct, [string]$type) {
-  $sam = [string]$acct.SamAccountName
-  if (-not $sam) { $sam = Get-SamFromLdap $acct.Guid }
-  if (-not $sam) { $sam = '(unknown)' }
-  $clear = ($null -ne $acct.SupplementalCredentials) -and ($null -ne $acct.SupplementalCredentials.ClearText)
-  $uac = [int]$acct.UserAccountControl
-  $rev = if ($clear -or (($uac -band 0x80) -ne 0)) { '1' } else { '0' }
-  $lm = if ($null -ne $acct.LMHash) { '1' } else { '0' }
-  $out.WriteLine((Clean $sam) + "`t" + (Clean $acct.DistinguishedName) + "`t" + $type + "`t" +
-                 (ToHex $acct.NTHash) + "`t" + $lm + "`t" + $rev)
+# Time-based progress (every ~5s): what is done, how fast, how long so far, and a rough time left.
+$script:clock = [Diagnostics.Stopwatch]::StartNew()
+$script:lastTick = -10
+function Tick([string]$label, [long]$done, [long]$total, [bool]$force = $false) {
+  $el = $script:clock.Elapsed.TotalSeconds
+  if (-not $force -and ($el - $script:lastTick) -lt 5) { return }
+  $script:lastTick = $el
+  $rate = if ($el -gt 0) { $done / $el } else { 0 }
+  $msg = "$label $done"
+  if ($total -gt 0) { $msg += " of $total ($([Math]::Floor(100 * $done / $total))%)" }
+  $msg += ", $([Math]::Round($rate, 1))/s, elapsed $([TimeSpan]::FromSeconds([int]$el).ToString('hh\:mm\:ss'))"
+  if ($total -gt 0 -and $rate -gt 0 -and $done -lt $total) { $msg += ", about $([TimeSpan]::FromSeconds([int](($total - $done) / $rate)).ToString('hh\:mm\:ss')) left" }
+  Status $msg
 }
 
 # LDAP matching rule 1.2.840.113556.1.4.803 = bitwise AND.
@@ -117,12 +137,15 @@ if ($Mode -eq 'live') {
   }
   $scope = New-Object 'System.Collections.Generic.Dictionary[Guid,string]'
   $script:found = 0
+  $script:clock.Restart(); $script:lastTick = -10
+  Status "step A: searching AD for the accounts in scope ($($types -join ', ') under $($bases.Count) location(s))"
   foreach ($b in $bases) {
     foreach ($t in $types) {
       $ds = New-Object System.DirectoryServices.DirectorySearcher
       $ds.SearchRoot = New-Object System.DirectoryServices.DirectoryEntry("LDAP://$Server/$b")
       $ds.Filter = "(&$(TypeFilter $t)$(UacClause))"
       $ds.PageSize = 1000
+      $ds.CacheResults = $false
       $ds.SearchScope = 'Subtree'
       [void]$ds.PropertiesToLoad.Add('objectguid')
       Status "scope search: looking for $t accounts under $b"
@@ -131,38 +154,106 @@ if ($Mode -eq 'live') {
         $g = New-Object Guid (, [byte[]]$r.Properties['objectguid'][0])
         $scope[$g] = $t
         $script:found++
-        if (($script:found % 50000) -eq 0) { Status "scope search: $($script:found) accounts found so far" }
+        Tick 'scope search: accounts found' $script:found 0
       }
       $res.Dispose(); $ds.Dispose()
     }
   }
-  Status "scope ready: $($scope.Count) accounts in scope. Starting replication from the DC (the first batch can take a while)..."
+  Status "step A done: $($scope.Count) accounts in scope (took $([int]$script:clock.Elapsed.TotalSeconds)s)"
+
+  Status 'step B: testing which replication property set this DSInternals version accepts (one test call to the DC)'
   $props = $null
   foreach ($k in $scope.Keys) { $props = Resolve-ReplProperties $k; break }
   $propArgs = @{}
   if ($props) { $propArgs['Properties'] = $props }
-  $mode = $Replication
+  Status "step B done: properties = $(if ($props) { $props -join ',' } else { 'module default' })"
+
+  $replMode = $Replication
   if ($Replication -eq 'bulk' -and $scope.Count -le $PerAccountThreshold) {
-    $mode = 'per-account'
+    $replMode = 'per-account'
     Status "only $($scope.Count) accounts in scope (threshold $PerAccountThreshold): replicating just those accounts instead of pulling the whole domain"
   }
-  if ($mode -eq 'per-account') {
-    $script:done = 0
-    foreach ($kv in $scope.GetEnumerator()) {
-      Emit (Get-ADReplAccount -ObjectGuid $kv.Key -Server $Server @propArgs) $kv.Value
-      $script:done++
-      if (($script:done % 1000) -eq 0) { Status "replicated $($script:done) of $($scope.Count) accounts" }
+  $script:clock.Restart(); $script:lastTick = -10
+
+  if ($replMode -eq 'per-account') {
+    $n = [Math]::Max(1, [Math]::Min($Workers, [Math]::Max(1, $scope.Count)))
+    Status "step C: replicating $($scope.Count) accounts one by one with $n parallel connection(s) to $Server"
+    if ($n -le 1) {
+      $script:done = 0
+      foreach ($kv in $scope.GetEnumerator()) {
+        Emit (Get-ADReplAccount -ObjectGuid $kv.Key -Server $Server @propArgs) $kv.Value
+        $script:done++
+        Tick 'replicated' $script:done $scope.Count
+      }
     }
+    else {
+      $queue = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]'
+      foreach ($kv in $scope.GetEnumerator()) { $queue.Enqueue("$($kv.Key)`t$($kv.Value)") }
+      $outQ = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]'
+      $errQ = New-Object 'System.Collections.Concurrent.ConcurrentQueue[string]'
+      $flag = [hashtable]::Synchronized(@{ stop = $false })
+      $worker = {
+        param($fmtText, $queue, $outQ, $errQ, $flag, $server, $props)
+        $ErrorActionPreference = 'Stop'
+        try {
+          Import-Module DSInternals
+          $global:HsMode = 'live'; $global:HsServer = $server
+          . ([scriptblock]::Create($fmtText))
+          $pa = @{}
+          if ($props) { $pa['Properties'] = $props }
+          $item = $null
+          while (-not $flag.stop -and $queue.TryDequeue([ref]$item)) {
+            $f = $item -split "`t"
+            $acct = Get-ADReplAccount -ObjectGuid ([Guid]$f[0]) -Server $server @pa
+            $outQ.Enqueue((FormatLine $acct $f[1]))
+          }
+        }
+        catch { $flag.stop = $true; $errQ.Enqueue([string]$_.Exception.Message) }
+      }
+      $pool = [runspacefactory]::CreateRunspacePool(1, $n)
+      $pool.Open()
+      $jobs = @()
+      for ($i = 0; $i -lt $n; $i++) {
+        $ps = [powershell]::Create()
+        $ps.RunspacePool = $pool
+        [void]$ps.AddScript($worker).AddArgument($sharedBlock.ToString()).AddArgument($queue).AddArgument($outQ).AddArgument($errQ).AddArgument($flag).AddArgument($Server).AddArgument($props)
+        $jobs += [pscustomobject]@{ PS = $ps; Async = $ps.BeginInvoke() }
+      }
+      $script:done = 0
+      try {
+        while ($true) {
+          $line = $null
+          while ($outQ.TryDequeue([ref]$line)) { $out.WriteLine($line); $script:done++ }
+          $msg = $null
+          if ($errQ.TryDequeue([ref]$msg)) { $flag.stop = $true; throw "replication worker failed: $msg" }
+          Tick "replicated ($n connections)" $script:done $scope.Count
+          $allDone = $true
+          foreach ($j in $jobs) { if (-not $j.Async.IsCompleted) { $allDone = $false } }
+          if ($allDone -and $outQ.IsEmpty) { break }
+          Start-Sleep -Milliseconds 100
+        }
+        if ($errQ.TryDequeue([ref]$msg)) { throw "replication worker failed: $msg" }
+      }
+      finally {
+        $flag.stop = $true
+        foreach ($j in $jobs) { try { $j.PS.Stop() } catch { }; $j.PS.Dispose() }
+        $pool.Close(); $pool.Dispose()
+      }
+    }
+    Tick 'replicated' $scope.Count $scope.Count $true
   }
   else {
+    Status "step C: pulling the whole domain from $Server in one pass (the first object can take a while; nothing is reported until it arrives)"
     $type = $null
     $script:seen = 0; $script:kept = 0
     Get-ADReplAccount -All -Server $Server @propArgs | ForEach-Object {
       $script:seen++
       if ($scope.TryGetValue($_.Guid, [ref]$type)) { $script:kept++; Emit $_ $type }
-      if (($script:seen % 100000) -eq 0) { Status "replicated $($script:seen) objects from the DC, $($script:kept) in scope" }
+      Tick "received from the DC ($($script:kept) kept in scope):" $script:seen 0
     }
+    Tick 'received from the DC, total objects:' $script:seen 0 $true
   }
+  Status "step C done: $($script:clock.Elapsed.ToString('hh\:mm\:ss'))"
 }
 else {
   if (-not ($NtdsPath -and $SystemHivePath)) { throw 'offline mode needs -NtdsPath and -SystemHivePath' }

@@ -52,6 +52,7 @@ namespace Hashslinger
             cmd.AddRange(new[] { "-NoProfile", "-NonInteractive", "-File", cfg.EngineScript,
                 "-Mode", cfg.Mode, "-Replication", cfg.Replication, "-SearchBases", joined,
                 "-PerAccountThreshold", cfg.PerAccountThreshold.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                "-Workers", cfg.Workers.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 "-AccountTypes", string.Join(",", cfg.AccountTypes.ToArray()) });
             if (cfg.UacExclude.Count > 0) { cmd.Add("-ExcludeUacFlags"); cmd.Add(JoinInts(cfg.UacExclude)); }
             if (cfg.UacRequire.Count > 0) { cmd.Add("-RequireUacFlags"); cmd.Add(JoinInts(cfg.UacRequire)); }
