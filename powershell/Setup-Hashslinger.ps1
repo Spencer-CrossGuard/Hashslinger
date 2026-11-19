@@ -130,6 +130,27 @@ New-Item -ItemType Directory -Force $Dir.logs | Out-Null
 $transcript = Join-Path $Dir.logs ("setup-{0:yyyyMMdd-HHmmss}.log" -f (Get-Date))
 Start-Transcript -Path $transcript | Out-Null
 
+# ---------------------------------------------------------------- optional FIPS exemption for the scan engine (OFF by default)
+# Replicating password data from AD (MS-DRSR) is itself protected with MD5 and RC4, and DSInternals runs the MD5 through
+# .NET, which refuses it while Windows FIPS mode is on. The exemption is a private copy of powershell.exe in the app
+# folder (admin-write only) with its own .config that turns .NET FIPS enforcement off for THAT process only. Windows FIPS
+# mode stays on for everything else on the server. Returns the path of the copy, or $null when it is off (or failed).
+function Sync-EngineCopy {
+  $engineCopy = Join-Path $Dir.bin 'hs-engine.exe'
+  if (-not [bool](Opt 'engine_fips_exempt' $false)) {
+    foreach ($f in $engineCopy, "$engineCopy.config") { if (Test-Path $f) { Remove-Item $f -Force -ErrorAction SilentlyContinue } }
+    return $null
+  }
+  try {
+    New-Item -ItemType Directory -Force $Dir.bin | Out-Null
+    Copy-Item "$env:windir\System32\WindowsPowerShell\v1.0\powershell.exe" $engineCopy -Force
+    $cfgXml = '<?xml version="1.0" encoding="utf-8"?>' + "`r`n" + '<configuration><runtime><enforceFIPSPolicy enabled="false"/></runtime></configuration>' + "`r`n"
+    [IO.File]::WriteAllText("$engineCopy.config", $cfgXml, (New-Object Text.ASCIIEncoding))
+    Result 'FIPS exemption for the scan engine' 'WARN' "ON. .NET FIPS enforcement is switched off for the scan engine process only ($engineCopy). Windows FIPS mode is unchanged everywhere else. This needs your security officer's approval (it is a STIG finding for .NET applications unless approved). Turn it off in the setup wizard or the Admin tool (Security and accounts) and re-apply."
+    return $engineCopy
+  } catch { Result 'FIPS exemption for the scan engine' 'FAIL' $_.Exception.Message; return $null }
+}
+
 # ---------------------------------------------------------------- phase: Local
 function Do-Local {
   if (Get-Process -Name Hashslinger -ErrorAction SilentlyContinue) {
@@ -210,6 +231,7 @@ __PAUSE__
   Get-ChildItem $Dir.root, $srcRoot -Recurse -File -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue
   Result 'Files unblocked' 'PASS'
 
+  $engineCopy = Sync-EngineCopy   # created before the DSInternals check below so that check can use it
   Step 'Dependencies'
   if (Get-Module -ListAvailable -Name ActiveDirectory) { Result 'ActiveDirectory module' 'PASS' }
   elseif (Get-Command Install-WindowsFeature -ErrorAction SilentlyContinue) {
@@ -230,7 +252,21 @@ __PAUSE__
       }
     } catch { Result 'DSInternals module' 'FAIL' ($_.Exception.Message + ' (set dsinternals_offline_path for offline hosts)') }
   }
-  try { Import-Module DSInternals -ErrorAction Stop; Result 'DSInternals loads' 'PASS' } catch { Result 'DSInternals loads' 'FAIL' $_.Exception.Message }
+  if ($engineCopy) {
+    # test it the way the scan will run it: inside the engine process, where .NET FIPS enforcement is off
+    $o = (& $engineCopy -NoProfile -NonInteractive -Command "try { Import-Module DSInternals -ErrorAction Stop; 'HS-OK' } catch { 'HS-ERR ' + `$_.Exception.Message }" 2>&1 | Out-String)
+    if ($o -match 'HS-OK') { Result 'DSInternals loads' 'PASS' 'in the scan engine process (FIPS enforcement is off for that process only)' }
+    else { Result 'DSInternals loads' 'FAIL' ("in the scan engine process: " + $o.Trim()) }
+  }
+  else {
+    try { Import-Module DSInternals -ErrorAction Stop; Result 'DSInternals loads' 'PASS' }
+    catch {
+      if ($_.Exception.Message -match 'FIPS') {
+        # not a broken install: this server enforces FIPS. Setup can finish; only the scan is blocked until a decision is made.
+        Result 'DSInternals loads' 'WARN' ('This server enforces FIPS, so DSInternals will not run in normal PowerShell. The scan will fail until you either tick "Allow the scan on a FIPS server" in the setup wizard (or the Admin tool, Security and accounts) and install again, which needs your security officer approval, or run the scan from a host that is not FIPS-enforced. Detail: ' + $_.Exception.Message)
+      } else { Result 'DSInternals loads' 'FAIL' $_.Exception.Message }
+    }
+  }
 
   Step 'Wordlists'
   foreach ($pair in @(@('hibp', 'HIBP'), @('rockyou', 'rockyou'), @('custom', 'custom'))) {
@@ -343,22 +379,9 @@ function Do-Finish {
   if ($env:COMPUTERNAME -ne $runServer.Split('.')[0] -and $env:COMPUTERNAME -ne $runServer) {
     Result 'Running on the run server' 'FAIL' "this is $env:COMPUTERNAME, the settings say $runServer (Admin tool > Security and accounts)."; return
   }
-  # ---- optional, OFF by default: switch .NET FIPS enforcement off for the SCAN ENGINE PROCESS ONLY
-  # Replicating password data from AD (MS-DRSR) is itself protected with MD5 and RC4, and DSInternals runs the MD5 through
-  # .NET, which refuses it while Windows FIPS mode is on. The exemption is a private copy of powershell.exe in the app
-  # folder (admin-write only) with its own .config; Windows FIPS mode stays on for everything else on the server.
   $fipsExempt = [bool](Opt 'engine_fips_exempt' $false)
-  $engineCopy = Join-Path $Dir.bin 'hs-engine.exe'
-  if ($fipsExempt) {
-    try {
-      Copy-Item "$env:windir\System32\WindowsPowerShell\v1.0\powershell.exe" $engineCopy -Force
-      $cfgXml = '<?xml version="1.0" encoding="utf-8"?>' + "`r`n" + '<configuration><runtime><enforceFIPSPolicy enabled="false"/></runtime></configuration>' + "`r`n"
-      [IO.File]::WriteAllText("$engineCopy.config", $cfgXml, (New-Object Text.ASCIIEncoding))
-      Result 'FIPS exemption for the scan engine' 'WARN' "ON. .NET FIPS enforcement is switched off for the scan engine process only ($engineCopy). Windows FIPS mode is unchanged everywhere else. This needs your security officer's approval (it is a STIG finding for .NET applications unless approved). Turn it off in the Admin tool (Security and accounts) and re-apply."
-    } catch { Result 'FIPS exemption for the scan engine' 'FAIL' $_.Exception.Message; return }
-  } else {
-    foreach ($f in $engineCopy, "$engineCopy.config") { if (Test-Path $f) { Remove-Item $f -Force -ErrorAction SilentlyContinue } }
-  }
+  $engineCopy = Sync-EngineCopy
+  if ($fipsExempt -and -not $engineCopy) { return }   # the reason was reported above
   try { Import-Module ActiveDirectory -ErrorAction Stop } catch { Result 'ActiveDirectory module' 'FAIL' 'install RSAT-AD-PowerShell'; return }
   $dom = Get-ADDomain
   $domainNC = $dom.DistinguishedName
