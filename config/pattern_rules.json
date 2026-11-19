@@ -4,6 +4,7 @@
   "base_words": ["password", "passw0rd", "welcome", "letmein", "admin", "administrator", "changeme",
                  "login", "secret", "football", "baseball", "monkey", "dragon", "master", "shadow",
                  "waterfall", "sunshine", "princess", "iloveyou", "trustno1", "company", "crossguard"],
+  "keyboard_waterfalls": true,
   "include_seasons": true,
   "years_back": 4,
   "suffixes": ["", "1", "12", "123", "1234", "!", "!!", "@", "#", "01", "69", "99"],

@@ -288,7 +288,7 @@ Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
     <tbody>
       <tr><td class="k">1 Preflight</td><td>The output folder must be under an allowed report location; optional BitLocker check.</td></tr>
       <tr><td class="k">2 Merge wordlists</td><td>New or changed files in <code>data\staging</code> are merged into the store (section 8).</td></tr>
-      <tr><td class="k">3 Patterns</td><td>Builds hashed candidates from <code>pattern_rules.json</code>: keyboard walks, base words, leetspeak, seasons, years, suffixes.</td></tr>
+      <tr><td class="k">3 Patterns</td><td>Builds hashed candidates from <code>pattern_rules.json</code>: keyboard walks, keyboard waterfalls (below), base words, leetspeak, seasons, years, suffixes.</td></tr>
       <tr><td class="k">4 Pull from AD</td><td>The engine (<code>Get-AccountHashes.ps1</code>) runs an LDAP search for the scope (base DN, account types, UAC flags) to get the in-scope account GUIDs, then replicates them with DSInternals.<br><b>bulk</b>: one pass over the whole directory, keeping only in-scope accounts. <b>per-account</b>: one call per account. At or below <code>per_account_threshold</code> (5000) bulk switches to per-account on its own, since bulk costs the same for 2 accounts as for all. Explicit <code>-Properties</code> sets are used so Schema partition rights are not needed. Offline mode reads an <code>ntds.dit</code> copy instead. Hashes go to the exe over a pipe, never to disk.</td></tr>
       <tr><td class="k">5 Match</td><td>Hashes are sorted, then looked up in the memory-mapped store (binary search plus a 2-byte prefix index). Pattern candidates, empty password, reversible encryption, LM hash and (if on) duplicates are checked.</td></tr>
       <tr><td class="k">6 Report</td><td>Writes <code>report_&lt;date&gt;.csv</code>, flagged accounts only. Refuses to write any cell containing an account's hash.</td></tr>
@@ -392,6 +392,8 @@ Exit codes: 0 ok, 1 usage, 2 failed (also logged)</code></pre>
     <li>A file that produces no usable hashes (wrong format, no 32-character hex hash column, empty) is <b>not</b> recorded as merged. The merge log shows a WARNING, and it is tried again next run. Lines in an NT hash file that are not valid hashes are counted and reported.</li>
     <li>Merge time is mostly disk speed; a full HIBP merge needs about twice the store size free. The source files are plaintext password lists; keep or delete them as you see fit.</li>
   </ul>
+  <h3>Keyboard waterfalls</h3>
+  <p>A waterfall is a password typed down one column of keys and then the next, such as <code>1qaz2wsx</code> or <code>zaq12wsx</code>. The scan generates about 5,700 of them for a US keyboard and tries each with upper case and common endings (<code>1 ! 123 12 @ # $ .</code>), around 100,000 candidates, in a fraction of a second. It covers every start column, left to right and right to left, columns taken down, up or zig-zag (<code>zaq1xsw2</code>), full columns or the top or bottom two or three keys (<code>1q2w3e4r</code>, <code>qazwsxedc</code>), and plain, shifted (<code>!QAZ@WSX</code>) and alternating (<code>1qaz@WSX</code>) forms, plus straight row runs and number-pad shapes. Matches are flagged Medium as a common-pattern rule. Set <code>"keyboard_waterfalls": false</code> in <code>pattern_rules.json</code> to turn it off, and add any extra walks you know to <code>keyboard_walks</code> there.</p>
 </section>
 
 <!-- 9 -->
