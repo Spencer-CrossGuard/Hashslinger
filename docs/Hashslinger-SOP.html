@@ -368,6 +368,7 @@ Exit codes: 0 ok, 1 usage, 2 failed (also logged)</code></pre>
       <tr><td class="k">install_root</td><td>chosen folder</td><td>Where everything lives.</td></tr>
       <tr><td class="k">mode</td><td>live</td><td><code>live</code> replicates from a DC; <code>offline</code> reads <code>ntds_path</code> with the SYSTEM hive <code>system_hive_path</code>.</td></tr>
       <tr><td class="k">replication</td><td>bulk</td><td><code>bulk</code> or <code>per-account</code>.</td></tr>
+      <tr><td class="k">repl_properties</td><td>GenericAccountInfo,NTHash,LMHash</td><td>Advanced. The password data requested from AD. Adding <code>SupplementalCredentials</code> slows the pull and only adds clear-text detection; accounts with the reversible-encryption flag are flagged from the account flag either way.</td></tr>
       <tr><td class="k">workers</td><td>1</td><td>Parallel connections to the DC when accounts are replicated one by one (small scopes). 1 turns it off. Raise carefully: each one loads the DC.</td></tr>
       <tr><td class="k">per_account_threshold</td><td>5000</td><td>At or below this many in-scope accounts bulk uses per-account.</td></tr>
       <tr><td class="k">target_server</td><td>none</td><td>DC to read from.</td></tr>

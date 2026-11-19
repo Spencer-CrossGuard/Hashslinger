@@ -18,6 +18,7 @@ function Get-HsDefaultConfig([string]$Root) {
     replication = 'bulk'
     per_account_threshold = 5000
     workers = 1
+    repl_properties = 'GenericAccountInfo,NTHash,LMHash'
     edipi_digits = 11
     target_server = ''
     target_ous = @()

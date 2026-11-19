@@ -35,7 +35,7 @@ param(
   [int]$PerAccountThreshold = 5000,
   # Parallel replication workers for per-account mode (each is its own connection to the DC). 1 = no parallelism.
   [int]$Workers = 4,
-  [string]$ReplProperties = 'GenericAccountInfo,NTHash,LMHash,SupplementalCredentials'
+  [string]$ReplProperties = 'GenericAccountInfo,NTHash,LMHash'
 )
 $ErrorActionPreference = 'Stop'
 Import-Module DSInternals

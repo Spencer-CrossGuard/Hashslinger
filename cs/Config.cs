@@ -46,6 +46,7 @@ namespace Hashslinger
         public string StatusPath = "status\\status.json";
         public int Workers = 1;                      // parallel DC connections for per-account replication
         public int PerAccountThreshold = 5000;       // at or below this many in-scope accounts, bulk mode switches to per-account
+        public string ReplProperties = "GenericAccountInfo,NTHash,LMHash";   // password data pulled from AD; SupplementalCredentials is slower and only adds clear-text detection
         public int EdipiDigits = 11;                 // how many digits an EDIPI has (set edipi_digits)
         public bool FipsExemptEngine = false;       // OFF by default: .NET FIPS enforcement is switched off for the scan engine process ONLY (needs security approval)
         public bool CheckDuplicates = false;         // off unless explicitly enabled
@@ -119,6 +120,8 @@ namespace Hashslinger
             c.Workers = Math.Max(1, Math.Min(16, (int)Convert.ToDouble(Json.Str(raw, "workers", "1"), System.Globalization.CultureInfo.InvariantCulture)));
             c.PerAccountThreshold = (int)Convert.ToDouble(Json.Str(raw, "per_account_threshold", "5000"), System.Globalization.CultureInfo.InvariantCulture);
             c.CheckDuplicates = Json.Str(raw, "check_duplicates", "false").ToLowerInvariant() == "true";
+            c.ReplProperties = Json.Str(raw, "repl_properties", c.ReplProperties).Trim();
+            if (!System.Text.RegularExpressions.Regex.IsMatch(c.ReplProperties, "^[A-Za-z]+(,[A-Za-z]+)*$")) throw new ConfigException("repl_properties must be a comma separated list of property names");
             c.EdipiDigits = Math.Max(5, Math.Min(20, (int)Convert.ToDouble(Json.Str(raw, "edipi_digits", "11"), System.Globalization.CultureInfo.InvariantCulture)));
             c.FipsExemptEngine = Json.Str(raw, "engine_fips_exempt", "false").ToLowerInvariant() == "true";
             if (c.FipsExemptEngine)
