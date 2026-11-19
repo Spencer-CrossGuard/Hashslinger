@@ -143,7 +143,9 @@ function Sync-EngineCopy {
   }
   try {
     New-Item -ItemType Directory -Force $Dir.bin | Out-Null
-    Copy-Item "$env:windir\System32\WindowsPowerShell\v1.0\powershell.exe" $engineCopy -Force
+    # always the 64-bit PowerShell, even if setup was started from a 32-bit PowerShell window (SysNative skips the redirect)
+    $psSrc = if ([Environment]::Is64BitOperatingSystem -and -not [Environment]::Is64BitProcess) { "$env:windir\SysNative\WindowsPowerShell\v1.0\powershell.exe" } else { "$env:windir\System32\WindowsPowerShell\v1.0\powershell.exe" }
+    Copy-Item $psSrc $engineCopy -Force
     $cfgXml = '<?xml version="1.0" encoding="utf-8"?>' + "`r`n" + '<configuration><runtime><enforceFIPSPolicy enabled="false"/></runtime></configuration>' + "`r`n"
     [IO.File]::WriteAllText("$engineCopy.config", $cfgXml, (New-Object Text.ASCIIEncoding))
     Result 'FIPS exemption for the scan engine' 'WARN' "ON. .NET FIPS enforcement is switched off for the scan engine process only ($engineCopy). Windows FIPS mode is unchanged everywhere else. This needs your security officer's approval (it is a STIG finding for .NET applications unless approved). Turn it off in the setup wizard or the Admin tool (Security and accounts) and re-apply."
