@@ -14,6 +14,7 @@ param([string]$ConfigPath = (Join-Path $PSScriptRoot '..\..\config\hashslinger.j
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 . (Join-Path $PSScriptRoot 'HashslingerTheme.ps1')
+. (Join-Path $PSScriptRoot 'HashslingerCsv.ps1')     # the report viewer / editor
 
 try { $cfg = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json }
 catch {
@@ -82,16 +83,17 @@ $cardB.Controls.AddRange(@($badge, $stepper, $bar, $txtLog))
 
 # ---------------------------------------------------------------- card: results
 $cardC = New-HsCard 16 586 752 262 'Results of the last scan'
-$btnReport = New-Object Windows.Forms.Button -Property @{ Text = 'Open newest report'; Left = 306; Top = 6; Width = 150; Height = 30 }
-$btnFolder = New-Object Windows.Forms.Button -Property @{ Text = 'Reports folder'; Left = 466; Top = 6; Width = 150; Height = 30 }
-$btnGuide = New-Object Windows.Forms.Button -Property @{ Text = 'Open the guide'; Left = 626; Top = 6; Width = 110; Height = 30 }
+$btnView = New-Object Windows.Forms.Button -Property @{ Text = 'View / edit report'; Left = 214; Top = 6; Width = 150; Height = 30; Tag = 'primary' }
+$btnReport = New-Object Windows.Forms.Button -Property @{ Text = 'Open in app'; Left = 372; Top = 6; Width = 110; Height = 30 }
+$btnFolder = New-Object Windows.Forms.Button -Property @{ Text = 'Reports folder'; Left = 490; Top = 6; Width = 122; Height = 30 }
+$btnGuide = New-Object Windows.Forms.Button -Property @{ Text = 'Open the guide'; Left = 620; Top = 6; Width = 116; Height = 30 }
 $tileA = New-HsTile 16 46 170 64 'accounts scanned' $C.Blue
 $tileF = New-HsTile 198 46 170 64 'accounts flagged' $C.Amber
 $tileH = New-HsTile 380 46 170 64 'High severity' $C.Red
 $tileM = New-HsTile 562 46 174 64 'Medium severity' $C.Amber
 $donut = New-HsDonut 16 122 130
 $bars = New-HsBars 160 124 576 128
-$cardC.Controls.AddRange(@($btnReport, $btnFolder, $btnGuide, $tileA, $tileF, $tileH, $tileM, $donut, $bars))
+$cardC.Controls.AddRange(@($btnView, $btnReport, $btnFolder, $btnGuide, $tileA, $tileF, $tileH, $tileM, $donut, $bars))
 
 $form.Controls.AddRange(@($cardA, $cardB, $cardC))
 Set-HsTheme $form
@@ -127,6 +129,9 @@ $btnStart.Add_Click({
   Test-Ready
 })
 
+$btnView.Add_Click({
+  try { Show-HsCsvViewer -Folder $outputPath } catch { [void][Windows.Forms.MessageBox]::Show('Cannot open the viewer: ' + $_.Exception.Message, 'Hashslinger') }
+})
 $btnReport.Add_Click({
   try {
     $f = Get-ChildItem -LiteralPath $outputPath -Filter 'report_*.csv' -File -ErrorAction Stop | Sort-Object LastWriteTime -Descending | Select-Object -First 1
