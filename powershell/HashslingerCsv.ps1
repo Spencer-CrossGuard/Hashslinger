@@ -52,6 +52,43 @@ function Read-HsCsvTable([string]$Path) {
   return , $table
 }
 
+function Read-HsAuditTable([string]$Path) {
+  # One row per scan (its start and end entries joined by run id), plus one row for every rejected request. Newest first.
+  $cols = 'Time (UTC)', 'Event', 'Run ID', 'Trigger', 'Started by', 'EDIPI', 'Reason', 'Scope', 'Result', 'Accounts', 'Memory wiped', 'Report', 'Error', 'Why rejected'
+  $table = New-Object Data.DataTable
+  foreach ($n in $cols) { $c = New-Object Data.DataColumn($n, [string]); $c.DefaultValue = ''; [void]$table.Columns.Add($c) }
+  $fi = Get-Item -LiteralPath $Path -ErrorAction Stop
+  if ($fi.Length -gt 200MB) { throw 'The audit log is too big for the viewer. Open it in Notepad or ask the administrator to archive it.' }
+  $runs = @{}; $order = New-Object 'System.Collections.Generic.List[object]'
+  foreach ($line in [IO.File]::ReadLines($Path)) {
+    if (-not $line.Trim()) { continue }
+    try { $o = $line | ConvertFrom-Json } catch { continue }
+    $ev = [string]$o.event
+    if ($ev -eq 'start') {
+      $by = [string]$o.started_by; if ($o.requested_by -and ([string]$o.requested_by -ne $by)) { $by += ' (request: ' + [string]$o.requested_by + ')' }
+      $row = @{ 'Time (UTC)' = [string]$o.time; 'Event' = 'Scan'; 'Run ID' = [string]$o.run_id; 'Trigger' = [string]$o.trigger; 'Started by' = $by
+                'EDIPI' = [string]$o.edipi; 'Reason' = [string]$o.reason; 'Scope' = (@($o.scope) -join '; '); 'Result' = 'started (no end entry)' }
+      $runs[[string]$o.run_id] = $row; $order.Add($row)
+    }
+    elseif ($ev -eq 'end') {
+      $row = $runs[[string]$o.run_id]
+      if (-not $row) { $row = @{ 'Time (UTC)' = [string]$o.time; 'Event' = 'Scan'; 'Run ID' = [string]$o.run_id }; $runs[[string]$o.run_id] = $row; $order.Add($row) }
+      $row['Result'] = [string]$o.status; $row['Accounts'] = [string]$o.accounts_processed; $row['Memory wiped'] = [string]$o.wipe_confirmed
+      $row['Report'] = [string]$o.output; $row['Error'] = [string]$o.error; $row['Ended (UTC)'] = [string]$o.time
+    }
+    elseif ($ev -eq 'rejected') {
+      $order.Add(@{ 'Time (UTC)' = [string]$o.time; 'Event' = 'Rejected request'; 'Started by' = [string]$o.started_by; 'EDIPI' = [string]$o.edipi; 'Reason' = [string]$o.reason; 'Result' = 'rejected'; 'Why rejected' = [string]$o.why })
+    }
+  }
+  for ($i = $order.Count - 1; $i -ge 0; $i--) {
+    $r = $table.NewRow()
+    foreach ($n in $cols) { if ($order[$i].ContainsKey($n)) { $r[$n] = [string]$order[$i][$n] } }
+    [void]$table.Rows.Add($r)
+  }
+  $table.AcceptChanges()
+  return , $table
+}
+
 function ConvertTo-HsCsvCell([string]$v) {
   if ($v.IndexOfAny([char[]]@(',', '"', "`r", "`n")) -ge 0) { return '"' + $v.Replace('"', '""') + '"' }
   return $v
@@ -93,9 +130,10 @@ function Set-HsClipboardText([string]$Text) {
 }
 
 function Show-HsCsvViewer {
-  param([string]$Path = '', [string]$Folder = '')
+  param([string]$Path = '', [string]$Folder = '', [string]$AuditPath = '')
   $C = $script:HsC
-  $V = @{ Path = $Path; Folder = $Folder; Table = $null; Dirty = $false; Loading = $false }
+  $V = @{ Path = $Path; Folder = $Folder; Table = $null; Dirty = $false; Loading = $false; Audit = [bool]$AuditPath }
+  if ($AuditPath) { $V.Path = $AuditPath }
 
   # pick the newest report when no file is given
   if (-not $V.Path -and $V.Folder) {
@@ -107,7 +145,7 @@ function Show-HsCsvViewer {
     Text = 'Hashslinger report viewer'; Width = [Math]::Min(1180, $wa.Width - 20); Height = [Math]::Min(720, $wa.Height - 20)
     StartPosition = 'CenterParent'; MinimumSize = New-Object Drawing.Size(860, 480); KeyPreview = $true
   }
-  $hdr = Add-HsHeader $f 'Report viewer' 'Look through, search, edit and copy a scan report' 76 $false
+  $hdr = if ($V.Audit) { Add-HsHeader $f 'Audit log' 'Every scan: who started it, why, and how it ended. Read only.' 76 $false } else { Add-HsHeader $f 'Report viewer' 'Look through, search, edit and copy a scan report' 76 $false }
 
   # toolbar row 1: file + search
   $btnOpen = New-Object Windows.Forms.Button -Property @{ Text = 'Open file...'; Left = 12; Top = 86; Width = 100; Height = 30 }
@@ -149,14 +187,21 @@ function Show-HsCsvViewer {
   $f.Controls.AddRange(@($btnOpen, $btnLatest, $btnReload, $lblFind, $txtFind, $btnClear, $btnCopyAll, $btnCopySel, $btnCopyCsv, $btnAdd, $btnDel, $btnSave, $btnSaveAs, $grid, $lblStatus))
   Set-HsTheme $f
   $f.BackColor = $C.Bg
+  if ($V.Audit) {   # the audit log is read only: no editing, saving over it, or opening other files
+    $grid.ReadOnly = $true
+    foreach ($b in @($btnOpen, $btnLatest, $btnAdd, $btnDel, $btnSave)) { $b.Visible = $false }
+    $btnReload.Left = 12; $lblFind.Left = 100; $txtFind.Left = 152; $btnClear.Left = 418
+    $btnSaveAs.Text = 'Export CSV...'; $btnSaveAs.Left = 410; $btnSaveAs.Width = 110
+    $f.Text = 'Hashslinger audit log'
+  }
 
   # ---- helpers (script-block variables, so the event handlers can reach them)
   $updateStatus = {
     $name = if ($V.Path) { [IO.Path]::GetFileName($V.Path) } else { '(no file)' }
-    $f.Text = 'Hashslinger report viewer: ' + $name + $(if ($V.Dirty) { ' *' } else { '' })
+    $f.Text = $(if ($V.Audit) { 'Hashslinger audit log' } else { 'Hashslinger report viewer: ' + $name + $(if ($V.Dirty) { ' *' } else { '' }) })
     if ($V.Table) {
       $total = $V.Table.Rows.Count; $shown = $grid.Rows.Count
-      $lblStatus.Text = ('{0:N0} rows' -f $total) + $(if ($shown -ne $total) { (', {0:N0} shown by the search' -f $shown) } else { '' }) + '   |   ' + $(if ($V.Dirty) { 'UNSAVED CHANGES' } else { 'no changes' }) + '   |   ' + $V.Path
+      $lblStatus.Text = ('{0:N0} rows' -f $total) + $(if ($shown -ne $total) { (', {0:N0} shown by the search' -f $shown) } else { '' }) + '   |   ' + $(if ($V.Audit) { 'read only' } elseif ($V.Dirty) { 'UNSAVED CHANGES' } else { 'no changes' }) + '   |   ' + $V.Path
     } else { $lblStatus.Text = 'Open a CSV file to begin.' }
     $lblStatus.ForeColor = $(if ($V.Dirty) { $C.Red } else { $C.Muted })
   }.GetNewClosure()
@@ -173,7 +218,7 @@ function Show-HsCsvViewer {
   $loadFile = {
     param([string]$p)
     try {
-      $t = Read-HsCsvTable $p
+      $t = if ($V.Audit) { Read-HsAuditTable $p } else { Read-HsCsvTable $p }
     } catch {
       [void][Windows.Forms.MessageBox]::Show('Cannot open the file:' + "`r`n" + $p + "`r`n`r`n" + $_.Exception.Message, 'Hashslinger')
       return
@@ -208,7 +253,7 @@ function Show-HsCsvViewer {
     try { $grid.EndEdit() | Out-Null; $null = $grid.CurrentCell = $null } catch { }
     try {
       Write-HsCsvFile $V.Table $p
-      $V.Path = $p; $V.Dirty = $false
+      if (-not $V.Audit) { $V.Path = $p; $V.Dirty = $false }
       $V.Table.AcceptChanges()
       & $updateStatus
       return $true

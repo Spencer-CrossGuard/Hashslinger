@@ -17,6 +17,7 @@ if (-not $isAdmin) {
   exit
 }
 . (Join-Path $PSScriptRoot 'HashslingerCommon.ps1')
+. (Join-Path $PSScriptRoot 'HashslingerCsv.ps1')       # the viewer (used for the audit log)
 
 if (-not (Test-Path $ConfigPath)) {
   [void][Windows.Forms.MessageBox]::Show("No settings file found at:`r`n$ConfigPath`r`n`r`nRun the Setup wizard first.", 'Hashslinger Admin')
@@ -314,7 +315,7 @@ $btns = @(
   @('Watch progress', { Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$viewer`"", '-ConfigPath', "`"$ConfigPath`"") }),
   @('Open newest report', { $f = Get-ChildItem (Get-Field 'output_path') -Filter 'report_*.csv' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1; if ($f) { Start-Process $f.FullName } else { Msg 'No report yet.' } }),
   @('Open reports folder', { $p = Get-Field 'output_path'; New-Item -ItemType Directory -Force $p | Out-Null; Start-Process explorer.exe $p }),
-  @('Open audit log', { $p = Get-Field 'log_path'; if (Test-Path $p) { Start-Process notepad.exe $p } else { Msg 'No audit log yet.' } })
+  @('Open audit log', { $p = Get-Field 'log_path'; if (Test-Path $p) { try { Show-HsCsvViewer -AuditPath $p } catch { Msg ('Cannot open the audit log: ' + $_.Exception.Message) } } else { Msg 'No audit log yet.' } })
 )
 $x = 12; $y = [int]$tpRun.Tag
 foreach ($b in $btns) {
