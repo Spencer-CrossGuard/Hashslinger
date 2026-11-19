@@ -320,7 +320,7 @@ Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
   <h3>Running tool (<code>Hashslinger-Run.ps1</code>), for analysts</h3>
   <p>A small window with no settings in it, so an analyst cannot change anything by mistake. It has two parts:</p>
   <ul>
-    <li><b>Start a scan:</b> pick the scope (only the ones the administrator configured), enter your EDIPI (11 digits by default, setting <code>edipi_digits</code>) and the reason or CTO number (at least 10 characters), and click Start scan. The request goes to the on-demand task, which runs as the service account and logs the EDIPI, the reason and your Windows account.</li>
+    <li><b>Start a scan:</b> pick the scope (only the ones the administrator configured), enter your EDIPI (12 letters or digits by default, setting <code>edipi_length</code>) and the reason or CTO number (at least 5 characters by default, setting <code>reason_min_length</code>), and click Start scan. The request goes to the on-demand task, which runs as the service account and logs the EDIPI, the reason and your Windows account.</li>
     <li><b>Current or last scan:</b> live step, progress bar, time, who started it, a short log, and buttons to open the newest report and the reports folder. If a scan is already running, a new request waits and starts when it finishes.</li>
   </ul>
   <p>Setup puts a <b>Hashslinger Running Tool</b> shortcut on the public desktop and in the Start menu (folder Hashslinger), so nobody needs to open the locked install folder. The Admin tool and Uninstall shortcuts are in the Start menu folder too.</p>
@@ -377,7 +377,8 @@ Exit codes: 0 ok, 1 usage, 2 failed (also logged)</code></pre>
       <tr><td class="k">uac.exclude_flags</td><td>SMARTCARD_REQUIRED</td><td>Skip accounts with ANY of these userAccountControl flags (names or numbers).</td></tr>
       <tr><td class="k">uac.require_flags</td><td>none</td><td>Accounts must have ALL of these.</td></tr>
       <tr><td class="k">check_duplicates</td><td>false</td><td>Flag shared passwords (Medium). Can add many rows on a large directory.</td></tr>
-      <tr><td class="k">edipi_digits</td><td>11</td><td>How many digits an EDIPI must have when a person starts a scan. Checked by the exe, the Running tool and the request window.</td></tr>
+      <tr><td class="k">edipi_length</td><td>12</td><td>How many characters an EDIPI must have when a person starts a scan. Letters and digits are allowed; the allow-list ignores case. Checked by the exe and the Running tool.</td></tr>
+      <tr><td class="k">reason_min_length</td><td>5</td><td>The shortest reason or CTO number accepted when a person starts a scan (up to 500).</td></tr>
       <tr><td class="k">engine_fips_exempt</td><td>false</td><td>Only for a FIPS-enforced server where the scan fails with the MD5 / FIPS error. Turns .NET FIPS enforcement off for the scan engine process only (a private copy of PowerShell in <code>app\</code>). Needs security approval. Applied by Finish.</td></tr>
       <tr><td class="k">enable_scheduled, enable_ondemand</td><td>true, true</td><td>Which scan tasks exist. <code>Hashslinger-Scheduled</code> runs unattended on the schedule (logged as scheduled, no person). <code>Hashslinger-OnDemand</code> is how every scan started by a person runs, with an EDIPI and a reason. Applied by the Finish step (the Admin tool offers to run it).</td></tr>
       <tr><td class="k">cadence, schedule_day, schedule_time</td><td>Weekly, Sunday, 02:00</td><td>Daily, Weekly or Monthly (every 4 weeks). Daily ignores the day.</td></tr>

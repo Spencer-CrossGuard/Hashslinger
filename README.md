@@ -202,7 +202,7 @@ at or below `per_account_threshold` (default 5000), replicates only those accoun
    per-account replication as above. DRS cannot filter by OU/UAC server side. Offline `ntds.dit`
    mode filters after loading.
 2. **On-demand scans.** Analysts lack replication rights, so the GUI writes a request file and starts
-   a scheduled task that runs as the GMSA. Analysts must enter an EDIPI (11 digits by default; `edipi_digits` in the settings) and a reason (10-500
+   a scheduled task that runs as the GMSA. Analysts must enter an EDIPI (12 letters or digits by default; `edipi_length` in the settings) and a reason (5-500
    chars). Both go into the request and the audit log (`start` entry; invalid or unauthorized requests
    are logged as `rejected`). Optional `authorized_edipis` allowlist in config. The request folder is a
    write-only drop box for analysts; only the GMSA can read the file, and it is deleted after being

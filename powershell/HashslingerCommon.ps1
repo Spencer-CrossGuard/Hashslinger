@@ -19,7 +19,8 @@ function Get-HsDefaultConfig([string]$Root) {
     per_account_threshold = 5000
     workers = 1
     repl_properties = 'GenericAccountInfo,NTHash,LMHash'
-    edipi_digits = 11
+    edipi_length = 12
+    reason_min_length = 5
     target_server = ''
     target_ous = @()
     account_types = @('User', 'Service')

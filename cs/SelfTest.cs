@@ -319,15 +319,15 @@ namespace Hashslinger
             Config cfg = MakeConfig(root);
             string req = Path.Combine(root, "req.json");
             string outOk = Path.Combine(cfg.OutputPath, "sub").Replace("\\", "\\\\");
-            string good = "{\"ou\":\"" + Ou + "\",\"output_dir\":\"" + outOk + "\",\"edipi\":\"12345678901\",\"reason\":\"Quarterly audit ticket 4411\"}";
+            string good = "{\"ou\":\"" + Ou + "\",\"output_dir\":\"" + outOk + "\",\"edipi\":\"12345678901A\",\"reason\":\"Quarterly audit ticket 4411\"}";
             File.WriteAllText(req, good);
             Check("valid request accepted", Request.Load(cfg, req).Ou == Ou);
             string[][] bad =
             {
                 new[] { "\"ou\":\"" + Ou + "\"", "\"ou\":\"OU=Other,DC=x\"" },
-                new[] { "\"edipi\":\"12345678901\"", "\"edipi\":\"12345\"" },
-                new[] { "\"edipi\":\"12345678901\"", "\"edipi\":\"1234567890a\"" },
-                new[] { "\"reason\":\"Quarterly audit ticket 4411\"", "\"reason\":\"short\"" },
+                new[] { "\"edipi\":\"12345678901A\"", "\"edipi\":\"12345\"" },
+                new[] { "\"edipi\":\"12345678901A\"", "\"edipi\":\"12345678901!\"" },
+                new[] { "\"reason\":\"Quarterly audit ticket 4411\"", "\"reason\":\"abcd\"" },
                 new[] { "\"reason\":\"Quarterly audit ticket 4411\"", "\"reason\":\"\"" },
                 new[] { "\"output_dir\":\"" + outOk + "\"", "\"output_dir\":\"" + Path.GetTempPath().Replace("\\", "\\\\") + "\"" },
             };
@@ -338,7 +338,7 @@ namespace Hashslinger
                 try { Request.Load(cfg, req); } catch (RequestException) { rejected++; }
             }
             Check("6 bad requests all rejected", rejected == 6);
-            cfg.AuthorizedEdipis = new List<string> { "11111111111" };
+            cfg.AuthorizedEdipis = new List<string> { "11111111111B" };
             File.WriteAllText(req, good);
             bool denied = false;
             try { Request.Load(cfg, req); } catch (RequestException) { denied = true; }

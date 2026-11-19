@@ -34,18 +34,24 @@ namespace Hashslinger
 
     public static class Request
     {
-        /// <summary>Every scan started by a person needs an EDIPI of the configured length (11 digits by default) (on the allowed list, if one is set) and a
-        /// reason or CTO number of 10 to 500 characters. Both go into the audit log.</summary>
+        /// <summary>Every scan started by a person needs an EDIPI of the configured length (12 letters or digits by default) (on the allowed list, if one is set) and a
+        /// reason or CTO number of the configured minimum (5 by default) to 500 characters. Both go into the audit log.</summary>
+        static bool ListHasIgnoreCase(List<string> list, string value)
+        {
+            foreach (string s in list) if (string.Equals(s, value, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
         public static void CheckPerson(Config cfg, string edipi, string reason, string by)
         {
             edipi = (edipi ?? "").Trim();
             reason = (reason ?? "").Trim();
-            if (!Regex.IsMatch(edipi, "^[0-9]{" + cfg.EdipiDigits + "}$"))
-                throw new RequestException("EDIPI must be exactly " + cfg.EdipiDigits + " digits", edipi, reason, by);
-            if (cfg.AuthorizedEdipis.Count > 0 && !cfg.AuthorizedEdipis.Contains(edipi))
+            if (!Regex.IsMatch(edipi, "^[0-9A-Za-z]{" + cfg.EdipiLength + "}$"))
+                throw new RequestException("EDIPI must be exactly " + cfg.EdipiLength + " characters (letters and digits)", edipi, reason, by);
+            if (cfg.AuthorizedEdipis.Count > 0 && !ListHasIgnoreCase(cfg.AuthorizedEdipis, edipi))
                 throw new RequestException("EDIPI is not authorized to request scans", edipi, reason, by);
-            if (reason.Length < 10 || reason.Length > 500)
-                throw new RequestException("a reason or CTO number of 10 to 500 characters is required", edipi, reason, by);
+            if (reason.Length < cfg.ReasonMinLength || reason.Length > 500)
+                throw new RequestException("a reason or CTO number of " + cfg.ReasonMinLength + " to 500 characters is required", edipi, reason, by);
         }
 
         /// <summary>Ask the person at the console for their EDIPI and the reason / CTO number (three tries).
@@ -60,7 +66,7 @@ namespace Hashslinger
             Console.WriteLine("This scan is attributed to a person and logged. Windows account: " + who);
             for (int tries = 0; ; tries++)
             {
-                if (string.IsNullOrEmpty(edipi)) { Console.Write("EDIPI (" + cfg.EdipiDigits + " digits): "); edipi = (Console.ReadLine() ?? "").Trim(); }
+                if (string.IsNullOrEmpty(edipi)) { Console.Write("EDIPI (" + cfg.EdipiLength + " characters): "); edipi = (Console.ReadLine() ?? "").Trim(); }
                 if (string.IsNullOrEmpty(reason)) { Console.Write("Reason for this scan / CTO number: "); reason = (Console.ReadLine() ?? "").Trim(); }
                 try { CheckPerson(cfg, edipi, reason, who); return; }
                 catch (RequestException e)
@@ -87,7 +93,7 @@ namespace Hashslinger
         }
 
         /// <summary>Validate an analyst request. Only config-listed OUs and allowed output roots are accepted;
-        /// an EDIPI (11 digits by default) and a reason (10-500 chars) are mandatory and end up in the audit log.</summary>
+        /// an EDIPI (12 letters or digits by default) and a reason (5-500 chars by default) are mandatory and end up in the audit log.</summary>
         public static ScanRequest Load(Config cfg, string path)
         {
             Dictionary<string, object> req = Json.Parse(File.ReadAllText(path, Encoding.UTF8)) as Dictionary<string, object>;

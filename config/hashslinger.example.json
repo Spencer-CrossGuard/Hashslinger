@@ -5,7 +5,8 @@
   "per_account_threshold": 5000,
   "workers": 1,
   "repl_properties": "GenericAccountInfo,NTHash,LMHash",
-  "edipi_digits": 11,
+  "edipi_length": 12,
+  "reason_min_length": 5,
   "target_server": "dc1.corp.contoso.com",
   "target_ous": [
     "OU=Finance,DC=corp,DC=contoso,DC=com"
