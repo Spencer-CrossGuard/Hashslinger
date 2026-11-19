@@ -41,9 +41,29 @@ function New-HsRoundPath([Drawing.RectangleF]$r, [single]$radius) {
 }
 
 # ---------------------------------------------------------------- the logo: a shield with a hash sign
+$script:HsPatch = $null
+function Get-HsPatch {
+  if ($script:HsPatch) { return $script:HsPatch }
+  try {
+    . (Join-Path $PSScriptRoot 'HashslingerLogoData.ps1')
+    $bytes = [Convert]::FromBase64String([string]$script:HsLogoB64)
+    $ms = New-Object IO.MemoryStream(, $bytes)
+    $script:HsPatch = New-Object Drawing.Bitmap($ms)   # stream must stay open for the bitmap's life
+  } catch { $script:HsPatch = $null }
+  return $script:HsPatch
+}
 function New-HsLogo([int]$size) {
   $bmp = New-Object Drawing.Bitmap($size, $size)
   $g = [Drawing.Graphics]::FromImage($bmp)
+  $patch = Get-HsPatch
+  if ($patch) {
+    try {
+      $g.SmoothingMode = 'AntiAlias'; $g.InterpolationMode = 'HighQualityBicubic'; $g.PixelOffsetMode = 'HighQuality'
+      $g.DrawImage($patch, 0, 0, $size, $size)
+      $g.Dispose()
+      return $bmp
+    } catch { }
+  }
   try {
     $g.SmoothingMode = 'AntiAlias'
     $s = [single]$size; $m = [single]($s * 0.07)
@@ -82,7 +102,7 @@ function Add-HsHeader($form, [string]$title, [string]$subtitle, [int]$height = 7
     $form.Height = [Math]::Min($form.Height + $height, $wa.Height - 10)
   }
   $p = New-Object Windows.Forms.Panel -Property @{ Left = 0; Top = 0; Width = $form.ClientSize.Width; Height = $height; Anchor = 'Top,Left,Right' }
-  $p.Tag = @{ Title = $title; Sub = $subtitle; Logo = (New-HsLogo 54) }
+  $p.Tag = @{ Title = $title; Sub = $subtitle; Logo = (New-HsLogo 64) }
   Set-HsDoubleBuffer $p
   $p.Add_Paint({
     param($s, $e)
@@ -94,11 +114,11 @@ function Add-HsHeader($form, [string]$title, [string]$subtitle, [int]$height = 7
       $g.FillRectangle($bg, $r)
       $bar = New-Object Drawing.Drawing2D.LinearGradientBrush($r, $script:HsC.Blue, $script:HsC.Sky, 0.0)
       $g.FillRectangle($bar, 0, $r.Height - 3, $r.Width, 3)
-      $g.DrawImage($t.Logo, 18, [int](($r.Height - 54) / 2) - 1, 54, 54)
+      $g.DrawImage($t.Logo, 16, [int](($r.Height - 64) / 2) - 1, 64, 64)
       $f1 = New-HsFont 17 'Bold'; $f2 = New-HsFont 9.5
       $w = New-Object Drawing.SolidBrush([Drawing.Color]::White); $l = New-Object Drawing.SolidBrush($script:HsC.Light)
-      $g.DrawString($t.Title, $f1, $w, 84, 13)
-      $g.DrawString($t.Sub, $f2, $l, 86, 44)
+      $g.DrawString($t.Title, $f1, $w, 90, 13)
+      $g.DrawString($t.Sub, $f2, $l, 92, 44)
       $bg.Dispose(); $bar.Dispose(); $f1.Dispose(); $f2.Dispose(); $w.Dispose(); $l.Dispose()
     } catch { }
   })
