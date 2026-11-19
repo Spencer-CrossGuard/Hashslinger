@@ -78,7 +78,7 @@ $btnRun.Add_Click({
     foreach ($i in $lst.CheckedItems) { $ous += [string]$i }
     foreach ($l in ($txtExtra.Text -split "`r?`n")) { if ($l.Trim()) { $ous += $l.Trim() } }
     $ous = @($ous | Select-Object -Unique)
-    if ($txtEdipi.Text.Trim() -notmatch '^[0-9A-Za-z]{12}$' -or $txtReason.Text.Trim().Length -lt 5) { [void][Windows.Forms.MessageBox]::Show('Enter your 11-character EDIPI and a reason / CTO number (at least 5 characters). They are written to the audit log.'); return }
+    if ($txtEdipi.Text.Trim() -notmatch '^[0-9A-Za-z]{11}$' -or $txtReason.Text.Trim().Length -lt 5) { [void][Windows.Forms.MessageBox]::Show('Enter your 11-character EDIPI and a reason / CTO number (at least 5 characters). They are written to the audit log.'); return }
     if (-not $server -or -not $w -or $ous.Count -eq 0) { [void][Windows.Forms.MessageBox]::Show('Enter a domain controller, a work folder, and at least one OU/DN.'); return }
 
     $btnRun.Enabled = $false; $bar.Style = 'Marquee'; $log.Clear()
