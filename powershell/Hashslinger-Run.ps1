@@ -114,6 +114,8 @@ $btnStart.Add_Click({
     # make the file's owner this person, so the audit log can name who started the scan
     try { $acl = Get-Acl -LiteralPath $file; $acl.SetOwner([Security.Principal.WindowsIdentity]::GetCurrent().User); Set-Acl -LiteralPath $file -AclObject $acl } catch { }
     Start-ScheduledTask -TaskName $taskName
+    $script:suppressRun = $script:lastRunId   # keep the finished run's numbers hidden until a new run replaces it
+    Reset-Results 'new scan requested, results will appear when it finishes'
     $lblSent.ForeColor = $C.Green
     $lblSent.Text = 'Request sent. The scan runs as the service account; watch it below. If a scan is already running, yours starts when it finishes.'
     $txtReason.Clear()
@@ -180,6 +182,13 @@ function Show-ReportSummary([string]$path) {
   } catch { Clear-Results 'summary not available' }
 }
 
+# wipe the previous scan's numbers so they cannot be mistaken for the new scan's
+function Reset-Results([string]$why) {
+  $script:summaryFor = $null
+  Clear-Results $why
+  Set-HsTile $tileA '-'
+}
+
 # ---------------------------------------------------------------- live status (read only)
 $timer = New-Object Windows.Forms.Timer -Property @{ Interval = 1500 }
 $timer.Add_Tick({
@@ -218,13 +227,20 @@ $timer.Add_Tick({
       $txt = (@($s.log) -join "`r`n")
       if ($txt -ne $txtLog.Text) { $txtLog.Text = $txt; $txtLog.SelectionStart = $txtLog.Text.Length; $txtLog.ScrollToCaret() }
     }
+    if ($running -and $script:clearedFor -ne [string]$s.run_id) {   # a scan started (by anyone): drop the old results once
+      $script:clearedFor = [string]$s.run_id
+      Reset-Results 'scan in progress, results will appear when it finishes'
+    }
+    $script:lastRunId = [string]$s.run_id
+    if ($state -eq 'failed' -and $script:clearedFor -ne [string]$s.run_id) { $script:clearedFor = [string]$s.run_id; Reset-Results 'the last scan failed, no results' }
     if ($state -eq 'failed') { $lblDetail.Text = 'Failed: ' + [string]$s.error }
     if ($state -eq 'success' -and $s.output) {
       Set-HsTile $tileA ('{0:N0}' -f [int]$s.accounts_received)
-      if ([string]$s.output -ne $script:summaryFor) { Show-ReportSummary ([string]$s.output) }
+      if ($script:lastRunId -ne $script:suppressRun -and [string]$s.output -ne $script:summaryFor) { Show-ReportSummary ([string]$s.output) }
     }
   } catch { }
 })
+$script:clearedFor = ''; $script:lastRunId = ''; $script:suppressRun = $null
 $timer.Start()
 Clear-Results 'run a scan to see results'
 Set-HsTile $tileA '-'
