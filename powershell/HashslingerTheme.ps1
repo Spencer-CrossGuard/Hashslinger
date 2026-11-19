@@ -104,6 +104,7 @@ function Add-HsHeader($form, [string]$title, [string]$subtitle, [int]$height = 7
   $p = New-Object Windows.Forms.Panel -Property @{ Left = 0; Top = 0; Width = $form.ClientSize.Width; Height = $height; Anchor = 'Top,Left,Right' }
   $p.Tag = @{ Title = $title; Sub = $subtitle; Logo = (New-HsLogo 64) }
   Set-HsDoubleBuffer $p
+  $p.Add_Resize({ try { $this.Invalidate() } catch { } })   # repaint the gradient across the new width
   $p.Add_Paint({
     param($s, $e)
     try {

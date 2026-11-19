@@ -189,6 +189,12 @@ function Show-HsCsvViewer {
     foreach ($col in $grid.Columns) { $col.SortMode = 'Automatic'; $col.MinimumWidth = 60 }
     try { $grid.AutoResizeColumns('DisplayedCells') } catch { }
     foreach ($col in $grid.Columns) { if ($col.Width -gt 420) { $col.Width = 420 } }
+    # the widest column (Flag Reason in a report) soaks up any extra room, so the list grows and shrinks with the window
+    try {
+      $wide = $null
+      foreach ($col in $grid.Columns) { if (-not $wide -or $col.Width -gt $wide.Width) { $wide = $col } }
+      if ($wide) { $mw = $wide.Width; $wide.AutoSizeMode = 'Fill'; $wide.MinimumWidth = [Math]::Max(60, $mw); $wide.FillWeight = 100 }
+    } catch { }
     $V.Loading = $false
     & $updateStatus
   }
