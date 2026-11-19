@@ -32,11 +32,12 @@ namespace Hashslinger
         {
             if (msg == null || msg.Length < 7 || !msg.StartsWith("step ", StringComparison.Ordinal)) return;
             string id = msg.Substring(5, 1);
-            bool done = msg.Length >= 11 && msg.Substring(6, 5) == " done";
+            bool start = msg[6] == ':';                                        // "step A: ..."
+            bool done = msg.Length >= 11 && msg.Substring(6, 5) == " done";   // "step A done: ..."
             lock (gate)
             {
-                if (!done) subStart[id] = runClock.ElapsedMilliseconds;
-                else if (subStart.ContainsKey(id)) subMs[id] = runClock.ElapsedMilliseconds - subStart[id];
+                if (start) subStart[id] = runClock.ElapsedMilliseconds;
+                else if (done && subStart.ContainsKey(id)) subMs[id] = runClock.ElapsedMilliseconds - subStart[id];   // other "step C detail" lines are ignored
             }
         }
 

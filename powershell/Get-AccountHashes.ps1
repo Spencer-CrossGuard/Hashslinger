@@ -54,7 +54,9 @@ function Status([string]$m) { $out.WriteLine('##HS## ' + $m) }
 $global:HsMode = $Mode; $global:HsServer = $Server
 $sharedBlock = {
   function ToHex($b) { if ($b) { [BitConverter]::ToString([byte[]]$b).Replace('-', '') } else { '' } }
-  function Clean([string]$s) { $s -replace '[\t\r\n]', ' ' }
+  $global:HsBad = [char[]]("`t", "`r", "`n")
+  # fast path: most names and DNs contain none of the three characters, so skip the regex for them
+  function Clean([string]$s) { if ($s.IndexOfAny($global:HsBad) -lt 0) { $s } else { $s -replace '[\t\r\n]', ' ' } }
   # sAMAccountName must never be blank in the report. Normally DSInternals supplies it; if not, read it from AD (LDAP, read-only).
   function Get-SamFromLdap($guid) {
     if ($global:HsMode -ne 'live' -or -not $global:HsServer -or -not $guid) { return '' }
@@ -156,10 +158,9 @@ if ($Mode -eq 'live') {
       Status "scope search: looking for $t accounts under $b"
       $res = $ds.FindAll()
       foreach ($r in $res) {
-        $g = New-Object Guid (, [byte[]]$r.Properties['objectguid'][0])
-        $scope[$g] = $t
+        $scope[[Guid][byte[]]$r.Properties['objectguid'][0]] = $t   # a cast is much cheaper than New-Object for every account
         $script:found++
-        Tick 'scope search: accounts found' $script:found 0
+        if (($script:found -band 1023) -eq 0) { Tick 'scope search: accounts found' $script:found 0 }
       }
       $res.Dispose(); $ds.Dispose()
     }
@@ -267,12 +268,16 @@ if ($Mode -eq 'live') {
     Status "step C: pulling the whole domain from $Server in one pass (the first object can take a while; nothing is reported until it arrives)"
     $type = $null
     $script:seen = 0; $script:kept = 0
+    $procSw = New-Object Diagnostics.Stopwatch   # time spent in OUR per-object code, to tell it apart from waiting on the DC
     Get-ADReplAccount -All -Server $Server @propArgs | ForEach-Object {
+      $procSw.Start()
       $script:seen++
       if ($scope.TryGetValue($_.Guid, [ref]$type)) { $script:kept++; Emit $_ $type }
-      Tick "received from the DC ($($script:kept) kept in scope):" $script:seen 0
+      if (($script:seen -band 2047) -eq 0) { Tick "received from the DC ($($script:kept) kept in scope):" $script:seen 0 }
+      $procSw.Stop()
     }
     Tick 'received from the DC, total objects:' $script:seen 0 $true
+    Status "step C detail: our own per-object processing took $([Math]::Round($procSw.Elapsed.TotalSeconds, 1))s of it; the rest was the DC and DSInternals"
   }
   Status "step C done: $($script:clock.Elapsed.ToString('hh\:mm\:ss'))"
 }
