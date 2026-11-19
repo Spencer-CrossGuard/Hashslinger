@@ -180,6 +180,12 @@ rem Hashslinger Admin: change any setting, run scans, manage wordlists.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0app\powershell\Hashslinger-Admin.ps1" -ConfigPath "%~dp0config\hashslinger.json"
 '@ -Encoding ASCII
   Result 'Admin tool shortcut' 'PASS' (Join-Path $Dir.root 'Hashslinger-Admin.cmd')
+  Set-Content (Join-Path $Dir.root 'Hashslinger-Run.cmd') @'
+@echo off
+rem Hashslinger Running Tool: start a scan (asks for your EDIPI and a reason) and watch it. There are no settings here.
+powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0app\powershell\Hashslinger-Run.ps1" -ConfigPath "%~dp0config\hashslinger.json"
+'@ -Encoding ASCII
+  Result 'Running tool shortcut' 'PASS' (Join-Path $Dir.root 'Hashslinger-Run.cmd')
   Set-Content (Join-Path $Dir.root 'Hashslinger-Uninstall.cmd') @'
 @echo off
 rem Hashslinger uninstall. No switches = remove scheduled tasks only (files stay). See the SOP for the switches.
@@ -400,8 +406,8 @@ function Do-Finish {
   $analystSam = $null; $analystSid = $null
   if ($analystGroup) { try { $grp = Get-ADGroup $analystGroup; $analystSid = $grp.SID; $analystSam = "$($dom.NetBIOSName)\$analystGroup" } catch { Result 'Analyst group' 'WARN' "group '$analystGroup' not found; ignoring"; $analystSam = $null; $analystSid = $null } }
   $plan = @(
-    @($Dir.root, $null, 'ContainerInherit,ObjectInherit', 'ReadAndExecute'),      # keeps ordinary users from replacing the program folders
-    @($Dir.bin, $null, 'ContainerInherit,ObjectInherit', 'ReadAndExecute'),       # program and scripts: the service account only reads them
+    @($Dir.root, 'ReadAndExecute', 'ContainerInherit,ObjectInherit', 'ReadAndExecute'),   # keeps ordinary users from replacing the program folders; analysts may read and run the Running tool
+    @($Dir.bin, 'ReadAndExecute', 'ContainerInherit,ObjectInherit', 'ReadAndExecute'),    # program and scripts: the service account and analysts only read them
     @($Dir.store, $null, 'ContainerInherit,ObjectInherit'),
     @($Dir.config, 'ReadAndExecute', 'ContainerInherit,ObjectInherit', 'ReadAndExecute'),
     @($Dir.staging, 'Modify', 'ContainerInherit,ObjectInherit'),

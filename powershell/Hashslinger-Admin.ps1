@@ -302,7 +302,7 @@ function Refresh-Wordlists {
 $tpRun = New-Tab 'Run and logs'
 Add-Heading $tpRun 'Scans'
 $btns = @(
-  @('Start a scan now', { Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$(Join-Path $root 'app\powershell\Start-HashslingerGui.ps1')`"", '-ConfigPath', "`"$ConfigPath`""); $lblStatus.Text = 'Opened the scan request window: it asks for your EDIPI and the reason / CTO number, then runs the scan as the service account.' }),
+  @('Start a scan now', { Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$(Join-Path $root 'app\powershell\Hashslinger-Run.ps1')`"", '-ConfigPath', "`"$ConfigPath`""); $lblStatus.Text = 'Opened the Running tool: it asks for your EDIPI and the reason / CTO number, then runs the scan as the service account.' }),
   @('Watch progress', { Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$viewer`"", '-ConfigPath', "`"$ConfigPath`"") }),
   @('Open newest report', { $f = Get-ChildItem (Get-Field 'output_path') -Filter 'report_*.csv' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1; if ($f) { Start-Process $f.FullName } else { Msg 'No report yet.' } }),
   @('Open reports folder', { $p = Get-Field 'output_path'; New-Item -ItemType Directory -Force $p | Out-Null; Start-Process explorer.exe $p }),

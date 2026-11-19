@@ -77,6 +77,9 @@ In the wizard you also choose what runs scans: a **scheduled scan** (daily, week
 (every scan started by a person asks for an EDIPI and a reason / CTO number), or both. Setup does not start a scan: run the first one from
 the Admin tool (*Run and logs*, *Start a scan now*), exactly like every later manual scan.
 
+**Running tool** (`<folder>\Hashslinger-Run.cmd`): for analysts. Pick the scope, enter your EDIPI and the reason / CTO number, Start scan; it
+shows the live progress of the current or last scan and opens the newest report. It has no settings, so nothing can be changed by mistake.
+
 **2. Admin tool** (`<folder>\Hashslinger-Admin.cmd`): change **any** setting, with an explanation under each one:
 where files live, the domain controller, mode, replication, account types, UAC flags, the nested scope tree, duplicate
 checking, schedule (day, time, how often), retention, timeouts, service account, analyst group, EDIPIs, BitLocker
@@ -113,7 +116,7 @@ pipeline with a fake account source, audit logging, wipe, and request validation
 | --- | --- |
 | Core engine | `powershell/Get-AccountHashes.ps1` (DSInternals), bridged by `cs/Engine.cs` over a stdout pipe |
 | Data layer | `cs/HashStore.cs` (mmap + binary search + 2-byte prefix index), `cs/StoreMerge.cs` (external sort, linear merge, atomic swap), `cs/Patterns.cs` |
-| Interface layer | `powershell/Start-HashslingerGui.ps1` |
+| Interface layer | `powershell/Hashslinger-Run.ps1` (Running tool) |
 | Output layer | `cs/Report.cs`, `cs/Runner.cs` (analysis) |
 | Orchestration / logging | `cs/Runner.cs`, `cs/Audit.cs`, `cs/Wipe.cs`, `cs/Preflight.cs`, `powershell/Setup-Hashslinger.ps1` |
 

@@ -204,7 +204,7 @@
   logs\           audit.jsonl, setup-*.log, SETUP-SUMMARY.txt
   status\         status.json (live progress)
   requests\       analyst request drop box (only if an analyst group is used)
-  Hashslinger-Admin.cmd   Hashslinger-Uninstall.cmd</code></pre>
+  Hashslinger-Admin.cmd   Hashslinger-Run.cmd   Hashslinger-Uninstall.cmd</code></pre>
   <div class="callout note"><b>Outside the folder</b>Two scheduled tasks (<code>Hashslinger-Scheduled</code>, <code>Hashslinger-OnDemand</code>), the DSInternals module (<code>%ProgramFiles%\WindowsPowerShell\Modules</code>), the RSAT AD tools feature, support bundles you create (Desktop), and the service account in AD.</div>
 </section>
 
@@ -241,7 +241,7 @@ Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
     <li>Pick the install folder, the DC and the service account name. Tick the scope in the tree: ticking an OU includes everything below it, and search keeps parents visible. Optional: rockyou and HIBP files, an offline DSInternals folder.</li>
     <li>Choose how scans run (step 4 in the wizard): a scheduled scan (how often, day, start time), on-demand scans for analysts (optional analyst group), or both.</li>
     <li>Click <b>Check readiness</b> (changes nothing), then <b>Install</b>. Install is the local install followed by the service account checks.</li>
-    <li>Setup does <b>not</b> start a scan. Run the first one like every manual scan: Admin tool, Run and logs, <b>Start a scan now</b>. It asks for your EDIPI and a reason or CTO number, then runs the scan as the service account. Watch it with Watch progress.</li>
+    <li>Setup does <b>not</b> start a scan. Run the first one like every manual scan: open the <b>Running tool</b> (<code>Hashslinger-Run.cmd</code> in the install folder), enter your EDIPI and a reason or CTO number, and click Start scan. It runs the scan as the service account and shows its progress in the same window.</li>
   </ol>
   <h3>Hardening the scan server</h3>
   <ul>
@@ -306,6 +306,13 @@ Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
 <!-- 6 -->
 <section id="tools">
   <h2><span class="num">6</span>Functions<a class="anchor" href="#tools">#</a></h2>
+  <h3>Running tool (<code>Hashslinger-Run.cmd</code>), for analysts</h3>
+  <p>A small window with no settings in it, so an analyst cannot change anything by mistake. It has two parts:</p>
+  <ul>
+    <li><b>Start a scan:</b> pick the scope (only the ones the administrator configured), enter your 10-digit EDIPI and the reason or CTO number (at least 10 characters), and click Start scan. The request goes to the on-demand task, which runs as the service account and logs the EDIPI, the reason and your Windows account.</li>
+    <li><b>Current or last scan:</b> live step, progress bar, time, who started it, a short log, and buttons to open the newest report and the reports folder. If a scan is already running, a new request waits and starts when it finishes.</li>
+  </ul>
+  <p>For people other than administrators to use it, put them in the analyst group (Admin tool, Security and accounts) and re-apply permissions. That gives the group read access to the program, settings, status and reports, and permission to create requests and start the on-demand task, and nothing else. The Admin tool is for administrators only.</p>
   <h3>Admin tool (<code>Hashslinger-Admin.cmd</code>)</h3>
   <p>Edits <code>config\hashslinger.json</code>. A backup is kept on every save and changes apply to the next scan.</p>
   <div class="tw"><table>
@@ -332,7 +339,7 @@ Exit codes: 0 ok, 1 usage, 2 failed (also logged)</code></pre>
     <thead><tr><th>Script</th><th>Does</th></tr></thead>
     <tbody>
       <tr><td class="k">Show-HashslingerProgress.ps1</td><td>Read-only live progress window from <code>status.json</code> (stage, detail, accounts, heartbeat). Works for any user with read access, independent of who started the scan.</td></tr>
-      <tr><td class="k">Start-HashslingerGui.ps1</td><td>The scan request window, used by analysts and admins alike. It asks for the EDIPI and the reason or CTO number; both go into a request file; the on-demand task (as the service account) validates and runs it, and logs the EDIPI, reason and the account that created the file.</td></tr>
+      <tr><td class="k">Hashslinger-Run.ps1</td><td>The Running tool (see above). <code>Start-HashslingerGui.ps1</code> is kept as a shortcut to it.</td></tr>
       <tr><td class="k">Start-HashslingerRun.ps1</td><td>Runs a scan as YOUR account (needs replication rights). Dev and lab use. Asks for the EDIPI and reason too.</td></tr>
       <tr><td class="k">Uninstall-Hashslinger.ps1</td><td>See section 13.</td></tr>
     </tbody>

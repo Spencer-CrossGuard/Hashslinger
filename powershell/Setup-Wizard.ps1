@@ -213,9 +213,9 @@ function Show-NextSteps {
   Log ''
   Log '==== SETUP FINISHED. No scan was started from here, so the first scan runs exactly like every later one. ===='
   if ($chkOnDemand.Checked) {
-    Log 'FIRST SCAN: open the Admin tool (Hashslinger-Admin.cmd) > Run and logs > Start a scan now.'
-    Log '  It asks for your EDIPI and the reason / CTO number (both are written to the audit log), then runs the scan as the service account.'
-    Log '  Analysts use the same window: app\powershell\Start-HashslingerGui.ps1.'
+    Log 'FIRST SCAN: open the Running tool (Hashslinger-Run.cmd in the install folder), enter your EDIPI and the reason / CTO number, click Start scan.'
+    Log '  Both are written to the audit log, and the scan runs as the service account. Analysts use the same Running tool; it has no settings.'
+    Log '  (The Admin tool, Hashslinger-Admin.cmd, is for administrators only: it changes settings.)'
     Log 'Watch it: Admin tool > Run and logs > Watch progress.'
   } else {
     Log 'Manual scans are turned off, so nobody can start a scan by hand with an EDIPI and reason. Turn on "On-demand scans" in the Admin tool (Scan options) and click Re-apply.'
