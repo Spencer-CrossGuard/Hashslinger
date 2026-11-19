@@ -159,7 +159,7 @@ function Show-HsCsvViewer {
       $lblStatus.Text = ('{0:N0} rows' -f $total) + $(if ($shown -ne $total) { (', {0:N0} shown by the search' -f $shown) } else { '' }) + '   |   ' + $(if ($V.Dirty) { 'UNSAVED CHANGES' } else { 'no changes' }) + '   |   ' + $V.Path
     } else { $lblStatus.Text = 'Open a CSV file to begin.' }
     $lblStatus.ForeColor = $(if ($V.Dirty) { $C.Red } else { $C.Muted })
-  }
+  }.GetNewClosure()
   $applyFilter = {
     if (-not $V.Table) { return }
     $q = $txtFind.Text.Trim()
@@ -169,7 +169,7 @@ function Show-HsCsvViewer {
     $parts = foreach ($c in $V.Table.Columns) { '[' + $c.ColumnName.Replace(']', '\]') + "] LIKE '%" + $like + "%'" }
     try { $V.Table.DefaultView.RowFilter = ($parts -join ' OR ') } catch { $V.Table.DefaultView.RowFilter = '' }
     & $updateStatus
-  }
+  }.GetNewClosure()
   $loadFile = {
     param([string]$p)
     try {
@@ -180,9 +180,9 @@ function Show-HsCsvViewer {
     }
     $V.Loading = $true
     $V.Table = $t; $V.Path = $p; $V.Dirty = $false
-    $t.Add_ColumnChanged({ if (-not $V.Loading) { $V.Dirty = $true; & $updateStatus } })
-    $t.Add_RowDeleted({ if (-not $V.Loading) { $V.Dirty = $true; & $updateStatus } })
-    $t.Add_TableNewRow({ if (-not $V.Loading) { $V.Dirty = $true; & $updateStatus } })
+    $t.Add_ColumnChanged(({ if (-not $V.Loading) { $V.Dirty = $true; & $updateStatus } }).GetNewClosure())
+    $t.Add_RowDeleted(({ if (-not $V.Loading) { $V.Dirty = $true; & $updateStatus } }).GetNewClosure())
+    $t.Add_TableNewRow(({ if (-not $V.Loading) { $V.Dirty = $true; & $updateStatus } }).GetNewClosure())
     $txtFind.Text = ''
     $grid.DataSource = $null
     $grid.DataSource = $t.DefaultView
@@ -197,12 +197,12 @@ function Show-HsCsvViewer {
     } catch { }
     $V.Loading = $false
     & $updateStatus
-  }
+  }.GetNewClosure()
   $confirmDiscard = {
     if (-not $V.Dirty) { return $true }
     $r = [Windows.Forms.MessageBox]::Show('You have unsaved changes. Throw them away?', 'Hashslinger', 'YesNo', 'Warning')
     return ($r -eq 'Yes')
-  }
+  }.GetNewClosure()
   $saveTo = {
     param([string]$p)
     try { $grid.EndEdit() | Out-Null; $null = $grid.CurrentCell = $null } catch { }
@@ -216,80 +216,80 @@ function Show-HsCsvViewer {
       [void][Windows.Forms.MessageBox]::Show('Could not save:' + "`r`n" + $_.Exception.Message + "`r`n`r`nTry Save as... and pick a folder you can write to.", 'Hashslinger')
       return $false
     }
-  }
+  }.GetNewClosure()
   $copy = {
     param([string]$text, [string]$what)
     if (Set-HsClipboardText $text) { $lblStatus.ForeColor = $C.Green; $lblStatus.Text = 'Copied ' + $what + ' to the clipboard. Paste it into Excel, Outlook, Teams or Notepad.' }
     else { [void][Windows.Forms.MessageBox]::Show('Could not reach the clipboard. Try again, or use Save as... instead.', 'Hashslinger') }
-  }
+  }.GetNewClosure()
 
   # ---- events
-  $txtFind.Add_TextChanged({ & $applyFilter })
-  $btnClear.Add_Click({ $txtFind.Text = '' })
-  $btnOpen.Add_Click({
+  $txtFind.Add_TextChanged(({ & $applyFilter }).GetNewClosure())
+  $btnClear.Add_Click(({ $txtFind.Text = '' }).GetNewClosure())
+  $btnOpen.Add_Click(({
     if (-not (& $confirmDiscard)) { return }
     $d = New-Object Windows.Forms.OpenFileDialog -Property @{ Filter = 'CSV files (*.csv)|*.csv|All files (*.*)|*.*'; Title = 'Open a CSV file' }
     try { $start = if ($V.Folder -and (Test-Path -LiteralPath $V.Folder)) { $V.Folder } elseif ($V.Path) { Split-Path -Parent $V.Path } else { '' }; if ($start) { $d.InitialDirectory = $start } } catch { }
     if ($d.ShowDialog($f) -eq 'OK') { & $loadFile $d.FileName }
-  })
-  $btnLatest.Add_Click({
+  }).GetNewClosure())
+  $btnLatest.Add_Click(({
     if (-not (& $confirmDiscard)) { return }
     try {
       $n = Get-ChildItem -LiteralPath $V.Folder -Filter 'report_*.csv' -File -ErrorAction Stop | Sort-Object LastWriteTime -Descending | Select-Object -First 1
       if ($n) { & $loadFile $n.FullName } else { [void][Windows.Forms.MessageBox]::Show('There is no report yet.', 'Hashslinger') }
     } catch { [void][Windows.Forms.MessageBox]::Show('Cannot read the reports folder: ' + $_.Exception.Message, 'Hashslinger') }
-  })
-  $btnReload.Add_Click({ if ($V.Path -and (& $confirmDiscard)) { & $loadFile $V.Path } })
-  $btnCopyAll.Add_Click({ if ($V.Table) { & $copy (Get-HsTableText $V.Table 'tsv') ('all {0:N0} rows' -f $V.Table.Rows.Count) } })
-  $btnCopyCsv.Add_Click({ if ($V.Table) { & $copy (Get-HsTableText $V.Table 'csv') ('all {0:N0} rows as CSV text' -f $V.Table.Rows.Count) } })
-  $btnCopySel.Add_Click({
+  }).GetNewClosure())
+  $btnReload.Add_Click(({ if ($V.Path -and (& $confirmDiscard)) { & $loadFile $V.Path } }).GetNewClosure())
+  $btnCopyAll.Add_Click(({ if ($V.Table) { & $copy (Get-HsTableText $V.Table 'tsv') ('all {0:N0} rows' -f $V.Table.Rows.Count) } }).GetNewClosure())
+  $btnCopyCsv.Add_Click(({ if ($V.Table) { & $copy (Get-HsTableText $V.Table 'csv') ('all {0:N0} rows as CSV text' -f $V.Table.Rows.Count) } }).GetNewClosure())
+  $btnCopySel.Add_Click(({
     try {
       if ($grid.SelectedRows.Count -eq 0) { [void][Windows.Forms.MessageBox]::Show('Click a row first (Ctrl or Shift to pick several).', 'Hashslinger'); return }
       $d = $grid.GetClipboardContent()
       if ($d) { [Windows.Forms.Clipboard]::SetDataObject($d, $true); $lblStatus.ForeColor = $C.Green; $lblStatus.Text = ('Copied {0} selected rows to the clipboard.' -f $grid.SelectedRows.Count) }
     } catch { [void][Windows.Forms.MessageBox]::Show('Could not copy: ' + $_.Exception.Message, 'Hashslinger') }
-  })
-  $btnAdd.Add_Click({
+  }).GetNewClosure())
+  $btnAdd.Add_Click(({
     if (-not $V.Table) { return }
     try { $r = $V.Table.NewRow(); $V.Table.Rows.Add($r); $V.Dirty = $true; & $updateStatus
       $grid.ClearSelection(); $last = $grid.Rows.Count - 1; if ($last -ge 0) { $grid.Rows[$last].Selected = $true; $grid.FirstDisplayedScrollingRowIndex = $last } } catch { }
-  })
-  $btnDel.Add_Click({
+  }).GetNewClosure())
+  $btnDel.Add_Click(({
     if (-not $V.Table -or $grid.SelectedRows.Count -eq 0) { [void][Windows.Forms.MessageBox]::Show('Click the row(s) to delete first.', 'Hashslinger'); return }
     $n = $grid.SelectedRows.Count
     if ([Windows.Forms.MessageBox]::Show("Delete $n selected row(s)? This only changes the file when you click Save.", 'Hashslinger', 'YesNo', 'Question') -ne 'Yes') { return }
     $rows = @($grid.SelectedRows | ForEach-Object { $_.DataBoundItem.Row })
     foreach ($r in $rows) { try { $r.Delete() } catch { } }
     & $updateStatus
-  })
-  $btnSave.Add_Click({
+  }).GetNewClosure())
+  $btnSave.Add_Click(({
     if (-not $V.Table -or -not $V.Path) { return }
     $m = 'Save over this file?' + "`r`n`r`n" + $V.Path + "`r`n`r`nChoose No to keep the original and save a copy instead."
     $a = [Windows.Forms.MessageBox]::Show($m, 'Hashslinger', 'YesNoCancel', 'Question')
     if ($a -eq 'Yes') { [void](& $saveTo $V.Path) } elseif ($a -eq 'No') { $btnSaveAs.PerformClick() }
-  })
-  $btnSaveAs.Add_Click({
+  }).GetNewClosure())
+  $btnSaveAs.Add_Click(({
     if (-not $V.Table) { return }
     $d = New-Object Windows.Forms.SaveFileDialog -Property @{ Filter = 'CSV files (*.csv)|*.csv'; Title = 'Save a copy'; DefaultExt = 'csv'; OverwritePrompt = $true }
     try { if ($V.Path) { $d.FileName = [IO.Path]::GetFileNameWithoutExtension($V.Path) + '_edited.csv'; $d.InitialDirectory = (Split-Path -Parent $V.Path) } } catch { }
     if ($d.ShowDialog($f) -eq 'OK') { [void](& $saveTo $d.FileName) }
-  })
-  $f.Add_KeyDown({
+  }).GetNewClosure())
+  $f.Add_KeyDown(({
     param($s, $e)
     if ($e.Control -and $e.KeyCode -eq 'S') { $e.SuppressKeyPress = $true; $btnSave.PerformClick() }
     elseif ($e.Control -and $e.KeyCode -eq 'F') { $e.SuppressKeyPress = $true; $txtFind.Focus(); $txtFind.SelectAll() }
-  })
-  $f.Add_FormClosing({
+  }).GetNewClosure())
+  $f.Add_FormClosing(({
     param($s, $e)
     if ($V.Dirty) {
       $r = [Windows.Forms.MessageBox]::Show('You have unsaved changes. Close without saving?', 'Hashslinger', 'YesNo', 'Warning')
       if ($r -ne 'Yes') { $e.Cancel = $true }
     }
-  })
-  $grid.Add_DataError({ param($s, $e) $e.ThrowException = $false })
+  }).GetNewClosure())
+  $grid.Add_DataError(({ param($s, $e) $e.ThrowException = $false }).GetNewClosure())
 
-  $f.Add_Shown({
+  $f.Add_Shown(({
     if ($V.Path) { & $loadFile $V.Path } else { & $updateStatus }
-  })
+  }).GetNewClosure())
   [void]$f.ShowDialog()
 }
