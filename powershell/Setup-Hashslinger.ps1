@@ -277,8 +277,14 @@ function Do-Verify {
       Result 'Domain controller reachable' 'PASS' $d.DNSRoot
       foreach ($o in $ous) {
         # Exists() is reliable. Reading a property on a failed bind can silently return $null.
-        if ([DirectoryServices.DirectoryEntry]::Exists("LDAP://$dc/$o")) { Result "Scope exists: $o" 'PASS' }
-        else { Result "Scope exists: $o" 'FAIL' 'not found on that DC. Note the built-in Users container is CN=Users, not OU=Users.' }
+        try {
+          if ([DirectoryServices.DirectoryEntry]::Exists("LDAP://$dc/$o")) { Result "Scope exists: $o" 'PASS' }
+          else { Result "Scope exists: $o" 'FAIL' 'not found on that DC. Note the built-in Users container is CN=Users, not OU=Users.' }
+        } catch {
+          if ($_.Exception.Message -match 'referral') {
+            Result "Scope exists: $o" 'FAIL' "the DC $dc answered with a referral: this scope is not in the domain it hosts. Every scope must end with $($d.DistinguishedName). Pick the scope again in the Admin tool (Active Directory tab, Reload from AD)."
+          } else { Result "Scope exists: $o" 'FAIL' $_.Exception.Message }
+        }
       }
     } catch { Result 'Domain controller reachable' 'FAIL' $_.Exception.Message }
   }

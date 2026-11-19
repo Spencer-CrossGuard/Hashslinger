@@ -135,7 +135,10 @@ if ($Mode -eq 'live') {
   if (-not $Server) { throw '-Server is required in live mode' }
   # objectGuid -> type, built with a paged DirectorySearcher (streams; handles millions of objects).
   foreach ($b in $bases) {
-    if (-not [DirectoryServices.DirectoryEntry]::Exists("LDAP://$Server/$b")) { throw "Search base not found on ${Server}: $b (the built-in Users container is CN=Users, not OU=Users)" }
+    $baseExists = $false
+    try { $baseExists = [DirectoryServices.DirectoryEntry]::Exists("LDAP://$Server/$b") }
+    catch { if ($_.Exception.Message -match 'referral') { throw "Search base $b is not in the domain hosted by ${Server} (the server answered with a referral). Every scope must end with that domain's name, for example DC=corp,DC=contoso,DC=com." } else { throw } }
+    if (-not $baseExists) { throw "Search base not found on ${Server}: $b (the built-in Users container is CN=Users, not OU=Users)" }
   }
   $scope = New-Object 'System.Collections.Generic.Dictionary[Guid,string]'
   $script:found = 0
