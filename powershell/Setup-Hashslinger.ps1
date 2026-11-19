@@ -228,6 +228,27 @@ __PAUSE__
   foreach ($old in 'Hashslinger-Admin.cmd', 'Hashslinger-Run.cmd', 'Hashslinger-Uninstall.cmd') { Remove-Item (Join-Path $Dir.root $old) -Force -ErrorAction SilentlyContinue }   # earlier versions
   New-Launcher 'Hashslinger-Admin' 'Hashslinger-Admin.ps1' '-ConfigPath' 'Hashslinger Admin: change any setting, manage wordlists, run scans. For administrators.' $false $false
   New-Launcher 'Hashslinger-Run' 'Hashslinger-Run.ps1' '-ConfigPath' 'Hashslinger Running Tool: start a scan (asks for your EDIPI and a reason) and watch it. There are no settings here.' $true $false
+  # Shortcuts where people look for programs, so nobody has to browse the locked install folder: the Start menu (all users)
+  # and, for the Running tool analysts use, the public desktop. They point straight at the scripts in app\powershell.
+  function New-ProgramShortcut([string]$Display, [string]$Script, [string]$ParamName, [bool]$Hidden, [bool]$Desktop) {
+    try {
+      $menu = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'Hashslinger'
+      New-Item -ItemType Directory -Force $menu | Out-Null
+      $places = @((Join-Path $menu "$Display.lnk"))
+      if ($Desktop) { $places += (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) "$Display.lnk") }
+      foreach ($place in $places) {
+        $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut($place)
+        $lnk.TargetPath = "$env:windir\System32\WindowsPowerShell\v1.0\powershell.exe"
+        $lnk.Arguments = '-NoProfile -ExecutionPolicy Bypass ' + $(if ($Hidden) { '-WindowStyle Hidden ' } else { '' }) + "-File `"$($Dir.bin)\powershell\$Script`" $ParamName `"$Config`""
+        $lnk.WorkingDirectory = $Dir.bin
+        $lnk.Save()
+      }
+      Result "Start menu shortcut: $Display" 'PASS' $(if ($Desktop) { 'Start menu and public desktop' } else { 'Start menu' })
+    } catch { Result "Start menu shortcut: $Display" 'WARN' $_.Exception.Message }
+  }
+  New-ProgramShortcut 'Hashslinger Running Tool' 'Hashslinger-Run.ps1' '-ConfigPath' $true $true
+  New-ProgramShortcut 'Hashslinger Admin' 'Hashslinger-Admin.ps1' '-ConfigPath' $false $false
+  New-ProgramShortcut 'Hashslinger Uninstall' 'Uninstall-Hashslinger.ps1' '-Config' $false $false
   New-Launcher 'Hashslinger-Uninstall' 'Uninstall-Hashslinger.ps1' '-Config' 'Hashslinger uninstall. No switches = remove the scheduled tasks only (files stay). See the SOP for the switches.' $false $true
   if (-not (Test-Path "$($Dir.config)\pattern_rules.json")) { Copy-Item "$srcRoot\config\pattern_rules.json" $Dir.config }
   Get-ChildItem $Dir.root, $srcRoot -Recurse -File -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue
@@ -460,6 +481,9 @@ function Do-Finish {
   # folder permissions (local) : gMSA, local Administrators, SYSTEM only unless an analyst group is set
   $analystSam = $null; $analystSid = $null
   if ($analystGroup) { try { $grp = Get-ADGroup $analystGroup; $analystSid = $grp.SID; $analystSam = "$($dom.NetBIOSName)\$analystGroup" } catch { Result 'Analyst group' 'WARN' "group '$analystGroup' not found; ignoring"; $analystSam = $null; $analystSid = $null } }
+  if ($analystSid -and $analystSid.Value -match '-(512|516|517|518|519|520|526|527|548|549|550|551)$') {
+    Result 'Analyst group is a privileged group' 'WARN' "'$analystGroup' is one of the built-in privileged groups. Windows removes such groups from the everyday (non-elevated) token of their members, so analysts in it would still get UAC prompts and 'access denied' on the permissions given to this group. Use a plain group made for this (for example Hashslinger-Analysts)."
+  }
   $plan = @(
     @($Dir.root, 'ReadAndExecute', 'ContainerInherit,ObjectInherit', 'ReadAndExecute'),   # keeps ordinary users from replacing the program folders; analysts may read and run the Running tool
     @($Dir.bin, 'ReadAndExecute', 'ContainerInherit,ObjectInherit', 'ReadAndExecute'),    # program and scripts: the service account and analysts only read them

@@ -228,7 +228,7 @@ function Show-NextSteps {
   Log ''
   Log '==== SETUP FINISHED. No scan was started from here, so the first scan runs exactly like every later one. ===='
   if ($chkOnDemand.Checked) {
-    Log 'FIRST SCAN: open the Running tool (the Hashslinger-Run shortcut in the install folder), enter your EDIPI and the reason / CTO number, click Start scan.'
+    Log 'FIRST SCAN: open the Running tool (the 'Hashslinger Running Tool' shortcut on the desktop or in the Start menu (Hashslinger folder)), enter your EDIPI and the reason / CTO number, click Start scan.'
     Log '  Both are written to the audit log, and the scan runs as the service account. Analysts use the same Running tool; it has no settings.'
     Log '  (The Admin tool, the Hashslinger-Admin shortcut, is for administrators only: it changes settings.)'
     Log 'Watch it: Admin tool > Run and logs > Watch progress.'

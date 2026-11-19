@@ -142,6 +142,10 @@ if ($RemoveLogs) {
   Remove-OwnFiles $status @('status.json*', 'gmsa-probe.txt')
 }
 if ($RemoveDsInternals) { Remove-Tree "$env:ProgramFiles\WindowsPowerShell\Modules\DSInternals" }
+if ($RemoveApp) {   # also with -RemoveAll: the Start menu and desktop shortcuts must not be left pointing at nothing
+  Remove-Item (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'Hashslinger') -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'Hashslinger Running Tool.lnk') -Force -ErrorAction SilentlyContinue
+}
 if ($RemoveApp -and -not $RemoveAll) {
   Remove-Tree "$root\extras"; Remove-Tree "$root\app-backups"
   foreach ($n in 'Hashslinger-Admin', 'Hashslinger-Run', 'Hashslinger-Uninstall') { foreach ($e in '.ps1', '.lnk', '.cmd') { Remove-Item "$root\$n$e" -Force -ErrorAction SilentlyContinue } }
