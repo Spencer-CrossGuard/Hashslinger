@@ -26,12 +26,15 @@ $best = Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | Sort-Object Fr
 $defaultRoot = if ($best) { Join-Path ($best.DeviceID + '\') 'Hashslinger' } else { 'C:\Hashslinger' }
 
 # ---- form
-$form = New-Object Windows.Forms.Form -Property @{ Text = 'Hashslinger setup'; Width = 1190; Height = 880; MinimumSize = New-Object Drawing.Size(900, 700); StartPosition = 'CenterScreen'; AutoScroll = $true; Font = New-Object Drawing.Font('Segoe UI', 9) }
+$form = New-Object Windows.Forms.Form -Property @{ Text = 'Hashslinger setup'; Width = 1190; Height = 990; MinimumSize = New-Object Drawing.Size(700, 500); StartPosition = 'CenterScreen'; AutoScroll = $true; Font = New-Object Drawing.Font('Segoe UI', 9) }
 function Lbl($text, $x, $y, $w = 860, $h = 20, $bold = $false) {
   $l = New-Object Windows.Forms.Label -Property @{ Text = $text; Left = $x; Top = $y; Width = $w; Height = $h }
   if ($bold) { $l.Font = New-Object Drawing.Font('Segoe UI', 10, [Drawing.FontStyle]::Bold) }
   $form.Controls.Add($l); $l
 }
+$wa = [Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+$form.Height = [Math]::Min(1000, $wa.Height - 10)
+$form.Width = [Math]::Min(1190, $wa.Width - 10)
 [void](Lbl 'Set up Hashslinger on this server' 15 8 860 26 $true)
 [void](Lbl ("This server: {0}   |   Domain: {1}" -f $env:COMPUTERNAME, $(if ($ad.Domain) { $ad.Domain } else { '(not detected)' })) 15 36)
 
@@ -110,30 +113,11 @@ $btnGo = New-Object Windows.Forms.Button -Property @{ Text = '2. Install'; Left 
 $btnFinish = New-Object Windows.Forms.Button -Property @{ Text = 'Re-run service account checks'; Left = 331; Top = 718; Width = 220; Height = 36; Enabled = $false }
 $btnAdmin = New-Object Windows.Forms.Button -Property @{ Text = 'Open Admin tool'; Left = 559; Top = 718; Width = 160; Height = 36; Enabled = $false }
 $form.Controls.AddRange(@($btnCheck, $btnGo, $btnFinish, $btnAdmin))
-$lblResult = Lbl 'Ready. Choose the options above, then click Check readiness or Install.' 15 764 1150 44 $true
-$bar = New-Object Windows.Forms.ProgressBar -Property @{ Left = 15; Top = 814; Width = 850; Height = 16 }
-$form.Controls.Add($bar)
-$btnShowLog = New-Object Windows.Forms.Button -Property @{ Text = 'Show log window'; Left = 727; Top = 718; Width = 140; Height = 36 }
-$form.Controls.Add($btnShowLog)
-
-# The setup output goes to its own resizable window, so it is never squeezed into the wizard
-$logForm = New-Object Windows.Forms.Form -Property @{ Text = 'Hashslinger setup log'; Width = 1000; Height = 620; MinimumSize = New-Object Drawing.Size(600, 300); StartPosition = 'Manual'; Font = New-Object Drawing.Font('Segoe UI', 9) }
-$log = New-Object Windows.Forms.TextBox -Property @{ Dock = 'Fill'; Multiline = $true; ReadOnly = $true; ScrollBars = 'Vertical'; WordWrap = $true; BackColor = [Drawing.Color]::White; Font = New-Object Drawing.Font('Consolas', 10) }
-$logBar = New-Object Windows.Forms.Panel -Property @{ Dock = 'Bottom'; Height = 46 }
-$btnLog = New-Object Windows.Forms.Button -Property @{ Text = 'Open the full log file'; Left = 10; Top = 8; Width = 170; Height = 30 }
-$btnCopy = New-Object Windows.Forms.Button -Property @{ Text = 'Copy log text'; Left = 190; Top = 8; Width = 140; Height = 30 }
-$logBar.Controls.AddRange(@($btnLog, $btnCopy))
-$logForm.Controls.AddRange(@($log, $logBar))   # the Fill control first (front), the bottom bar after it: WinForms docks the bar first
-$logForm.Add_FormClosing({ param($s, $e) if ($e.CloseReason -eq 'UserClosing') { $e.Cancel = $true; $s.Hide() } })   # closing only hides it, the text stays
-function Show-LogWindow {
-  if (-not $logForm.Visible) {
-    $wa = [Windows.Forms.Screen]::PrimaryScreen.WorkingArea
-    $logForm.Location = New-Object Drawing.Point([Math]::Max(0, [Math]::Min($form.Left + 60, $wa.Width - $logForm.Width)), [Math]::Max(0, [Math]::Min($form.Top + 90, $wa.Height - $logForm.Height)))
-    $logForm.Show($form)
-  }
-  $logForm.WindowState = 'Normal'
-  $logForm.BringToFront()
-}
+$lblResult = Lbl 'Ready. Choose the options above, then click Check readiness or Install.' 15 764 1150 44 $true   # tall enough for a wrapped error
+$bar = New-Object Windows.Forms.ProgressBar -Property @{ Left = 15; Top = 812; Width = 850; Height = 16 }
+$btnLog = New-Object Windows.Forms.Button -Property @{ Text = 'Open full log'; Left = 727; Top = 718; Width = 140; Height = 36 }   # in the button row, not on top of the log
+$log = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 836; Width = 850; Height = 150; Multiline = $true; ReadOnly = $true; ScrollBars = 'Vertical'; WordWrap = $true; Font = New-Object Drawing.Font('Consolas', 9.5) }
+$form.Controls.AddRange(@($bar, $btnLog, $log))
 
 function Log([string]$m) { $log.AppendText($m + "`r`n") }
 function Pump { [Windows.Forms.Application]::DoEvents() }
@@ -244,7 +228,6 @@ function Test-Inputs {
   return $root
 }
 function Show-NextSteps {
-  Show-LogWindow
   Log ''
   Log '==== SETUP FINISHED. No scan was started from here, so the first scan runs exactly like every later one. ===='
   if ($chkOnDemand.Checked) {
@@ -272,8 +255,6 @@ $txtRoot.Add_Leave({ Load-Existing })
 $btnRock.Add_Click({ $d = New-Object Windows.Forms.OpenFileDialog; if ($d.ShowDialog() -eq 'OK') { $txtRock.Text = $d.FileName } })
 $btnHibp.Add_Click({ $d = New-Object Windows.Forms.OpenFileDialog; if ($d.ShowDialog() -eq 'OK') { $txtHibp.Text = $d.FileName } })
 $btnDs.Add_Click({ $d = New-Object Windows.Forms.FolderBrowserDialog; if ($d.ShowDialog() -eq 'OK') { $txtDs.Text = $d.SelectedPath } })
-$btnShowLog.Add_Click({ Show-LogWindow })
-$btnCopy.Add_Click({ try { [Windows.Forms.Clipboard]::SetText($log.Text) } catch { } })
 $btnLog.Add_Click({
   $r = Resolve-Root $txtRoot.Text
   $l = if ($r) { Get-ChildItem (Join-Path $r 'logs') -Filter 'setup-*.log' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1 }
@@ -283,11 +264,11 @@ $btnAdmin.Add_Click({ $r = Resolve-Root $txtRoot.Text; Start-Process powershell.
 $btnCheck.Add_Click({
   try {
     $root = Test-Inputs; if (-not $root) { return }
-    Busy $true; $log.Clear(); Show-LogWindow; $lblResult.ForeColor = [Drawing.Color]::Black; $lblResult.Text = 'Checking this server (nothing is changed)...'
+    Busy $true; $log.Clear(); $lblResult.ForeColor = [Drawing.Color]::Black; $lblResult.Text = 'Checking this server (nothing is changed)...'
     $cfgPath = Save-Settings $root -Temp     # readiness check changes nothing: it uses a throwaway settings file
     try { $rc = Invoke-Setup $cfgPath 'Check' } finally { Remove-Item $cfgPath -ErrorAction SilentlyContinue }
     if ($rc -eq 0) { $lblResult.ForeColor = [Drawing.Color]::SeaGreen; $lblResult.Text = 'Ready to install. No blocking problems found.' }
-    else { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Fix this first: ' + (Fail-Text 'see the log window.') }
+    else { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Fix this first: ' + (Fail-Text 'see the log below.') }
   }
   catch { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Error: ' + $_.Exception.Message; Log ('ERROR: ' + $_.Exception.Message) }
   finally { Busy $false }
@@ -296,16 +277,16 @@ $btnCheck.Add_Click({
 $btnGo.Add_Click({
   try {
     $root = Test-Inputs; if (-not $root) { return }
-    Busy $true; $log.Clear(); Show-LogWindow; $lblResult.ForeColor = [Drawing.Color]::Black; $lblResult.Text = 'Installing on this server...'
+    Busy $true; $log.Clear(); $lblResult.ForeColor = [Drawing.Color]::Black; $lblResult.Text = 'Installing on this server...'
     $cfgPath = Save-Settings $root
     $rc = Invoke-Setup $cfgPath 'Local'
-    if ($rc -ne 0) { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'The install has a problem: ' + (Fail-Text 'see the log window.'); return }
+    if ($rc -ne 0) { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'The install has a problem: ' + (Fail-Text 'see the log below.'); return }
     $btnAdmin.Enabled = $true
     $btnFinish.Enabled = $true
     $lblResult.Text = 'Installed. Checking the service account, permissions and scheduled tasks...'
     $rc = Invoke-Setup $cfgPath 'Finish'
-    if ($rc -eq 0) { $lblResult.ForeColor = [Drawing.Color]::SeaGreen; $lblResult.Text = 'Setup finished. Next step: run the scan task (details in the log window).'; Show-NextSteps }
-    else { $lblResult.ForeColor = [Drawing.Color]::DarkOrange; $lblResult.Text = 'Installed, but the service account checks need attention: ' + (Fail-Text 'see the log window.') + '  Fix it, then click Re-run service account checks.' }
+    if ($rc -eq 0) { $lblResult.ForeColor = [Drawing.Color]::SeaGreen; $lblResult.Text = 'Setup finished. Next step: run the scan task (see the log below).'; Show-NextSteps }
+    else { $lblResult.ForeColor = [Drawing.Color]::DarkOrange; $lblResult.Text = 'Installed, but the service account checks need attention: ' + (Fail-Text 'see the log below.') + '  Fix it, then click Re-run service account checks.' }
   }
   catch { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Error: ' + $_.Exception.Message; Log ('ERROR: ' + $_.Exception.Message) }
   finally { $bar.Style = 'Continuous'; $btnCheck.Enabled = $true; $btnGo.Enabled = $true }
@@ -314,11 +295,11 @@ $btnGo.Add_Click({
 $btnFinish.Add_Click({
   try {
     $root = Resolve-Root $txtRoot.Text
-    Busy $true; $log.Clear(); Show-LogWindow; $lblResult.ForeColor = [Drawing.Color]::Black; $lblResult.Text = 'Checking the Active Directory prerequisites and finishing...'
+    Busy $true; $log.Clear(); $lblResult.ForeColor = [Drawing.Color]::Black; $lblResult.Text = 'Checking the Active Directory prerequisites and finishing...'
     $cfgPath = Save-Settings $root
     $rc = Invoke-Setup $cfgPath 'Finish'
-    if ($rc -eq 0) { $lblResult.ForeColor = [Drawing.Color]::SeaGreen; $lblResult.Text = 'Setup finished. Next step: run the scan task (details in the log window).'; $btnAdmin.Enabled = $true; Show-NextSteps }
-    else { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Not finished: ' + (Fail-Text 'see the log window.') }
+    if ($rc -eq 0) { $lblResult.ForeColor = [Drawing.Color]::SeaGreen; $lblResult.Text = 'Setup finished. Next step: run the scan task (see the log below).'; $btnAdmin.Enabled = $true; Show-NextSteps }
+    else { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Not finished: ' + (Fail-Text 'see the log below.') }
   }
   catch { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Error: ' + $_.Exception.Message; Log ('ERROR: ' + $_.Exception.Message) }
   finally { Busy $false }
