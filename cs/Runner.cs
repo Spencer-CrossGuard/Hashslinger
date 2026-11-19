@@ -86,7 +86,7 @@ namespace Hashslinger
             }
 
             string runId = log.NextRunId();
-            log.Start(runId, trigger, ous, requestedBy, edipi, reason, startedBy, startedBySid);
+            log.Start(runId, trigger, ous, requestedBy, edipi, reason, startedBy, startedBySid, cfg.FipsExemptEngine);
             Progress.Begin(cfg.StatusPath, runId, Environment.UserDomainName + "\\" + Environment.UserName, startedBy ?? requestedBy, ous);
 
             AccountTable table = new AccountTable();
@@ -105,6 +105,7 @@ namespace Hashslinger
                 Dictionary<Hash128, string> patterns = Patterns.Build(cfg.PatternRulesPath, DateTime.Now);
                 Progress.Info(patterns.Count + " pattern candidates");
                 Progress.Stage(4, "Pulling accounts from AD (" + cfg.Mode + ", " + cfg.Replication + " replication)");
+                if (cfg.FipsExemptEngine) Progress.Info("FIPS enforcement is switched off for the scan engine process only (engine_fips_exempt)");
                 int received = 0;
                 System.Diagnostics.Stopwatch ingestClock = System.Diagnostics.Stopwatch.StartNew();
                 source.Run(cfg, ous, delegate(AccountRecord a)

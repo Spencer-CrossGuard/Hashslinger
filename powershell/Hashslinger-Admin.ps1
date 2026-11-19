@@ -244,6 +244,7 @@ Add-Row $tpSec 'run_server' 'Scan server' 'text' $null 'The only computer allowe
 Add-Row $tpSec 'analyst_group' 'Analyst group (optional)' 'text' $null 'Leave empty so only the service account and local Administrators have access. A group lets analysts submit scans.'
 Add-Row $tpSec 'authorized_edipis' 'Allowed EDIPIs' 'lines' $null 'One per line. Empty = any valid 10-digit EDIPI may request a scan (only used with the analyst request GUI).'
 Add-Row $tpSec 'require_encrypted_volume' 'Require BitLocker' 'bool' 'Refuse to scan unless the store, wordlists and reports are on a BitLocker-protected volume.'
+Add-Row $tpSec 'engine_fips_exempt' 'Allow the scan under FIPS mode' 'bool' 'ONLY if this server enforces FIPS and the scan fails with an MD5 / FIPS error. Switches .NET FIPS enforcement off for the scan engine process only (a private copy of PowerShell in the app folder); Windows FIPS mode stays on everywhere else. Needs approval from your security officer. Click Re-apply afterwards.'
 Add-Row $tpSec 'dsinternals_offline_path' 'DSInternals module folder' 'path' 'folder' 'Only for servers with no internet: where the DSInternals module was copied from.'
 $btnFinish = New-Object Windows.Forms.Button -Property @{ Text = 'Re-apply permissions and scheduled tasks'; Left = 270; Top = [int]$tpSec.Tag; Width = 300; Height = 30 }
 $btnFinish.Add_Click({
@@ -401,6 +402,10 @@ $btnSave.Add_Click({
     if ($errs.Count) { Msg ("Not saved:`r`n`r`n - " + ($errs -join "`r`n - ")); return }
 
     $old = Read-HsConfig $ConfigPath
+    if ((Get-Field 'engine_fips_exempt') -and -not [bool]$old['engine_fips_exempt']) {
+      $ans = [Windows.Forms.MessageBox]::Show("You are about to switch .NET FIPS enforcement OFF for the scan engine process.`r`n`r`nWhy: replicating password data from AD uses MD5 and RC4 (part of the AD replication protocol), which .NET blocks while Windows FIPS mode is on.`r`nScope: only the scan engine process. Windows FIPS mode stays on everywhere else on this server.`r`nCompliance: this is normally a documented finding (STIG APPNET0062) that needs your security officer's approval.`r`n`r`nDo you have that approval and want to continue?", 'Hashslinger Admin', 'YesNo', 'Warning')
+      if ($ans -ne 'Yes') { Msg 'Not saved. The FIPS setting was left off.'; return }
+    }
     $new = Read-HsConfig $ConfigPath
     foreach ($k in @($script:Ctl.Keys)) { Set-HsCfgValue $new $k (Get-Field $k) }
     $new['target_ous'] = @(Get-HsOuSelection)

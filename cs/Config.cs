@@ -46,6 +46,7 @@ namespace Hashslinger
         public string StatusPath = "status\\status.json";
         public int Workers = 4;                      // parallel DC connections for per-account replication
         public int PerAccountThreshold = 5000;       // at or below this many in-scope accounts, bulk mode switches to per-account
+        public bool FipsExemptEngine = false;       // OFF by default: .NET FIPS enforcement is switched off for the scan engine process ONLY (needs security approval)
         public bool CheckDuplicates = false;         // off unless explicitly enabled
 
         static int Flag(string name)
@@ -117,6 +118,15 @@ namespace Hashslinger
             c.Workers = Math.Max(1, Math.Min(16, (int)Convert.ToDouble(Json.Str(raw, "workers", "4"), System.Globalization.CultureInfo.InvariantCulture)));
             c.PerAccountThreshold = (int)Convert.ToDouble(Json.Str(raw, "per_account_threshold", "5000"), System.Globalization.CultureInfo.InvariantCulture);
             c.CheckDuplicates = Json.Str(raw, "check_duplicates", "false").ToLowerInvariant() == "true";
+            c.FipsExemptEngine = Json.Str(raw, "engine_fips_exempt", "false").ToLowerInvariant() == "true";
+            if (c.FipsExemptEngine)
+            {
+                // a copy of powershell.exe in the (admin-only) app folder with its own .config that turns FIPS enforcement
+                // off for THAT process only. Windows FIPS mode stays on for everything else.
+                string ex = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "hs-engine.exe");
+                if (!File.Exists(ex)) throw new ConfigException("engine_fips_exempt is on but " + ex + " does not exist. Re-run the Finish step (Admin tool, Security and accounts, Re-apply).");
+                c.PowerShellPath = ex;
+            }
             if (c.EngineTimeoutSeconds < 60) c.EngineTimeoutSeconds = 60;
             if (c.EngineTimeoutSeconds > 4000000) c.EngineTimeoutSeconds = 4000000;   // about 46 days
             c.Validate();

@@ -329,6 +329,22 @@ function Do-Finish {
   if ($env:COMPUTERNAME -ne $runServer.Split('.')[0] -and $env:COMPUTERNAME -ne $runServer) {
     Result 'Running on the run server' 'FAIL' "this is $env:COMPUTERNAME, the settings say $runServer (Admin tool > Security and accounts)."; return
   }
+  # ---- optional, OFF by default: switch .NET FIPS enforcement off for the SCAN ENGINE PROCESS ONLY
+  # Replicating password data from AD (MS-DRSR) is itself protected with MD5 and RC4, and DSInternals runs the MD5 through
+  # .NET, which refuses it while Windows FIPS mode is on. The exemption is a private copy of powershell.exe in the app
+  # folder (admin-write only) with its own .config; Windows FIPS mode stays on for everything else on the server.
+  $fipsExempt = [bool](Opt 'engine_fips_exempt' $false)
+  $engineCopy = Join-Path $Dir.bin 'hs-engine.exe'
+  if ($fipsExempt) {
+    try {
+      Copy-Item "$env:windir\System32\WindowsPowerShell\v1.0\powershell.exe" $engineCopy -Force
+      $cfgXml = '<?xml version="1.0" encoding="utf-8"?>' + "`r`n" + '<configuration><runtime><enforceFIPSPolicy enabled="false"/></runtime></configuration>' + "`r`n"
+      [IO.File]::WriteAllText("$engineCopy.config", $cfgXml, (New-Object Text.ASCIIEncoding))
+      Result 'FIPS exemption for the scan engine' 'WARN' "ON. .NET FIPS enforcement is switched off for the scan engine process only ($engineCopy). Windows FIPS mode is unchanged everywhere else. This needs your security officer's approval (it is a STIG finding for .NET applications unless approved). Turn it off in the Admin tool (Security and accounts) and re-apply."
+    } catch { Result 'FIPS exemption for the scan engine' 'FAIL' $_.Exception.Message; return }
+  } else {
+    foreach ($f in $engineCopy, "$engineCopy.config") { if (Test-Path $f) { Remove-Item $f -Force -ErrorAction SilentlyContinue } }
+  }
   try { Import-Module ActiveDirectory -ErrorAction Stop } catch { Result 'ActiveDirectory module' 'FAIL' 'install RSAT-AD-PowerShell'; return }
   $dom = Get-ADDomain
   $domainNC = $dom.DistinguishedName
@@ -503,7 +519,7 @@ function Do-Finish {
   Remove-Item $probeOut -ErrorAction SilentlyContinue
   $probeArgs = "-NoProfile -File `"$($Dir.bin)\powershell\Test-GmsaReplication.ps1`" -Server $dc -Sam `"$($env:COMPUTERNAME)`$`" -OutFile `"$probeOut`""
   Register-ScheduledTask -TaskName 'Hashslinger-Probe' -Force -Principal $principal -Settings $settings `
-    -Action (New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $probeArgs) | Out-Null
+    -Action (New-ScheduledTaskAction -Execute $(if ($fipsExempt) { $engineCopy } else { 'powershell.exe' }) -Argument $probeArgs) | Out-Null
   Start-ScheduledTask -TaskName 'Hashslinger-Probe'
   $deadline = (Get-Date).AddSeconds(90)
   while (-not (Test-Path $probeOut) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }

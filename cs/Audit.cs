@@ -66,10 +66,11 @@ namespace Hashslinger
             return today + "-" + (n + 1).ToString("D3", CultureInfo.InvariantCulture);
         }
 
-        public void Start(string runId, string trigger, IList<string> scope, string requestedBy, string edipi, string reason, string startedBy = null, string startedBySid = null)
+        public void Start(string runId, string trigger, IList<string> scope, string requestedBy, string edipi, string reason, string startedBy = null, string startedBySid = null, bool fipsExemptEngine = false)
         {
             Dictionary<string, object> e = new Dictionary<string, object>();
             e["event"] = "start";
+            e["fips_exempt_engine"] = fipsExemptEngine;
             e["run_id"] = runId;
             e["time"] = Now();
             e["trigger"] = trigger;

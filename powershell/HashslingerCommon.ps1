@@ -25,6 +25,7 @@ function Get-HsDefaultConfig([string]$Root) {
     ntds_path = ''
     system_hive_path = ''
     check_duplicates = $false
+    engine_fips_exempt = $false
     enable_scheduled = $true
     enable_ondemand = $true
     cadence = 'Weekly'

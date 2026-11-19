@@ -39,11 +39,16 @@ run when .NET is FIPS-only ("Only FIPS certified cryptographic algorithms are en
 code is unaffected (its MD4 is hand-written), but the DSInternals pull is blocked on a FIPS-enforced server. Setup,
 permissions and scheduled tasks are all fine; the Finish live test reports it as `FIPS MODE`.
 Check: `Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\FipsAlgorithmPolicy -Name Enabled` (1 = on).
-Options (each needs your security / ISSO approval, none is applied by this tool):
-1. A policy exception for the scan server only: "System cryptography: Use FIPS compliant algorithms" = Disabled.
-2. Run the scan from a dedicated, approved host that is not FIPS-enforced.
-3. A native engine whose `Hashslinger.exe.config` opts only that process out of .NET FIPS enforcement
-   (`enforceFIPSPolicy`). Not built; unverified with DSInternals' replication code.
+Options (each needs your security / ISSO approval):
+1. **Scan-engine-only exemption (built in, OFF by default):** set `"engine_fips_exempt": true` (Admin tool, Security and accounts,
+   "Allow the scan under FIPS mode", then Re-apply). Finish makes a private copy of `powershell.exe` named `hs-engine.exe` in the
+   admin-only `app\` folder, with an `hs-engine.exe.config` containing `<enforceFIPSPolicy enabled="false"/>`, and the scan runs the
+   engine with it. Windows FIPS mode stays on for everything else. It is shown as a WARN in setup, recorded in every audit entry
+   (`fips_exempt_engine`), and DISA STIG APPNET0062 normally treats it as a finding that needs documented approval.
+   Unverified with DSInternals' replication code on a real FIPS server: if the scan still fails, send the error. It may also be
+   blocked by AppLocker/WDAC rules that allow only the original powershell.exe path.
+2. A policy exception for the scan server only: "System cryptography: Use FIPS compliant algorithms" = Disabled (broader).
+3. Run the scan from a dedicated, approved host that is not FIPS-enforced.
 
 ## Setup and administration (two separate tools)
 
