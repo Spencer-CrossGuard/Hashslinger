@@ -12,6 +12,18 @@
    No hash values anywhere in the file.
 8. Check `logs\audit.jsonl` has a `start` and an `end` line with `"wipe_confirmed":true`.
 9. Re-run `merge` (expect 0 merged: manifest skips unchanged files) and `scan` (run id ends in `-002`).
-10. Request path: save `{"ou":"OU=Finance,DC=contoso,DC=com","output_dir":"C:\\HashslingerTest\\output","edipi":"1234567890","reason":"smoke test run"}`
+10. Request path: save `{"ou":"OU=Finance,DC=contoso,DC=com","output_dir":"C:\\HashslingerTest\\output","edipi":"12345678901A","reason":"smoke test run"}`
     as `req.json`, run `scan --request req.json` (file is deleted afterward, EDIPI and reason appear in the log).
-    Repeat with `"edipi":"123"` and expect exit code 2 plus a `rejected` log line.
+    Repeat with `"edipi":"123"` (wrong length) and expect exit code 2 plus a `rejected` log line.
+
+# Lab checks on a real domain (about an hour)
+
+1. Setup: `Setup-Hashslinger.ps1`, Check readiness, Install. Expect no FAIL. If the server enforces FIPS, tick the FIPS box
+   (needs approval) and expect the live test to say `replication works`.
+2. Running tool (as a member of the analyst group, not an admin): start a scan with an EDIPI and a reason. The audit log
+   `start` entry has `edipi`, `reason`, `started_by` and `started_by_sid`.
+3. Load test: `diagnostics\06-LoadTest-Accounts.ps1` (lab only) creates thousands of accounts with a known mix of flagged and
+   unflagged passwords; scan them, then run it with `-CompareReport`. Expect RESULT: PASS (no misses, no false positives).
+   Reference run: 59,969 accounts, AD stage about 14 s, peak memory 283 MB.
+4. Admin tool, Run and logs, Scan timings: check where the time goes. Change one setting at a time and compare.
+5. Uninstall with no switches (tasks only), then Install again.

@@ -300,7 +300,7 @@ Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
       <tr><td class="k">1 Preflight</td><td>The output folder must be under an allowed report location; optional BitLocker check.</td></tr>
       <tr><td class="k">2 Merge wordlists</td><td>New or changed files in <code>data\staging</code> are merged into the store (section 8).</td></tr>
       <tr><td class="k">3 Patterns</td><td>Builds hashed candidates from <code>pattern_rules.json</code>: keyboard walks, keyboard waterfalls (below), base words, leetspeak, seasons, years, suffixes.</td></tr>
-      <tr><td class="k">4 Pull from AD</td><td>The engine (<code>Get-AccountHashes.ps1</code>) runs an LDAP search for the scope (base DN, account types, UAC flags) to get the in-scope account GUIDs, then replicates them with DSInternals.<br><b>bulk</b>: one pass over the whole directory, keeping only in-scope accounts. <b>per-account</b>: one call per account. At or below <code>per_account_threshold</code> (5000) bulk switches to per-account on its own, since bulk costs the same for 2 accounts as for all. Explicit <code>-Properties</code> sets are used so Schema partition rights are not needed. Offline mode reads an <code>ntds.dit</code> copy instead. Hashes go to the exe over a pipe, never to disk.</td></tr>
+      <tr><td class="k">4 Pull from AD</td><td>The engine (<code>Get-AccountHashes.ps1</code>) runs an LDAP search for the scope (base DN, account types, UAC flags) to get the in-scope account GUIDs, then replicates them with DSInternals.<br><b>bulk</b>: one pass over the whole directory, keeping only in-scope accounts. <b>per-account</b>: one call per account. At or below <code>per_account_threshold</code> (5000) bulk switches to per-account on its own, since bulk costs the same for 2 accounts as for all. Explicit <code>-Properties</code> sets are used so Schema partition rights are not needed. By default only <code>GenericAccountInfo,NTHash,LMHash</code> are requested (<code>repl_properties</code>). The parallel connections setting (<code>workers</code>, default 1) only matters in per-account mode. Offline mode reads an <code>ntds.dit</code> copy instead. Hashes go to the exe over a pipe, never to disk.</td></tr>
       <tr><td class="k">5 Match</td><td>Hashes are sorted, then looked up in the memory-mapped store (binary search plus a 2-byte prefix index). Pattern candidates, empty password, reversible encryption, LM hash and (if on) duplicates are checked.</td></tr>
       <tr><td class="k">6 Report</td><td>Writes <code>report_&lt;date&gt;.csv</code>, flagged accounts only. Refuses to write any cell containing an account's hash.</td></tr>
       <tr><td class="k">7 Wipe</td><td>Zeroes the in-memory hash and name buffers, deletes temp merge folders, writes the audit entry with <code>wipe_confirmed</code>, applies report retention.</td></tr>
@@ -310,7 +310,7 @@ Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
     <li>Watching a scan: the progress window shows the step, how long this step has run, how long since the last message from the engine, and a scrolling log. Step 4 reports sub-steps A (scope search), B (property test), C (replication) with counts, rate per second, elapsed time and a rough time left, every 5 seconds. The same log is in <code>status\status.json</code> (<code>log</code>).</li>
     <li>One scan at a time (<code>data\store\run.lock</code>, next to the store, so only the service account and administrators can touch it). A second start is refused and logged; an on-demand request that arrives meanwhile is kept, the on-demand task waits (checks every 30 seconds, up to about 24 hours) and runs it as soon as the lock is free. Merges (<code>merge</code>, Admin tool Merge now) use the same lock.</li>
     <li>The scheduled task runs <code>Hashslinger.exe --config ... scan</code> as the service account on the cadence, day and time in the settings.</li>
-    <li>Memory is about 150 to 250 bytes per account plus 40 for sorting.</li>
+    <li>Memory is about 150 to 250 bytes per account plus 40 for sorting. Measured in a lab: 59,969 accounts through the AD stage in about 14 seconds (scope search 1.3 s, replication 11.6 s, matching 0.1 s) with a peak of 283 MB; replication ran at about 5,000 objects a second. Larger directories scale roughly in proportion; test against a DC like your production one.</li>
   </ul>
 </section>
 
@@ -550,12 +550,17 @@ Hashslinger-Uninstall.ps1 -RemoveAll -SecureWipe    everything</code></pre>
       <tr><td class="k">Scripts blocked or ask to confirm</td><td>Start from <code>Setup-Hashslinger.ps1</code> (it unblocks), or <code>Get-ChildItem &lt;folder&gt; -Recurse | Unblock-File</code>.</td></tr>
       <tr><td class="k">Search base not found</td><td>The Users container is <code>CN=Users</code>, not an OU. Pick it from the tree.</td></tr>
       <tr><td class="k">Setup says a scan is running</td><td>Wait, or <code>Stop-Process -Name Hashslinger</code>.</td></tr>
+      <tr><td class="k">The install folder asks for administrator permission to open</td><td>Expected: <code>C:\Hashslinger</code> is locked to Administrators, SYSTEM, the service account and the analyst group. If you are in the analyst group and still get the prompt, that group is probably a built-in privileged group (Domain Admins, Group Policy Creator Owners and similar). Windows strips those from the everyday token, so use a plain group made for this. Analysts should use the Start menu or desktop shortcut, not the folder.</td></tr>
+      <tr><td class="k">"Secret decryption failed: CRC check did not match"</td><td>Seen with several parallel connections in per-account mode. The scan then finishes the remaining accounts one at a time; set <code>workers</code> to 1 to skip the parallel attempt. If it still happens with 1, send the full error.</td></tr>
+      <tr><td class="k">"A referral was returned from the server"</td><td>A scope is not in the domain the DC hosts. Every scope must end with that domain's name (for example <code>DC=corp,DC=contoso,DC=com</code>). Pick it again in the Admin tool (Active Directory tab, Reload from AD).</td></tr>
+      <tr><td class="k">The scan is rejected: EDIPI or reason</td><td>The EDIPI must be exactly <code>edipi_length</code> letters or digits (default 12) and the reason at least <code>reason_min_length</code> characters (default 5). Both are settings on the Security tab. If an allow-list is set, the EDIPI must be on it.</td></tr>
+      <tr><td class="k">The Running tool cannot start a scan</td><td>Manual scans must be enabled (<code>enable_ondemand</code>), the person must be in the analyst group, and Finish must have been run since the group was set (Admin tool, Security and accounts, Re-apply).</td></tr>
       <tr><td class="k">Need to send diagnostics</td><td>Admin tool, Run and logs, Create support bundle (settings, logs and versions; no reports or hashes).</td></tr>
     </tbody>
   </table></div>
 </section>
 
-<footer>Hashslinger SOP. Press <b>/</b> to search, <b>Esc</b> to clear.</footer>
+<footer>Hashslinger SOP, last updated 2026-11-19. Press <b>/</b> to search, <b>Esc</b> to clear.</footer>
 </main>
 </div>
 
