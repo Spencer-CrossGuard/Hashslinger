@@ -12,7 +12,7 @@
    No hash values anywhere in the file.
 8. Check `logs\audit.jsonl` has a `start` and an `end` line with `"wipe_confirmed":true`.
 9. Re-run `merge` (expect 0 merged: manifest skips unchanged files) and `scan` (run id ends in `-002`).
-10. Request path: save `{"ou":"OU=Finance,DC=contoso,DC=com","output_dir":"C:\\HashslingerTest\\output","edipi":"12345678901A","reason":"smoke test run"}`
+10. Request path: save `{"ou":"OU=Finance,DC=contoso,DC=com","output_dir":"C:\\HashslingerTest\\output","edipi":"1234567890A","reason":"smoke test run"}`
     as `req.json`, run `scan --request req.json` (file is deleted afterward, EDIPI and reason appear in the log).
     Repeat with `"edipi":"123"` (wrong length) and expect exit code 2 plus a `rejected` log line.
 

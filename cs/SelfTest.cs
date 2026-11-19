@@ -319,14 +319,14 @@ namespace Hashslinger
             Config cfg = MakeConfig(root);
             string req = Path.Combine(root, "req.json");
             string outOk = Path.Combine(cfg.OutputPath, "sub").Replace("\\", "\\\\");
-            string good = "{\"ou\":\"" + Ou + "\",\"output_dir\":\"" + outOk + "\",\"edipi\":\"12345678901A\",\"reason\":\"Quarterly audit ticket 4411\"}";
+            string good = "{\"ou\":\"" + Ou + "\",\"output_dir\":\"" + outOk + "\",\"edipi\":\"1234567890A\",\"reason\":\"Quarterly audit ticket 4411\"}";
             File.WriteAllText(req, good);
             Check("valid request accepted", Request.Load(cfg, req).Ou == Ou);
             string[][] bad =
             {
                 new[] { "\"ou\":\"" + Ou + "\"", "\"ou\":\"OU=Other,DC=x\"" },
-                new[] { "\"edipi\":\"12345678901A\"", "\"edipi\":\"12345\"" },
-                new[] { "\"edipi\":\"12345678901A\"", "\"edipi\":\"12345678901!\"" },
+                new[] { "\"edipi\":\"1234567890A\"", "\"edipi\":\"12345\"" },
+                new[] { "\"edipi\":\"1234567890A\"", "\"edipi\":\"1234567890!\"" },
                 new[] { "\"reason\":\"Quarterly audit ticket 4411\"", "\"reason\":\"abcd\"" },
                 new[] { "\"reason\":\"Quarterly audit ticket 4411\"", "\"reason\":\"\"" },
                 new[] { "\"output_dir\":\"" + outOk + "\"", "\"output_dir\":\"" + Path.GetTempPath().Replace("\\", "\\\\") + "\"" },

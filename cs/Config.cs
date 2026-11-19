@@ -47,7 +47,7 @@ namespace Hashslinger
         public int Workers = 1;                      // parallel DC connections for per-account replication
         public int PerAccountThreshold = 5000;       // at or below this many in-scope accounts, bulk mode switches to per-account
         public string ReplProperties = "GenericAccountInfo,NTHash,LMHash";   // password data pulled from AD; SupplementalCredentials is slower and only adds clear-text detection
-        public int EdipiLength = 12;                 // how many characters an EDIPI has, letters and digits (edipi_length)
+        public int EdipiLength = 11;                 // how many characters an EDIPI has, letters and digits (edipi_length)
         public int ReasonMinLength = 5;              // shortest accepted reason or CTO number (reason_min_length)
         public bool FipsExemptEngine = false;       // OFF by default: .NET FIPS enforcement is switched off for the scan engine process ONLY (needs security approval)
         public bool CheckDuplicates = false;         // off unless explicitly enabled
@@ -123,7 +123,7 @@ namespace Hashslinger
             c.CheckDuplicates = Json.Str(raw, "check_duplicates", "false").ToLowerInvariant() == "true";
             c.ReplProperties = Json.Str(raw, "repl_properties", c.ReplProperties).Trim();
             if (!System.Text.RegularExpressions.Regex.IsMatch(c.ReplProperties, "^[A-Za-z]+(,[A-Za-z]+)*$")) throw new ConfigException("repl_properties must be a comma separated list of property names");
-            c.EdipiLength = Math.Max(4, Math.Min(30, (int)Convert.ToDouble(Json.Str(raw, "edipi_length", "12"), System.Globalization.CultureInfo.InvariantCulture)));
+            c.EdipiLength = Math.Max(4, Math.Min(30, (int)Convert.ToDouble(Json.Str(raw, "edipi_length", "11"), System.Globalization.CultureInfo.InvariantCulture)));
             c.ReasonMinLength = Math.Max(1, Math.Min(100, (int)Convert.ToDouble(Json.Str(raw, "reason_min_length", "5"), System.Globalization.CultureInfo.InvariantCulture)));
             c.FipsExemptEngine = Json.Str(raw, "engine_fips_exempt", "false").ToLowerInvariant() == "true";
             if (c.FipsExemptEngine)

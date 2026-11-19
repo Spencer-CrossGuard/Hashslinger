@@ -34,7 +34,7 @@ namespace Hashslinger
 
     public static class Request
     {
-        /// <summary>Every scan started by a person needs an EDIPI of the configured length (12 letters or digits by default) (on the allowed list, if one is set) and a
+        /// <summary>Every scan started by a person needs an EDIPI of the configured length (11 letters or digits by default) (on the allowed list, if one is set) and a
         /// reason or CTO number of the configured minimum (5 by default) to 500 characters. Both go into the audit log.</summary>
         static bool ListHasIgnoreCase(List<string> list, string value)
         {
@@ -93,7 +93,7 @@ namespace Hashslinger
         }
 
         /// <summary>Validate an analyst request. Only config-listed OUs and allowed output roots are accepted;
-        /// an EDIPI (12 letters or digits by default) and a reason (5-500 chars by default) are mandatory and end up in the audit log.</summary>
+        /// an EDIPI (11 letters or digits by default) and a reason (5-500 chars by default) are mandatory and end up in the audit log.</summary>
         public static ScanRequest Load(Config cfg, string path)
         {
             Dictionary<string, object> req = Json.Parse(File.ReadAllText(path, Encoding.UTF8)) as Dictionary<string, object>;
