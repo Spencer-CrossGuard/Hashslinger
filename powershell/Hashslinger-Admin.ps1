@@ -449,5 +449,8 @@ $btnSave.Add_Click({
 })
 $btnRevert.Add_Click({ Load-All; $lblStatus.Text = 'Reverted to the saved settings.' })
 
+$btnSave.Tag = 'primary'
+[void](Add-HsHeader $form 'Hashslinger Admin' 'Settings, wordlists, scans and logs' 76 $true)
+Set-HsTheme $form
 Load-All
 [void]$form.ShowDialog()

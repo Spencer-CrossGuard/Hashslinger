@@ -9,6 +9,7 @@
 #>
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+. (Join-Path $PSScriptRoot 'HashslingerTheme.ps1')   # the shared look (header, flat buttons, drawn charts)
 
 # ================================================================ config
 function Get-HsDefaultConfig([string]$Root) {

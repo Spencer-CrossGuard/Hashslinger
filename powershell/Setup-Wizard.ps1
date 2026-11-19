@@ -114,7 +114,7 @@ $btnFinish = New-Object Windows.Forms.Button -Property @{ Text = 'Re-run service
 $btnAdmin = New-Object Windows.Forms.Button -Property @{ Text = 'Open Admin tool'; Left = 559; Top = 718; Width = 160; Height = 36; Enabled = $false }
 $form.Controls.AddRange(@($btnCheck, $btnGo, $btnFinish, $btnAdmin))
 $lblResult = Lbl 'Ready. Choose the options above, then click Check readiness or Install.' 15 764 1150 44 $true   # tall enough for a wrapped error
-$bar = New-Object Windows.Forms.ProgressBar -Property @{ Left = 15; Top = 812; Width = 850; Height = 16 }
+$bar = New-HsProgress 15 814 850 12
 $btnLog = New-Object Windows.Forms.Button -Property @{ Text = 'Open full log'; Left = 727; Top = 718; Width = 140; Height = 36 }   # in the button row, not on top of the log
 $log = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 836; Width = 850; Height = 150; Multiline = $true; ReadOnly = $true; ScrollBars = 'Vertical'; WordWrap = $true; Font = New-Object Drawing.Font('Consolas', 9.5) }
 $form.Controls.AddRange(@($bar, $btnLog, $log))
@@ -242,7 +242,7 @@ function Show-NextSteps {
 }
 function Busy([bool]$on) {
   foreach ($b in $btnCheck, $btnGo, $btnFinish) { $b.Enabled = -not $on }
-  $bar.Style = $(if ($on) { 'Marquee' } else { 'Continuous' })
+  if ($on) { Start-HsMarquee $bar } else { Stop-HsMarquee $bar }
 }
 
 $btnRoot.Add_Click({
@@ -289,7 +289,7 @@ $btnGo.Add_Click({
     else { $lblResult.ForeColor = [Drawing.Color]::DarkOrange; $lblResult.Text = 'Installed, but the service account checks need attention: ' + (Fail-Text 'see the log below.') + '  Fix it, then click Re-run service account checks.' }
   }
   catch { $lblResult.ForeColor = [Drawing.Color]::Firebrick; $lblResult.Text = 'Error: ' + $_.Exception.Message; Log ('ERROR: ' + $_.Exception.Message) }
-  finally { $bar.Style = 'Continuous'; $btnCheck.Enabled = $true; $btnGo.Enabled = $true }
+  finally { Stop-HsMarquee $bar; $btnCheck.Enabled = $true; $btnGo.Enabled = $true }
 })
 
 $btnFinish.Add_Click({
@@ -305,6 +305,9 @@ $btnFinish.Add_Click({
   finally { Busy $false }
 })
 
+$btnGo.Tag = 'primary'
+[void](Add-HsHeader $form 'Hashslinger Setup' 'Install and configure the password exposure scan' 76 $true)
+Set-HsTheme $form
 Update-Plan
 Load-Existing
 [void]$form.ShowDialog()
