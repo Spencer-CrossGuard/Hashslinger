@@ -172,7 +172,9 @@ foreach ($w in 'welcome', 'letmein', 'football', 'baseball', 'dragon', 'shadow',
   foreach ($sfx in '1', '123', '!') { $patternWeakList.Add("$cap$sfx") }
 }
 foreach ($wf in '1qaz@WSX', '!QAZ2wsx', 'Zaq12wsx!', '1QAZ2WSX!', '1qaz@WSX3edc', '!QAZ@WSX#EDC', 'Qwerty123', 'Zaq1xsw2!', '1Q2w3e4r!', 'P@ssw0rd1') { $patternWeakList.Add($wf) }
-$patternWeakList = New-Object System.Collections.Generic.List[string] (, @($patternWeakList | Where-Object { Test-Complex $_ } | Select-Object -Unique))
+$filtered = New-Object System.Collections.Generic.List[string]
+foreach ($c in ($patternWeakList | Select-Object -Unique)) { if (Test-Complex ([string]$c)) { $filtered.Add([string]$c) } }
+$patternWeakList = $filtered
 Write-Host ("Pattern-weak passwords available: {0}" -f $patternWeakList.Count)
 
 # passwords from the user's own rockyou file (complexity-safe lines only)
