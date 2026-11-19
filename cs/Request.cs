@@ -34,14 +34,14 @@ namespace Hashslinger
 
     public static class Request
     {
-        /// <summary>Every scan started by a person needs a 10-digit EDIPI (on the allowed list, if one is set) and a
+        /// <summary>Every scan started by a person needs an EDIPI of the configured length (11 digits by default) (on the allowed list, if one is set) and a
         /// reason or CTO number of 10 to 500 characters. Both go into the audit log.</summary>
         public static void CheckPerson(Config cfg, string edipi, string reason, string by)
         {
             edipi = (edipi ?? "").Trim();
             reason = (reason ?? "").Trim();
-            if (!Regex.IsMatch(edipi, "^[0-9]{10}$"))
-                throw new RequestException("EDIPI must be exactly 10 digits", edipi, reason, by);
+            if (!Regex.IsMatch(edipi, "^[0-9]{" + cfg.EdipiDigits + "}$"))
+                throw new RequestException("EDIPI must be exactly " + cfg.EdipiDigits + " digits", edipi, reason, by);
             if (cfg.AuthorizedEdipis.Count > 0 && !cfg.AuthorizedEdipis.Contains(edipi))
                 throw new RequestException("EDIPI is not authorized to request scans", edipi, reason, by);
             if (reason.Length < 10 || reason.Length > 500)
@@ -60,7 +60,7 @@ namespace Hashslinger
             Console.WriteLine("This scan is attributed to a person and logged. Windows account: " + who);
             for (int tries = 0; ; tries++)
             {
-                if (string.IsNullOrEmpty(edipi)) { Console.Write("EDIPI (10 digits): "); edipi = (Console.ReadLine() ?? "").Trim(); }
+                if (string.IsNullOrEmpty(edipi)) { Console.Write("EDIPI (" + cfg.EdipiDigits + " digits): "); edipi = (Console.ReadLine() ?? "").Trim(); }
                 if (string.IsNullOrEmpty(reason)) { Console.Write("Reason for this scan / CTO number: "); reason = (Console.ReadLine() ?? "").Trim(); }
                 try { CheckPerson(cfg, edipi, reason, who); return; }
                 catch (RequestException e)
@@ -87,7 +87,7 @@ namespace Hashslinger
         }
 
         /// <summary>Validate an analyst request. Only config-listed OUs and allowed output roots are accepted;
-        /// an EDIPI (10 digits) and a reason (10-500 chars) are mandatory and end up in the audit log.</summary>
+        /// an EDIPI (11 digits by default) and a reason (10-500 chars) are mandatory and end up in the audit log.</summary>
         public static ScanRequest Load(Config cfg, string path)
         {
             Dictionary<string, object> req = Json.Parse(File.ReadAllText(path, Encoding.UTF8)) as Dictionary<string, object>;

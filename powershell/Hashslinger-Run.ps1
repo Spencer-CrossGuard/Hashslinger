@@ -23,6 +23,8 @@ $statusPath = [string]$cfg.status_path
 $outputPath = [string]$cfg.output_path
 $requestDir = [string]$cfg.request_dir
 $script:lastOutput = $null
+$edipiDigits = 11
+try { if ($cfg.edipi_digits) { $edipiDigits = [int]$cfg.edipi_digits } } catch { }
 
 $form = New-Object Windows.Forms.Form -Property @{ Text = 'Hashslinger: run a scan'; Width = 660; Height = 690; StartPosition = 'CenterScreen'; FormBorderStyle = 'FixedDialog'; MaximizeBox = $false; Font = New-Object Drawing.Font('Segoe UI', 9) }
 function Add-Label([string]$text, [int]$x, [int]$y, [int]$w = 600, [int]$h = 20, [bool]$bold = $false) {
@@ -38,8 +40,8 @@ function Add-Label([string]$text, [int]$x, [int]$y, [int]$w = 600, [int]$h = 20,
 $cmbOu = New-Object Windows.Forms.ComboBox -Property @{ Left = 15; Top = 62; Width = 615; DropDownStyle = 'DropDownList' }
 foreach ($o in @($cfg.target_ous)) { [void]$cmbOu.Items.Add([string]$o) }
 if ($cmbOu.Items.Count) { $cmbOu.SelectedIndex = 0 }
-[void](Add-Label 'EDIPI (10 digits)' 15 96 160)
-$txtEdipi = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 116; Width = 150; MaxLength = 10 }
+[void](Add-Label ("EDIPI ($edipiDigits digits)") 15 96 160)
+$txtEdipi = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 116; Width = 150; MaxLength = $edipiDigits }
 [void](Add-Label 'Reason for this scan / CTO number (at least 10 characters)' 185 96 445)
 $txtReason = New-Object Windows.Forms.TextBox -Property @{ Left = 185; Top = 116; Width = 445; MaxLength = 500 }
 $btnStart = New-Object Windows.Forms.Button -Property @{ Text = 'Start scan'; Left = 15; Top = 152; Width = 150; Height = 34; Enabled = $false }
@@ -62,7 +64,7 @@ $btnFolder = New-Object Windows.Forms.Button -Property @{ Text = 'Open reports f
 $form.Controls.AddRange(@($bar, $txtLog, $btnReport, $btnFolder))
 
 function Test-Ready {
-  $ok = ($cmbOu.SelectedItem -and $txtEdipi.Text -match '^[0-9]{10}$' -and $txtReason.Text.Trim().Length -ge 10)
+  $ok = ($cmbOu.SelectedItem -and $txtEdipi.Text -match ('^[0-9]{' + $edipiDigits + '}$') -and $txtReason.Text.Trim().Length -ge 10)
   $btnStart.Enabled = [bool]$ok
 }
 $txtEdipi.Add_TextChanged({ Test-Ready }); $txtReason.Add_TextChanged({ Test-Ready }); $cmbOu.Add_SelectedIndexChanged({ Test-Ready })

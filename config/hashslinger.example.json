@@ -3,7 +3,8 @@
   "mode": "live",
   "replication": "bulk",
   "per_account_threshold": 5000,
-  "workers": 4,
+  "workers": 1,
+  "edipi_digits": 11,
   "target_server": "dc1.corp.contoso.com",
   "target_ous": [
     "OU=Finance,DC=corp,DC=contoso,DC=com"

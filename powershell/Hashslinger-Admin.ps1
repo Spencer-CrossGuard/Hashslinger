@@ -111,7 +111,10 @@ function Add-Row($tp, [string]$key, [string]$label, [string]$type, $opts = $null
       $tp.Controls.Add($c)
     }
     'bool' {
-      $c = New-Object Windows.Forms.CheckBox -Property @{ Left = 270; Top = $y + 2; Width = 580; Text = [string]$opts }
+      # long labels wrap, so the box must be as tall as its text (otherwise the second line is cut off)
+      $lines = [Math]::Max(1, [Math]::Ceiling(([string]$opts).Length / 68))
+      $c = New-Object Windows.Forms.CheckBox -Property @{ Left = 270; Top = $y; Width = 580; Height = (20 * $lines + 4); Text = [string]$opts; AutoSize = $false }
+      $h = 20 * $lines + 8
       $tp.Controls.Add($c)
     }
     'choice' {
@@ -198,7 +201,7 @@ Add-Heading $tpAd 'Where to read from and how'
 Add-Row $tpAd 'target_server' 'Domain controller' 'combo' $ad.DCs 'The DC the scan reads from (type a name if it is not in the list).'
 Add-Row $tpAd 'mode' 'Mode' 'choice' @('live', 'offline') 'live = read from a DC (replication). offline = read an ntds.dit copy (set the two paths below).'
 Add-Row $tpAd 'replication' 'Replication' 'choice' @('bulk', 'per-account') 'bulk = one pass over the whole domain (best for large scopes). per-account = only the accounts in scope.'
-Add-Row $tpAd 'workers' 'Parallel connections' 'int' @{ Min = 1; Max = 16 } 'How many connections to the DC are used at once when replicating accounts one by one (small scopes). Higher is faster but loads the DC more. 1 turns it off.'
+Add-Row $tpAd 'workers' 'Parallel connections' 'int' @{ Min = 1; Max = 16 } 'How many connections to the DC are used at once when replicating accounts one by one (small scopes). Default 1 (off). More is faster but loads the DC, and if DSInternals reports decryption errors with several connections the scan finishes the rest one at a time.'
 Add-Row $tpAd 'per_account_threshold' 'Small-scope switch' 'int' @{ Min = 0; Max = 1000000 } 'At or below this many accounts in scope, bulk automatically switches to per-account (much faster for small scans).'
 Add-Row $tpAd 'account_types' 'Account types' 'checks' @('User', 'Service', 'Computer') 'Which kinds of accounts to audit.'
 Add-Row $tpAd 'uac.exclude_flags' 'Skip accounts with flag' 'checks' @('SMARTCARD_REQUIRED', 'ACCOUNTDISABLE', 'PASSWD_NOTREQD', 'DONT_EXPIRE_PASSWORD', 'ENCRYPTED_TEXT_PWD_ALLOWED') 'Accounts that have ANY ticked flag are skipped. Smart-card-required accounts have no usable password.'
@@ -242,9 +245,10 @@ Add-Heading $tpSec 'Service account and access'
 Add-Row $tpSec 'gmsa_name' 'Service account (gMSA) name' 'text' $null 'The account the scheduled scan runs as. Create it by hand first; it needs only the two directory replication rights on the domain root and nothing else.'
 Add-Row $tpSec 'run_server' 'Scan server' 'text' $null 'The only computer allowed to use the service account.'
 Add-Row $tpSec 'analyst_group' 'Analyst group (optional)' 'text' $null 'Leave empty so only the service account and local Administrators have access. A group lets analysts submit scans.'
-Add-Row $tpSec 'authorized_edipis' 'Allowed EDIPIs' 'lines' $null 'One per line. Empty = any valid 10-digit EDIPI may request a scan (only used with the analyst request GUI).'
+Add-Row $tpSec 'edipi_digits' 'EDIPI length (digits)' 'int' @{ Min = 5; Max = 20 } 'How many digits an EDIPI must have when someone starts a scan. Default 11.'
+Add-Row $tpSec 'authorized_edipis' 'Allowed EDIPIs' 'lines' $null 'One per line. Empty = any valid EDIPI may request a scan (only used with the analyst request GUI).'
 Add-Row $tpSec 'require_encrypted_volume' 'Require BitLocker' 'bool' 'Refuse to scan unless the store, wordlists and reports are on a BitLocker-protected volume.'
-Add-Row $tpSec 'engine_fips_exempt' 'Allow the scan under FIPS mode' 'bool' 'ONLY if this server enforces FIPS and the scan fails with an MD5 / FIPS error. Switches .NET FIPS enforcement off for the scan engine process only (a private copy of PowerShell in the app folder); Windows FIPS mode stays on everywhere else. Needs approval from your security officer. Click Re-apply afterwards.'
+Add-Row $tpSec 'engine_fips_exempt' 'Allow the scan under FIPS mode' 'bool' 'Switch .NET FIPS enforcement off for the scan engine only' 'ONLY if this server enforces FIPS and the scan fails with an MD5 / FIPS error. It uses a private copy of PowerShell in the app folder; Windows FIPS mode stays on everywhere else. Needs approval from your security officer. Click Re-apply afterwards.'
 Add-Row $tpSec 'dsinternals_offline_path' 'DSInternals module folder' 'path' 'folder' 'Only for servers with no internet: where the DSInternals module was copied from.'
 $btnFinish = New-Object Windows.Forms.Button -Property @{ Text = 'Re-apply permissions and scheduled tasks'; Left = 270; Top = [int]$tpSec.Tag; Width = 300; Height = 30 }
 $btnFinish.Add_Click({

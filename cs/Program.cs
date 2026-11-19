@@ -14,7 +14,7 @@ namespace Hashslinger
             "  --config <file> merge                 merge staging/<HIBP|rockyou|custom>/* into the hash store\n" +
             "  --config <file> info                  show hash store record count\n" +
             "  --config <file> scan [--ou <dn>] [--output-dir <dir>] [--trigger <t>] [--request <file> | --request-dir <dir>]\n" +
-            "                                        [--scheduled] [--edipi <10 digits> --reason <text>]\n" +
+            "                                        [--scheduled] [--edipi <digits> --reason <text>]\n" +
             "      A scan started by a person asks for an EDIPI and a reason / CTO number (or take them from --edipi/--reason).\n" +
             "      --scheduled is for the unattended scheduled task only: no person, logged as scheduled.\n";
 

@@ -51,9 +51,9 @@ $form.Controls.Add($chkDup)
 $btnStaging = New-Object Windows.Forms.Button -Property @{ Text = 'Open wordlist (staging) folder'; Left = 430; Top = 329; Width = 240 }
 $form.Controls.Add($btnStaging)
 
-[void](Add-Label 'EDIPI (10 digits)' 15 368 150)
+[void](Add-Label 'EDIPI (11 digits)' 15 368 150)
 $txtEdipi = Add-Text 15 388 150
-$txtEdipi.MaxLength = 10
+$txtEdipi.MaxLength = 11
 [void](Add-Label 'Reason for this scan / CTO number' 190 368 300)
 $txtReason = Add-Text 190 388 480
 $btnRun = New-Object Windows.Forms.Button -Property @{ Text = 'Set up and start scan'; Left = 15; Top = 424; Width = 200; Height = 32 }
@@ -78,7 +78,7 @@ $btnRun.Add_Click({
     foreach ($i in $lst.CheckedItems) { $ous += [string]$i }
     foreach ($l in ($txtExtra.Text -split "`r?`n")) { if ($l.Trim()) { $ous += $l.Trim() } }
     $ous = @($ous | Select-Object -Unique)
-    if ($txtEdipi.Text.Trim() -notmatch '^[0-9]{10}$' -or $txtReason.Text.Trim().Length -lt 10) { [void][Windows.Forms.MessageBox]::Show('Enter your 10-digit EDIPI and a reason / CTO number (at least 10 characters). They are written to the audit log.'); return }
+    if ($txtEdipi.Text.Trim() -notmatch '^[0-9]{11}$' -or $txtReason.Text.Trim().Length -lt 10) { [void][Windows.Forms.MessageBox]::Show('Enter your 11-digit EDIPI and a reason / CTO number (at least 10 characters). They are written to the audit log.'); return }
     if (-not $server -or -not $w -or $ous.Count -eq 0) { [void][Windows.Forms.MessageBox]::Show('Enter a domain controller, a work folder, and at least one OU/DN.'); return }
 
     $btnRun.Enabled = $false; $bar.Style = 'Marquee'; $log.Clear()

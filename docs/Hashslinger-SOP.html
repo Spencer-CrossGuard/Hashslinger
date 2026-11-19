@@ -243,6 +243,17 @@ Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
     <li>Click <b>Check readiness</b> (changes nothing), then <b>Install</b>. Install is the local install followed by the service account checks.</li>
     <li>Setup does <b>not</b> start a scan. Run the first one like every manual scan: open the <b>Running tool</b> (<code>Hashslinger-Run.ps1</code> in the install folder), enter your EDIPI and a reason or CTO number, and click Start scan. It runs the scan as the service account and shows its progress in the same window.</li>
   </ol>
+  <h3>Which scripts need administrator rights</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Script</th><th>Needs admin?</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Setup-Hashslinger.ps1, the setup wizard, Hashslinger-Admin.ps1, Hashslinger-Uninstall.ps1</td><td>Yes. They ask for it themselves (a UAC prompt), so start them normally.</td></tr>
+      <tr><td class="k">Hashslinger-Run.ps1 (Running tool)</td><td>No. Analysts use it as themselves; they only need to be in the analyst group.</td></tr>
+      <tr><td class="k">Build-Hashslinger.ps1, Rebuild-Hashslinger.ps1, Hashslinger.exe selftest</td><td>No.</td></tr>
+      <tr><td class="k">The scan itself</td><td>No: it runs as the service account from a scheduled task.</td></tr>
+      <tr><td class="k">extras\ scripts (gMSA helpers)</td><td>Run by a Domain Admin on a machine with the AD tools, by hand.</td></tr>
+    </tbody>
+  </table></div>
   <h3>Hardening the scan server</h3>
   <ul>
     <li><b>Crash dumps:</b> a crash dump of <code>Hashslinger.exe</code> or <code>powershell.exe</code> can contain account hashes, and Windows Error Reporting may send dumps off the server. Turn it off on this server: <code>reg add "HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting" /v Disabled /t REG_DWORD /d 1 /f</code>, and make sure no <code>LocalDumps</code> key exists under it.</li>
@@ -309,7 +320,7 @@ Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
   <h3>Running tool (<code>Hashslinger-Run.ps1</code>), for analysts</h3>
   <p>A small window with no settings in it, so an analyst cannot change anything by mistake. It has two parts:</p>
   <ul>
-    <li><b>Start a scan:</b> pick the scope (only the ones the administrator configured), enter your 10-digit EDIPI and the reason or CTO number (at least 10 characters), and click Start scan. The request goes to the on-demand task, which runs as the service account and logs the EDIPI, the reason and your Windows account.</li>
+    <li><b>Start a scan:</b> pick the scope (only the ones the administrator configured), enter your EDIPI (11 digits by default, setting <code>edipi_digits</code>) and the reason or CTO number (at least 10 characters), and click Start scan. The request goes to the on-demand task, which runs as the service account and logs the EDIPI, the reason and your Windows account.</li>
     <li><b>Current or last scan:</b> live step, progress bar, time, who started it, a short log, and buttons to open the newest report and the reports folder. If a scan is already running, a new request waits and starts when it finishes.</li>
   </ul>
   <p>For people other than administrators to use it, put them in the analyst group (Admin tool, Security and accounts) and re-apply permissions. That gives the group read access to the program, settings, status and reports, and permission to create requests and start the on-demand task, and nothing else. The Admin tool is for administrators only.</p>
@@ -327,7 +338,7 @@ Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
     </tbody>
   </table></div>
   <h3>Command line</h3>
-<pre><code>Hashslinger.exe --config &lt;json&gt; scan [--ou &lt;dn&gt;] [--output-dir &lt;dir&gt;] [--trigger &lt;t&gt;] [--request &lt;file&gt; | --request-dir &lt;dir&gt;] [--scheduled] [--edipi &lt;10 digits&gt; --reason &lt;text&gt;]
+<pre><code>Hashslinger.exe --config &lt;json&gt; scan [--ou &lt;dn&gt;] [--output-dir &lt;dir&gt;] [--trigger &lt;t&gt;] [--request &lt;file&gt; | --request-dir &lt;dir&gt;] [--scheduled] [--edipi &lt;digits&gt; --reason &lt;text&gt;]
 Run by a person at a console, scan asks for the EDIPI and a reason or CTO number (or takes --edipi and --reason). --scheduled is only for the unattended task.
 Hashslinger.exe --config &lt;json&gt; merge             merge new staging files into the store now
 Hashslinger.exe --config &lt;json&gt; info              store record count
@@ -356,7 +367,7 @@ Exit codes: 0 ok, 1 usage, 2 failed (also logged)</code></pre>
       <tr><td class="k">install_root</td><td>chosen folder</td><td>Where everything lives.</td></tr>
       <tr><td class="k">mode</td><td>live</td><td><code>live</code> replicates from a DC; <code>offline</code> reads <code>ntds_path</code> with the SYSTEM hive <code>system_hive_path</code>.</td></tr>
       <tr><td class="k">replication</td><td>bulk</td><td><code>bulk</code> or <code>per-account</code>.</td></tr>
-      <tr><td class="k">workers</td><td>4</td><td>Parallel connections to the DC when accounts are replicated one by one (small scopes). 1 turns it off. Raise carefully: each one loads the DC.</td></tr>
+      <tr><td class="k">workers</td><td>1</td><td>Parallel connections to the DC when accounts are replicated one by one (small scopes). 1 turns it off. Raise carefully: each one loads the DC.</td></tr>
       <tr><td class="k">per_account_threshold</td><td>5000</td><td>At or below this many in-scope accounts bulk uses per-account.</td></tr>
       <tr><td class="k">target_server</td><td>none</td><td>DC to read from.</td></tr>
       <tr><td class="k">target_ous</td><td>none</td><td>List of DNs. Each is searched as a subtree.</td></tr>
@@ -364,6 +375,7 @@ Exit codes: 0 ok, 1 usage, 2 failed (also logged)</code></pre>
       <tr><td class="k">uac.exclude_flags</td><td>SMARTCARD_REQUIRED</td><td>Skip accounts with ANY of these userAccountControl flags (names or numbers).</td></tr>
       <tr><td class="k">uac.require_flags</td><td>none</td><td>Accounts must have ALL of these.</td></tr>
       <tr><td class="k">check_duplicates</td><td>false</td><td>Flag shared passwords (Medium). Can add many rows on a large directory.</td></tr>
+      <tr><td class="k">edipi_digits</td><td>11</td><td>How many digits an EDIPI must have when a person starts a scan. Checked by the exe, the Running tool and the request window.</td></tr>
       <tr><td class="k">engine_fips_exempt</td><td>false</td><td>Only for a FIPS-enforced server where the scan fails with the MD5 / FIPS error. Turns .NET FIPS enforcement off for the scan engine process only (a private copy of PowerShell in <code>app\</code>). Needs security approval. Applied by Finish.</td></tr>
       <tr><td class="k">enable_scheduled, enable_ondemand</td><td>true, true</td><td>Which scan tasks exist. <code>Hashslinger-Scheduled</code> runs unattended on the schedule (logged as scheduled, no person). <code>Hashslinger-OnDemand</code> is how every scan started by a person runs, with an EDIPI and a reason. Applied by the Finish step (the Admin tool offers to run it).</td></tr>
       <tr><td class="k">cadence, schedule_day, schedule_time</td><td>Weekly, Sunday, 02:00</td><td>Daily, Weekly or Monthly (every 4 weeks). Daily ignores the day.</td></tr>

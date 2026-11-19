@@ -211,7 +211,7 @@ if ($Mode -eq 'live') {
             $f = $item -split "`t"
             $acct = Get-ADReplAccount -ObjectGuid ([Guid]$f[0]) -Server $server @pa
             $fl = FormatLine $acct $f[1]
-            if ($fl) { $outQ.Enqueue($fl) }
+            if ($fl) { $outQ.Enqueue(([string]$f[0]) + $fl) }   # 36-character GUID first, so the main loop knows which accounts are done
           }
         }
         catch { $flag.stop = $true; $errQ.Enqueue([string]$_.Exception.Message) }
@@ -226,24 +226,39 @@ if ($Mode -eq 'live') {
         $jobs += [pscustomobject]@{ PS = $ps; Async = $ps.BeginInvoke() }
       }
       $script:done = 0
+      $doneGuids = New-Object 'System.Collections.Generic.HashSet[string]'
+      $workerError = $null
       try {
         while ($true) {
           $line = $null
-          while ($outQ.TryDequeue([ref]$line)) { $out.WriteLine($line); $script:done++ }
+          while ($outQ.TryDequeue([ref]$line)) { [void]$doneGuids.Add($line.Substring(0, 36)); $out.WriteLine($line.Substring(36)); $script:done++ }
           $msg = $null
-          if ($errQ.TryDequeue([ref]$msg)) { $flag.stop = $true; throw "replication worker failed: $msg" }
+          if ($errQ.TryDequeue([ref]$msg)) { $workerError = $msg; break }
           Tick "replicated ($n connections)" $script:done $scope.Count
           $allDone = $true
           foreach ($j in $jobs) { if (-not $j.Async.IsCompleted) { $allDone = $false } }
           if ($allDone -and $outQ.IsEmpty) { break }
           Start-Sleep -Milliseconds 100
         }
-        if ($errQ.TryDequeue([ref]$msg)) { throw "replication worker failed: $msg" }
       }
       finally {
         $flag.stop = $true
         foreach ($j in $jobs) { try { $j.PS.Stop() } catch { }; $j.PS.Dispose() }
         $pool.Close(); $pool.Dispose()
+      }
+      if ($workerError) {
+        # The parallel connections are an optimization. If they fail (for example DSInternals reporting a decryption
+        # error when several connections run at once), finish the accounts that are not done yet, one at a time.
+        $line = $null
+        while ($outQ.TryDequeue([ref]$line)) { [void]$doneGuids.Add($line.Substring(0, 36)); $out.WriteLine($line.Substring(36)); $script:done++ }
+        Status "parallel replication failed ($workerError). Finishing the remaining accounts one at a time. (Set workers to 1 in the Admin tool to skip the parallel attempt.)"
+        $script:lastTick = -10
+        foreach ($kv in $scope.GetEnumerator()) {
+          if ($doneGuids.Contains([string]$kv.Key)) { continue }
+          Emit (Get-ADReplAccount -ObjectGuid $kv.Key -Server $Server @propArgs) $kv.Value
+          $script:done++
+          Tick 'replicated (one at a time)' $script:done $scope.Count
+        }
       }
     }
     Tick 'replicated' $scope.Count $scope.Count $true
