@@ -17,6 +17,7 @@ namespace Hashslinger
         public string TargetServer = "";
         public List<string> TargetOus = new List<string>();
         public List<string> AccountTypes = new List<string> { "User", "Service" };
+        public List<string> ServiceNamePrefixes = new List<string> { "svc.", "$svc." };   // accounts whose name starts with one of these count as Service even without an SPN (service_name_prefixes)
         public List<int> UacRequire = new List<int>();
         public List<int> UacExclude = new List<int> { 0x40000 }; // smart-card-required
         public string HashStorePath = "store\\master.ntlm";
@@ -90,6 +91,7 @@ namespace Hashslinger
             c.TargetServer = Json.Str(raw, "target_server", "");
             c.TargetOus = Json.StrList(raw, "target_ous");
             if (raw.ContainsKey("account_types")) c.AccountTypes = Json.StrList(raw, "account_types");
+            if (raw.ContainsKey("service_name_prefixes")) c.ServiceNamePrefixes = Json.StrList(raw, "service_name_prefixes");
             object uo;
             if (raw.TryGetValue("uac", out uo))
             {
@@ -147,6 +149,9 @@ namespace Hashslinger
             if (TargetOus.Count == 0) throw new ConfigException("target_ous must list at least one OU distinguished name");
             foreach (string t in AccountTypes)
                 if (t != "User" && t != "Service" && t != "Computer") throw new ConfigException("bad account type " + t);
+            foreach (string sp in ServiceNamePrefixes)
+                if (sp.Length == 0 || sp.IndexOfAny(new[] { ',', '*', '(', ')', '\\', '\0', '"', '\'' }) >= 0)
+                    throw new ConfigException("service_name_prefixes entries must be non-empty and must not contain , * ( ) \\ quotes: " + sp);
             foreach (string lp in new[] { HashStorePath, StagingPath, LogPath, OutputPath, StatusPath, RequestDir })
                 if (lp.StartsWith("\\\\", StringComparison.Ordinal)) throw new ConfigException("paths must be on a local drive, not a network share: " + lp);
             foreach (string ar in AllowedOutputRoots)

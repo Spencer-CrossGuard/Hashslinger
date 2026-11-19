@@ -54,7 +54,8 @@ namespace Hashslinger
                 "-PerAccountThreshold", cfg.PerAccountThreshold.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 "-Workers", cfg.Workers.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 "-ReplProperties", cfg.ReplProperties,
-                "-AccountTypes", string.Join(",", cfg.AccountTypes.ToArray()) });
+                "-AccountTypes", string.Join(",", cfg.AccountTypes.ToArray()),
+                "-ServicePrefixes", string.Join(",", cfg.ServiceNamePrefixes.ToArray()) });
             if (cfg.UacExclude.Count > 0) { cmd.Add("-ExcludeUacFlags"); cmd.Add(JoinInts(cfg.UacExclude)); }
             if (cfg.UacRequire.Count > 0) { cmd.Add("-RequireUacFlags"); cmd.Add(JoinInts(cfg.UacRequire)); }
             if (cfg.Mode == "live") { cmd.Add("-Server"); cmd.Add(cfg.TargetServer); }

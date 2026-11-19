@@ -24,6 +24,7 @@ param(
   [Parameter(Mandatory)][string]$SearchBases,
   [string]$Server,
   [string]$AccountTypes = 'User,Service',
+  [string]$ServicePrefixes = 'svc.,$svc.',   # names starting with one of these count as Service even without an SPN
   [string]$ExcludeUacFlags = '',
   [string]$RequireUacFlags = '',
   [string]$NtdsPath,
@@ -43,6 +44,7 @@ Import-Module DSInternals
 
 $bases = $SearchBases -split '\|' | Where-Object { $_ }
 $types = $AccountTypes -split ',' | Where-Object { $_ }
+$svcPrefixes = @($ServicePrefixes -split ',' | Where-Object { $_ })
 $exFlags = @($ExcludeUacFlags -split ',' | Where-Object { $_ } | ForEach-Object { [int]$_ })
 $reqFlags = @($RequireUacFlags -split ',' | Where-Object { $_ } | ForEach-Object { [int]$_ })
 # A buffered writer on the raw stdout stream: Console.Out flushes after EVERY line, which is a system call per account.
@@ -112,16 +114,24 @@ function UacClause {
   foreach ($f in $reqFlags) { $c += "(userAccountControl:1.2.840.113556.1.4.803:=$f)" }
   $c
 }
+function SvcMatch {   # LDAP: has an SPN, or the name starts with a service prefix
+  $m = '(servicePrincipalName=*)'
+  foreach ($p in $svcPrefixes) { $m += "(sAMAccountName=$p*)" }
+  "(|$m)"
+}
 function TypeFilter([string]$t) {
   switch ($t) {
-    'User'     { '(&(objectCategory=person)(objectClass=user)(!(servicePrincipalName=*)))' }
-    'Service'  { '(&(objectCategory=person)(objectClass=user)(servicePrincipalName=*))' }
+    'User'     { "(&(objectCategory=person)(objectClass=user)(!$(SvcMatch)))" }
+    'Service'  { "(&(objectCategory=person)(objectClass=user)$(SvcMatch))" }
     'Computer' { '(objectCategory=computer)' }
     default    { throw "Unknown account type $t" }
   }
 }
-function ClassifyType($spn, [bool]$isComputer) {
-  if ($isComputer) { 'Computer' } elseif ($spn -and @($spn).Count -gt 0) { 'Service' } else { 'User' }
+function ClassifyType($spn, [bool]$isComputer, [string]$sam) {
+  if ($isComputer) { return 'Computer' }
+  if ($spn -and @($spn).Count -gt 0) { return 'Service' }
+  foreach ($p in $svcPrefixes) { if ($sam.StartsWith($p, [StringComparison]::OrdinalIgnoreCase)) { return 'Service' } }
+  'User'
 }
 
 # Pick the widest property set this DSInternals version accepts (names differ between versions). Access-denied errors
@@ -312,7 +322,7 @@ else {
     $inScope = $false
     foreach ($b in $bases) { if ($a.DistinguishedName -ieq $b -or $a.DistinguishedName.EndsWith(',' + $b, [StringComparison]::OrdinalIgnoreCase)) { $inScope = $true; break } }
     if (-not $inScope) { return }
-    $type = ClassifyType $a.ServicePrincipalName $a.SamAccountName.EndsWith('$')
+    $type = ClassifyType $a.ServicePrincipalName $a.SamAccountName.EndsWith('$') $a.SamAccountName
     if ($types -notcontains $type) { return }
     $uac = [int]$a.UserAccountControl
     foreach ($f in $exFlags) { if (($uac -band $f) -ne 0) { return } }

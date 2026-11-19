@@ -374,7 +374,8 @@ Exit codes: 0 ok, 1 usage, 2 failed (also logged)</code></pre>
       <tr><td class="k">per_account_threshold</td><td>5000</td><td>At or below this many in-scope accounts bulk uses per-account.</td></tr>
       <tr><td class="k">target_server</td><td>none</td><td>DC to read from.</td></tr>
       <tr><td class="k">target_ous</td><td>none</td><td>List of DNs. Each is searched as a subtree.</td></tr>
-      <tr><td class="k">account_types</td><td>User, Service</td><td>Also <code>Computer</code>. Service means it has a servicePrincipalName.</td></tr>
+      <tr><td class="k">account_types</td><td>User, Service</td><td>Also <code>Computer</code>. Service means it has a servicePrincipalName, or its logon name starts with one of the <code>service_name_prefixes</code>.</td></tr>
+      <tr><td class="k">service_name_prefixes</td><td>svc.  $svc.</td><td>Logon-name prefixes (not case sensitive) that make an account count as Service even with no SPN. One per line in the Admin tool. Cannot contain a comma, asterisk, parentheses, backslash or quote.</td></tr>
       <tr><td class="k">uac.exclude_flags</td><td>SMARTCARD_REQUIRED</td><td>Skip accounts with ANY of these userAccountControl flags (names or numbers).</td></tr>
       <tr><td class="k">uac.require_flags</td><td>none</td><td>Accounts must have ALL of these.</td></tr>
       <tr><td class="k">check_duplicates</td><td>false</td><td>Flag shared passwords (Medium). Can add many rows on a large directory.</td></tr>

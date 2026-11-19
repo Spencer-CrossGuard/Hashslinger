@@ -15,6 +15,10 @@
     "User",
     "Service"
   ],
+  "service_name_prefixes": [
+    "svc.",
+    "$svc."
+  ],
   "uac": {
     "require_flags": [],
     "exclude_flags": [

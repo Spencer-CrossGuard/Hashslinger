@@ -25,6 +25,7 @@ function Get-HsDefaultConfig([string]$Root) {
     target_server = ''
     target_ous = @()
     account_types = @('User', 'Service')
+    service_name_prefixes = @('svc.', '$svc.')
     uac = [ordered]@{ require_flags = @(); exclude_flags = @('SMARTCARD_REQUIRED') }
     ntds_path = ''
     system_hive_path = ''
