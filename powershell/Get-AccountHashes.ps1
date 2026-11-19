@@ -45,10 +45,13 @@ $bases = $SearchBases -split '\|' | Where-Object { $_ }
 $types = $AccountTypes -split ',' | Where-Object { $_ }
 $exFlags = @($ExcludeUacFlags -split ',' | Where-Object { $_ } | ForEach-Object { [int]$_ })
 $reqFlags = @($RequireUacFlags -split ',' | Where-Object { $_ } | ForEach-Object { [int]$_ })
-$out = [Console]::Out
+# A buffered writer on the raw stdout stream: Console.Out flushes after EVERY line, which is a system call per account.
+# Status lines and the periodic progress tick flush it, and it is flushed again at the very end.
+$out = New-Object IO.StreamWriter([Console]::OpenStandardOutput(), (New-Object System.Text.UTF8Encoding($false)), 65536)
+$out.AutoFlush = $false
 # Progress lines for the exe (it shows them in the console and the progress viewer). Marker chosen so it can never
 # be mistaken for an account line (account lines have 6 tab-separated fields and never start with this).
-function Status([string]$m) { $out.WriteLine('##HS## ' + $m) }
+function Status([string]$m) { $out.WriteLine('##HS## ' + $m); $out.Flush() }
 
 # Formatting helpers live in one block so the parallel workers (separate runspaces) use the exact same code.
 $global:HsMode = $Mode; $global:HsServer = $Server
@@ -272,8 +275,28 @@ if ($Mode -eq 'live') {
     Get-ADReplAccount -All -Server $Server @propArgs | ForEach-Object {
       $procSw.Start()
       $script:seen++
-      if ($scope.TryGetValue($_.Guid, [ref]$type)) { $script:kept++; Emit $_ $type }
-      if (($script:seen -band 2047) -eq 0) { Tick "received from the DC ($($script:kept) kept in scope):" $script:seen 0 }
+      $a = $_
+      if ($scope.TryGetValue($a.Guid, [ref]$type)) {
+        $script:kept++
+        # same line format as FormatLine, written inline: function calls are the expensive part of PowerShell per object
+        $sam = [string]$a.SamAccountName
+        if (-not $sam) { $sam = Get-SamFromLdap $a.Guid; if (-not $sam) { $sam = '(unknown)' } }
+        $dn = [string]$a.DistinguishedName
+        if ($sam.IndexOfAny($global:HsBad) -ge 0) { $sam = $sam -replace '[\t\r\n]', ' ' }
+        if ($dn.IndexOfAny($global:HsBad) -ge 0) { $dn = $dn -replace '[\t\r\n]', ' ' }
+        $nt = $a.NTHash
+        $hex = if ($nt) { [BitConverter]::ToString([byte[]]$nt).Replace('-', '') } else { '' }
+        $uac = [int]$a.UserAccountControl
+        $sc = $a.SupplementalCredentials
+        $rev = if ((($uac -band 0x80) -ne 0) -or (($null -ne $sc) -and ($null -ne $sc.ClearText))) { '1' } else { '0' }
+        $lm = if ($null -ne $a.LMHash) { '1' } else { '0' }
+        $nopw = if (($null -eq $nt) -and (($uac -band 0x20) -ne 0)) { '1' } else { '0' }
+        $out.WriteLine("$sam`t$dn`t$type`t$hex`t$lm`t$rev`t$nopw")
+      }
+      if (($script:seen -band 2047) -eq 0) {
+        $out.Flush()
+        Tick "received from the DC ($($script:kept) kept in scope):" $script:seen 0
+      }
       $procSw.Stop()
     }
     Tick 'received from the DC, total objects:' $script:seen 0 $true
@@ -297,3 +320,4 @@ else {
     Emit $a $type
   }
 }
+$out.Flush()
