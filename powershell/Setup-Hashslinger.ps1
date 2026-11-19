@@ -226,7 +226,7 @@ __PAUSE__
     Result "$Name launcher" 'PASS' "$ps1 (and a shortcut of the same name)"
   }
   foreach ($old in 'Hashslinger-Admin.cmd', 'Hashslinger-Run.cmd', 'Hashslinger-Uninstall.cmd') { Remove-Item (Join-Path $Dir.root $old) -Force -ErrorAction SilentlyContinue }   # earlier versions
-  New-Launcher 'Hashslinger-Admin' 'Hashslinger-Admin.ps1' '-ConfigPath' 'Hashslinger Admin: change any setting, manage wordlists, run scans. For administrators.' $false $false
+  New-Launcher 'Hashslinger-Admin' 'Hashslinger-Admin.ps1' '-ConfigPath' 'Hashslinger Admin: change any setting, manage wordlists, run scans. For administrators.' $true $false
   New-Launcher 'Hashslinger-Run' 'Hashslinger-Run.ps1' '-ConfigPath' 'Hashslinger Running Tool: start a scan (asks for your EDIPI and a reason) and watch it. There are no settings here.' $true $false
   # Shortcuts where people look for programs, so nobody has to browse the locked install folder: the Start menu (all users)
   # and, for the Running tool analysts use, the public desktop. They point straight at the scripts in app\powershell.
@@ -247,7 +247,7 @@ __PAUSE__
     } catch { Result "Start menu shortcut: $Display" 'WARN' $_.Exception.Message }
   }
   New-ProgramShortcut 'Hashslinger Running Tool' 'Hashslinger-Run.ps1' '-ConfigPath' $true $true
-  New-ProgramShortcut 'Hashslinger Admin' 'Hashslinger-Admin.ps1' '-ConfigPath' $false $false
+  New-ProgramShortcut 'Hashslinger Admin' 'Hashslinger-Admin.ps1' '-ConfigPath' $true $false
   New-ProgramShortcut 'Hashslinger Uninstall' 'Uninstall-Hashslinger.ps1' '-Config' $false $false
   # The ANALYST guide for everyone: a copy in ProgramData, which every user can read (the install folder is locked down),
   # with a shortcut in the Start menu and on the public desktop. The administrator SOP stays in app\docs (Admin tool, Run and

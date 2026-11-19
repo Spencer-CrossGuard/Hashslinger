@@ -14,7 +14,7 @@ $srcRoot = Split-Path -Parent $PSScriptRoot
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-  Start-Process powershell.exe -Verb RunAs -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"")
+  Start-Process powershell.exe -Verb RunAs -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', "`"$PSCommandPath`"")
   exit
 }
 . (Join-Path $PSScriptRoot 'HashslingerCommon.ps1')
@@ -260,7 +260,7 @@ $btnLog.Add_Click({
   $l = if ($r) { Get-ChildItem (Join-Path $r 'logs') -Filter 'setup-*.log' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1 }
   if ($l) { Start-Process notepad.exe $l.FullName } else { [void][Windows.Forms.MessageBox]::Show('No setup log yet.') }
 })
-$btnAdmin.Add_Click({ $r = Resolve-Root $txtRoot.Text; Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$(Join-Path $r 'Hashslinger-Admin.ps1')`"") })
+$btnAdmin.Add_Click({ $r = Resolve-Root $txtRoot.Text; Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', "`"$(Join-Path $r 'Hashslinger-Admin.ps1')`"") })
 $btnCheck.Add_Click({
   try {
     $root = Test-Inputs; if (-not $root) { return }
