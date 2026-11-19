@@ -101,9 +101,10 @@ function Save-HsConfig($cfg, [string]$Path) {
   $tmp = "$Path.tmp"
   [IO.File]::WriteAllText($tmp, $json, (New-Object Text.UTF8Encoding($true)))
   $null = Get-Content $tmp -Raw | ConvertFrom-Json
+  # [NullString]::Value, not $null: PowerShell turns a plain $null into an empty string, which is an illegal path
   for ($try = 0; $try -lt 15; $try++) {
     try {
-      if (Test-Path $Path) { [IO.File]::Replace($tmp, $Path, $null) } else { [IO.File]::Move($tmp, $Path) }
+      if (Test-Path $Path) { [IO.File]::Replace($tmp, $Path, [NullString]::Value) } else { [IO.File]::Move($tmp, $Path) }
       return
     } catch [System.IO.IOException] { Start-Sleep -Milliseconds 300 }
   }
