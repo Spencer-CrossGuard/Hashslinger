@@ -145,6 +145,8 @@ if ($RemoveDsInternals) { Remove-Tree "$env:ProgramFiles\WindowsPowerShell\Modul
 if ($RemoveApp) {   # also with -RemoveAll: the Start menu and desktop shortcuts must not be left pointing at nothing
   Remove-Item (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'Hashslinger') -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'Hashslinger Running Tool.lnk') -Force -ErrorAction SilentlyContinue
+  Remove-Item (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'Hashslinger SOP.lnk') -Force -ErrorAction SilentlyContinue
+  Remove-Item (Join-Path $env:ProgramData 'Hashslinger') -Recurse -Force -ErrorAction SilentlyContinue   # the public copy of the SOP
 }
 if ($RemoveApp -and -not $RemoveAll) {
   Remove-Tree "$root\extras"; Remove-Tree "$root\app-backups"

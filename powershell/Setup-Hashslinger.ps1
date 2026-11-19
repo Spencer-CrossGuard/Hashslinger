@@ -249,6 +249,25 @@ __PAUSE__
   New-ProgramShortcut 'Hashslinger Running Tool' 'Hashslinger-Run.ps1' '-ConfigPath' $true $true
   New-ProgramShortcut 'Hashslinger Admin' 'Hashslinger-Admin.ps1' '-ConfigPath' $false $false
   New-ProgramShortcut 'Hashslinger Uninstall' 'Uninstall-Hashslinger.ps1' '-Config' $false $false
+  # The manual (SOP) for everyone: a copy in ProgramData, which every user can read (the install folder is locked down),
+  # with a shortcut in the Start menu and on the public desktop. It is documentation only and holds no settings or secrets.
+  try {
+    $docSrc = Join-Path $Dir.bin 'docs\Hashslinger-SOP.html'
+    if (Test-Path $docSrc) {
+      $pubDir = Join-Path $env:ProgramData 'Hashslinger'
+      New-Item -ItemType Directory -Force $pubDir | Out-Null
+      $pubDoc = Join-Path $pubDir 'Hashslinger-SOP.html'
+      Copy-Item $docSrc $pubDoc -Force
+      $menu = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'Hashslinger'
+      New-Item -ItemType Directory -Force $menu | Out-Null
+      foreach ($place in (Join-Path $menu 'Hashslinger SOP.lnk'), (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'Hashslinger SOP.lnk')) {
+        $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut($place)
+        $lnk.TargetPath = $pubDoc
+        $lnk.Save()
+      }
+      Result 'SOP shortcut for everyone' 'PASS' "$pubDoc (Start menu and public desktop)"
+    } else { Result 'SOP shortcut for everyone' 'WARN' "$docSrc not found" }
+  } catch { Result 'SOP shortcut for everyone' 'WARN' $_.Exception.Message }
   New-Launcher 'Hashslinger-Uninstall' 'Uninstall-Hashslinger.ps1' '-Config' 'Hashslinger uninstall. No switches = remove the scheduled tasks only (files stay). See the SOP for the switches.' $false $true
   if (-not (Test-Path "$($Dir.config)\pattern_rules.json")) { Copy-Item "$srcRoot\config\pattern_rules.json" $Dir.config }
   Get-ChildItem $Dir.root, $srcRoot -Recurse -File -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue
