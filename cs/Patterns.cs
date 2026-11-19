@@ -185,9 +185,15 @@ namespace Hashslinger
             Dictionary<Hash128, string> map = new Dictionary<Hash128, string>();
             if (Json.Str(rules, "keyboard_waterfalls", "True").ToLowerInvariant() == "true")
                 foreach (string wf in Waterfalls())
-                    foreach (string v in CaseVariants(wf))
+                {
+                    // the walk exactly as generated first (1qaz@WSX and !QAZ2wsx are mixed case on purpose), then the
+                    // lower, Capitalized and UPPER forms
+                    List<string> forms = new List<string>(CaseVariants(wf));
+                    if (!forms.Contains(wf)) forms.Add(wf);
+                    foreach (string v in forms)
                         foreach (string s in new[] { "", "1", "!", "123", "12", "@", "#", "$", "." })
                             AddCandidate(map, v + s, "keyboard waterfall");
+                }
             foreach (string walk in Json.StrList(rules, "keyboard_walks"))
                 foreach (string v in CaseVariants(walk))
                     foreach (string s in new[] { "", "1", "!", "123" })
