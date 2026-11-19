@@ -102,6 +102,11 @@ $csc = Join-Path $env:windir 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 Result 'C# compiler (csc.exe)' $(if (Test-Path $csc) { 'PASS' } else { 'WARN' }) $(if (Test-Path $csc) { $csc } else { 'not found; a prebuilt Hashslinger.exe must be in the folder' })
 $csName = (Get-CimInstance Win32_ComputerSystem)
 Result 'Domain joined' $(if ($csName.PartOfDomain) { 'PASS' } else { 'WARN' }) $csName.Domain
+$fipsOn = $false
+try { $fipsOn = ([int](Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\FipsAlgorithmPolicy' -ErrorAction Stop).Enabled) -eq 1 } catch { }
+if (-not $fipsOn) { Result 'FIPS mode' 'PASS' 'not enforced on this server' }
+elseif ([bool](Opt 'engine_fips_exempt' $false)) { Result 'FIPS mode' 'WARN' 'This server enforces FIPS. The engine-only exemption is ON (the scan engine process runs with .NET FIPS enforcement off; the rest of the server is unchanged). Make sure your security officer has approved it.' }
+else { Result 'FIPS mode' 'WARN' 'This server enforces FIPS. The scan will fail with an MD5 / FIPS error unless you tick "Allow the scan on a FIPS server" in the setup wizard (or the Admin tool, Security and accounts), which needs your security officer approval, or run the scan from a host that is not FIPS-enforced.' }
 if (-not $dc) { Result 'Domain controller set' 'WARN' 'live scans need it (Admin tool > Active Directory)' } else { Result 'Domain controller set' 'PASS' $dc }
 if ($ous.Count -eq 0) { Result 'Scan scope set' 'FAIL' 'pick at least one OU to scan (Admin tool > Active Directory)' } else { Result 'Scan scope set' 'PASS' "$($ous.Count) scope(s)" }
 

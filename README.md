@@ -40,7 +40,7 @@ code is unaffected (its MD4 is hand-written), but the DSInternals pull is blocke
 permissions and scheduled tasks are all fine; the Finish live test reports it as `FIPS MODE`.
 Check: `Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\FipsAlgorithmPolicy -Name Enabled` (1 = on).
 Options (each needs your security / ISSO approval):
-1. **Scan-engine-only exemption (built in, OFF by default):** set `"engine_fips_exempt": true` (Admin tool, Security and accounts,
+1. **Scan-engine-only exemption (built in, OFF by default):** set `"engine_fips_exempt": true` (setup wizard checkbox "Allow the scan on a FIPS server", or Admin tool, Security and accounts,
    "Allow the scan under FIPS mode", then Re-apply). Finish makes a private copy of `powershell.exe` named `hs-engine.exe` in the
    admin-only `app\` folder, with an `hs-engine.exe.config` containing `<enforceFIPSPolicy enabled="false"/>`, and the scan runs the
    engine with it. Windows FIPS mode stays on for everything else. It is shown as a WARN in setup, recorded in every audit entry

@@ -71,6 +71,19 @@ $chkOnDemand = New-Object Windows.Forms.CheckBox -Property @{ Text = 'Manual / o
 $txtAnalyst = New-Object Windows.Forms.TextBox -Property @{ Left = 903; Top = 494; Width = 240 }
 [void](Lbl 'Anyone starting a scan by hand must give an EDIPI and a reason / CTO number; that path needs this task. Scheduled scans run on their own.' 885 526 280 64)
 $form.Controls.AddRange(@($chkSched, $cmbCad, $cmbDay, $txtTime, $chkOnDemand, $txtAnalyst))
+# FIPS: the scan reads password data through DSInternals, which needs MD5 that .NET refuses while Windows FIPS mode is on.
+$fipsOn = $false
+try { $fipsOn = ([int](Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\FipsAlgorithmPolicy' -ErrorAction Stop).Enabled) -eq 1 } catch { }
+$chkFips = New-Object Windows.Forms.CheckBox -Property @{ Text = 'Allow the scan on a FIPS server (engine-only exemption)'; Left = 885; Top = 596; Width = 285; Height = 36 }
+$lblFips = Lbl $(if ($fipsOn) { 'FIPS mode is ON on this server. Without this the scan fails with an MD5 / FIPS error. It switches .NET FIPS enforcement off for the scan engine process only and needs your security officer approval.' } else { 'FIPS mode is off on this server. Leave this unticked.' }) 903 634 270 84
+if ($fipsOn) { $lblFips.ForeColor = [Drawing.Color]::DarkOrange }
+$form.Controls.Add($chkFips)
+$script:fipsGuard = $false
+$chkFips.Add_CheckedChanged({
+  if ($script:fipsGuard -or -not $chkFips.Checked) { return }
+  $ans = [Windows.Forms.MessageBox]::Show("You are about to switch .NET FIPS enforcement OFF for the scan engine process.`r`n`r`nWhy: replicating password data from AD uses MD5 and RC4 (part of the AD replication protocol), which .NET blocks while Windows FIPS mode is on.`r`nScope: only the scan engine process (a private copy of PowerShell in the app folder). Windows FIPS mode stays on everywhere else on this server.`r`nCompliance: this is normally a documented finding (STIG APPNET0062) that needs your security officer's approval.`r`n`r`nDo you have that approval and want to continue?", 'Hashslinger setup', 'YesNo', 'Warning')
+  if ($ans -ne 'Yes') { $script:fipsGuard = $true; $chkFips.Checked = $false; $script:fipsGuard = $false }
+})
 function Update-TaskControls {
   foreach ($c in $cmbCad, $txtTime) { $c.Enabled = $chkSched.Checked }
   $cmbDay.Enabled = $chkSched.Checked -and ($cmbCad.SelectedIndex -ne 0)
@@ -140,6 +153,7 @@ function Load-Existing {
     $ci = @{ Daily = 0; Weekly = 1; Monthly = 2 }[[string]$cfg['cadence']]; if ($null -ne $ci) { $cmbCad.SelectedIndex = $ci }
     if ($cmbDay.Items.Contains([string]$cfg['schedule_day'])) { $cmbDay.SelectedItem = [string]$cfg['schedule_day'] }
     $txtTime.Text = [string]$cfg['schedule_time']; $txtAnalyst.Text = [string]$cfg['analyst_group']
+    $script:fipsGuard = $true; $chkFips.Checked = [bool]$cfg['engine_fips_exempt']; $script:fipsGuard = $false
     Update-TaskControls
     $btnFinish.Enabled = $true; $btnAdmin.Enabled = (Test-Path (Join-Path $r 'Hashslinger-Admin.cmd'))
     Log "Loaded the existing settings from $p"
@@ -158,6 +172,7 @@ function Save-Settings([string]$root, [switch]$Temp) {
   $cfg['wordlists']['rockyou'] = $txtRock.Text.Trim()
   $cfg['wordlists']['hibp'] = $txtHibp.Text.Trim()
   $cfg['dsinternals_offline_path'] = $txtDs.Text.Trim()
+  $cfg['engine_fips_exempt'] = [bool]$chkFips.Checked
   $cfg['enable_scheduled'] = [bool]$chkSched.Checked
   $cfg['enable_ondemand'] = [bool]$chkOnDemand.Checked
   $cfg['cadence'] = @('Daily', 'Weekly', 'Monthly')[[Math]::Max(0, $cmbCad.SelectedIndex)]
