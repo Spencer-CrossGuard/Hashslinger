@@ -147,7 +147,9 @@ namespace Hashslinger
                 if (Directory.Exists(dir))
                     foreach (string d in Directory.GetDirectories(dir, "merge-*"))
                         tmpOk &= Wipe.SecureDeleteDir(d);
-                log.End(runId, status, accounts, outPath, wipeOk && tmpOk, error, Progress.Timings());
+                long peakMb = 0;
+                try { peakMb = System.Diagnostics.Process.GetCurrentProcess().PeakWorkingSet64 / (1024 * 1024); } catch (Exception) { }
+                log.End(runId, status, accounts, outPath, wipeOk && tmpOk, error, Progress.Timings(), Progress.SubTimings(), peakMb);
                 wipeOk = wipeOk && tmpOk;
                 Progress.Finish(status, outPath, error);
                 runLock.Dispose();

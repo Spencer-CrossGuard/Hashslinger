@@ -290,9 +290,9 @@ foreach ($t in @(@('HIBP', 'HIBP (NTLM hashes, HASH:count)'), @('rockyou', 'rock
   $tpWl.Tag = $y + 34
 }
 $btnMerge = New-Object Windows.Forms.Button -Property @{ Text = 'Merge new files into the store now'; Left = 12; Top = [int]$tpWl.Tag + 6; Width = 260; Height = 32 }
-$btnMerge.Add_Click({ Start-Process cmd.exe -ArgumentList '/k', "`"`"$exe`" --config `"$ConfigPath`" merge`"" })
+$btnMerge.Add_Click({ Start-Process powershell.exe -ArgumentList @('-NoProfile', '-NoExit', '-Command', "& `"$exe`" --config `"$ConfigPath`" merge") })
 $btnInfo = New-Object Windows.Forms.Button -Property @{ Text = 'Show store size'; Left = 282; Top = [int]$tpWl.Tag + 6; Width = 160; Height = 32 }
-$btnInfo.Add_Click({ Start-Process cmd.exe -ArgumentList '/k', "`"`"$exe`" --config `"$ConfigPath`" info`"" })
+$btnInfo.Add_Click({ Start-Process powershell.exe -ArgumentList @('-NoProfile', '-NoExit', '-Command', "& `"$exe`" --config `"$ConfigPath`" info") })
 $tpWl.Controls.AddRange(@($btnMerge, $btnInfo))
 function Refresh-Wordlists {
   foreach ($t in 'HIBP', 'rockyou', 'custom') {
@@ -323,13 +323,15 @@ Add-Heading $tpRun 'Checks and support'
 $btns2 = @(
   @('Re-run readiness checks', { Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-File', "`"$setupScript`"", '-Config', "`"$ConfigPath`"", '-Phase', 'Check') }),
   @('Create support bundle', { New-SupportBundle }),
-  @('Run self-test (exe)', { Start-Process cmd.exe -ArgumentList '/k', "`"`"$exe`" selftest`"" }),
+  @('Run self-test (exe)', { Start-Process powershell.exe -ArgumentList @('-NoProfile', '-NoExit', '-Command', "& `"$exe`" selftest") }),
+  @('Scan timings (recent runs)', { Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-File', "`"$(Join-Path $root 'app\powershell\Show-ScanTimings.ps1')`"", '-ConfigPath', "`"$ConfigPath`"") }),
   @('Open the SOP', { $p = Join-Path $root 'app\docs\Hashslinger-SOP.html'; if (Test-Path $p) { Start-Process $p } else { Msg "Not found: $p" } })
 )
 $x = 12; $y = [int]$tpRun.Tag
 foreach ($b in $btns2) {
   $bt = New-Object Windows.Forms.Button -Property @{ Text = $b[0]; Left = $x; Top = $y; Width = 200; Height = 32 }
   $bt.Add_Click($b[1]); $tpRun.Controls.Add($bt); $x += 208
+  if ($x -gt 700) { $x = 12; $y += 40 }
 }
 $tpRun.Tag = $y + 44
 Add-Heading $tpRun 'Last scan'
@@ -357,6 +359,16 @@ function Show-LastRun {
       if ($null -ne $ms) { $t += ('  {0,-24} {1,10:N1} s' -f $names[$k], ($ms / 1000.0)) + "`r`n" }
     }
   }
+  if ($end.engine_steps_ms) {
+    $t += "`r`nInside 'Pull accounts from AD':`r`n"
+    foreach ($pair in @(@('scope_search', 'Scope search (LDAP)'), @('property_test', 'Property test (one call)'), @('replication', 'Replication from the DC'))) {
+      $ms = $end.engine_steps_ms.($pair[0])
+      if ($null -ne $ms) { $t += ('  {0,-24} {1,10:N1} s' -f $pair[1], ($ms / 1000.0)) + "`r`n" }
+    }
+  }
+  $s4 = if ($end.timings_ms) { [double]$end.timings_ms.stage4 } else { 0 }
+  if ($s4 -gt 0 -and $end.accounts_processed) { $t += ("`r`nAccounts per second in the AD stage: {0:N0}`r`n" -f ($end.accounts_processed / ($s4 / 1000.0))) }
+  if ($end.peak_working_set_mb) { $t += "Peak memory of the scan program: $($end.peak_working_set_mb) MB`r`n" }
   $txtLast.Text = $t
 }
 

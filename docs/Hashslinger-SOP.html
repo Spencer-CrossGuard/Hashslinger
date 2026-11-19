@@ -449,12 +449,14 @@ Exit codes: 0 ok, 1 usage, 2 failed (also logged)</code></pre>
   <div class="tw"><table>
     <thead><tr><th>File</th><th>Contents</th></tr></thead>
     <tbody>
-      <tr><td class="k">logs\audit.jsonl</td><td>One JSON object per line. <code>start</code>: run_id, time, trigger, run_as, <b>started_by</b> (the Windows account of the person who started it, taken automatically: the console user for manual runs, the owner of the request file for on-demand runs, the service account for scheduled runs), host, requested_by, edipi, reason, scope. <code>trigger</code> is <code>scheduled</code> (unattended, no person), <code>on-demand</code> (request window) or <code>manual</code> (a person ran the exe at a console). <code>end</code>: run_id, time, status, accounts_processed, output, wipe_confirmed, error, timings_ms (stage1 to stage7). <code>rejected</code>: a refused request or a second concurrent scan, with why.</td></tr>
+      <tr><td class="k">logs\audit.jsonl</td><td>One JSON object per line. <code>start</code>: run_id, time, trigger, run_as, <b>started_by</b> (the Windows account of the person who started it, taken automatically: the console user for manual runs, the owner of the request file for on-demand runs, the service account for scheduled runs), host, requested_by, edipi, reason, scope. <code>trigger</code> is <code>scheduled</code> (unattended, no person), <code>on-demand</code> (request window) or <code>manual</code> (a person ran the exe at a console). <code>end</code>: run_id, time, status, accounts_processed, output, wipe_confirmed, error, timings_ms (stage1 to stage7), engine_steps_ms (inside stage 4: scope_search, property_test, replication), peak_working_set_mb (peak memory of the scan program). <code>rejected</code>: a refused request or a second concurrent scan, with why.</td></tr>
       <tr><td class="k">status\status.json</td><td>Live: state (running, success, failed), run_id, stage, message, detail, accounts_received, run_as, requested_by, host, scope, output, error. Rewritten about every 5 seconds while running (heartbeat).</td></tr>
       <tr><td class="k">logs\setup-*.log, SETUP-SUMMARY.txt</td><td>Transcript and summary of each setup run.</td></tr>
       <tr><td class="k">config\hashslinger.json.bak-*</td><td>Previous settings, last 10 kept.</td></tr>
     </tbody>
   </table></div>
+  <h3>Where scan time goes</h3>
+  <p>Admin tool, Run and logs, <b>Scan timings (recent runs)</b> (or <code>powershell -NoProfile -ExecutionPolicy Bypass -File app\powershell\Show-ScanTimings.ps1 -ConfigPath config\hashslinger.json -Last 10</code>) prints one row per recent scan: accounts, total seconds, the seven stages, the three parts inside the AD stage (LDAP scope search, one property test call, replication), accounts per second in the AD stage and the peak memory. The last row is also shown as percentages of the total. Compare rows after each change (scope size, workers, store size, wordlists) to see what actually helped. The Admin tool's "Last scan" box shows the same figures for the newest run.</p>
 </section>
 
 <!-- 11 -->

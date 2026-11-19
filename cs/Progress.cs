@@ -22,6 +22,34 @@ namespace Hashslinger
         static System.Diagnostics.Stopwatch stageClock = new System.Diagnostics.Stopwatch();
         static int curStage;
         static long[] stageMs = new long[Stages + 1];
+        static System.Diagnostics.Stopwatch runClock = new System.Diagnostics.Stopwatch();
+        static Dictionary<string, long> subStart = new Dictionary<string, long>();
+        static Dictionary<string, long> subMs = new Dictionary<string, long>();
+
+        /// <summary>The engine reports its own sub-steps ("step A: ...", "step A done: ..."). Time each one so the audit log
+        /// shows where the big AD stage spends its time (A scope search, B property test, C replication).</summary>
+        public static void Mark(string msg)
+        {
+            if (msg == null || msg.Length < 7 || !msg.StartsWith("step ", StringComparison.Ordinal)) return;
+            string id = msg.Substring(5, 1);
+            bool done = msg.Length >= 11 && msg.Substring(6, 5) == " done";
+            lock (gate)
+            {
+                if (!done) subStart[id] = runClock.ElapsedMilliseconds;
+                else if (subStart.ContainsKey(id)) subMs[id] = runClock.ElapsedMilliseconds - subStart[id];
+            }
+        }
+
+        public static Dictionary<string, object> SubTimings()
+        {
+            lock (gate)
+            {
+                Dictionary<string, object> d = new Dictionary<string, object>();
+                string[][] names = { new[] { "A", "scope_search" }, new[] { "B", "property_test" }, new[] { "C", "replication" } };
+                foreach (string[] n in names) { long v; if (subMs.TryGetValue(n[0], out v)) d[n[1]] = v; }
+                return d;
+            }
+        }
         static List<string> log = new List<string>();
 
         static void AddLog(string s)
@@ -42,6 +70,9 @@ namespace Hashslinger
             {
                 statusPath = path;
                 stageMs = new long[Stages + 1];
+                subStart = new Dictionary<string, long>();
+                subMs = new Dictionary<string, long>();
+                runClock.Restart();
                 curStage = 0;
                 stageClock.Restart();
                 st = new Dictionary<string, object>();
