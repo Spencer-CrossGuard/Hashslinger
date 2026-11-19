@@ -7,7 +7,7 @@
   extras). All settings go into ONE file, <folder>\config\hashslinger.json, which the Admin tool edits later.
   You create the service account (gMSA) by hand first. Install = local install, then the service account checks
   (read-only AD checks, folder permissions, scheduled tasks, live test as the service account).
-  Day-to-day changes are made in the Admin tool (<folder>\Hashslinger-Admin.cmd), not here.
+  Day-to-day changes are made in the Admin tool (<folder>\Hashslinger-Admin.ps1), not here.
 #>
 $ErrorActionPreference = 'Stop'
 $srcRoot = Split-Path -Parent $PSScriptRoot
@@ -155,7 +155,7 @@ function Load-Existing {
     $txtTime.Text = [string]$cfg['schedule_time']; $txtAnalyst.Text = [string]$cfg['analyst_group']
     $script:fipsGuard = $true; $chkFips.Checked = [bool]$cfg['engine_fips_exempt']; $script:fipsGuard = $false
     Update-TaskControls
-    $btnFinish.Enabled = $true; $btnAdmin.Enabled = (Test-Path (Join-Path $r 'Hashslinger-Admin.cmd'))
+    $btnFinish.Enabled = $true; $btnAdmin.Enabled = (Test-Path (Join-Path $r 'Hashslinger-Admin.ps1'))
     Log "Loaded the existing settings from $p"
   } catch { Log ('Could not read the existing settings: ' + $_.Exception.Message) }
 }
@@ -228,9 +228,9 @@ function Show-NextSteps {
   Log ''
   Log '==== SETUP FINISHED. No scan was started from here, so the first scan runs exactly like every later one. ===='
   if ($chkOnDemand.Checked) {
-    Log 'FIRST SCAN: open the Running tool (Hashslinger-Run.cmd in the install folder), enter your EDIPI and the reason / CTO number, click Start scan.'
+    Log 'FIRST SCAN: open the Running tool (the Hashslinger-Run shortcut in the install folder), enter your EDIPI and the reason / CTO number, click Start scan.'
     Log '  Both are written to the audit log, and the scan runs as the service account. Analysts use the same Running tool; it has no settings.'
-    Log '  (The Admin tool, Hashslinger-Admin.cmd, is for administrators only: it changes settings.)'
+    Log '  (The Admin tool, the Hashslinger-Admin shortcut, is for administrators only: it changes settings.)'
     Log 'Watch it: Admin tool > Run and logs > Watch progress.'
   } else {
     Log 'Manual scans are turned off, so nobody can start a scan by hand with an EDIPI and reason. Turn on "On-demand scans" in the Admin tool (Scan options) and click Re-apply.'
@@ -257,7 +257,7 @@ $btnLog.Add_Click({
   $l = if ($r) { Get-ChildItem (Join-Path $r 'logs') -Filter 'setup-*.log' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1 }
   if ($l) { Start-Process notepad.exe $l.FullName } else { [void][Windows.Forms.MessageBox]::Show('No setup log yet.') }
 })
-$btnAdmin.Add_Click({ $r = Resolve-Root $txtRoot.Text; Start-Process (Join-Path $r 'Hashslinger-Admin.cmd') })
+$btnAdmin.Add_Click({ $r = Resolve-Root $txtRoot.Text; Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$(Join-Path $r 'Hashslinger-Admin.ps1')`"") })
 $btnCheck.Add_Click({
   try {
     $root = Test-Inputs; if (-not $root) { return }

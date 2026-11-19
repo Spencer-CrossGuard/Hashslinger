@@ -11,12 +11,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build with the in-box csc.exe (C# 5)
-        shell: cmd
-        run: build.cmd
+        shell: pwsh
+        run: ./Build-Hashslinger.ps1
 
       - name: Self-test
-        shell: cmd
-        run: Hashslinger.exe selftest
+        shell: pwsh
+        run: ./Hashslinger.exe selftest
 
       - name: AD-free smoke test (fake engine)
         shell: pwsh

@@ -5,7 +5,7 @@
   Edits the ONE config file (<root>\config\hashslinger.json) that the scan program reads. Every setting is here,
   with defaults explained. A backup of the previous file is kept on every save. Changes apply to the NEXT scan
   (the schedule is applied to the scheduled task when you say so). This tool never changes Active Directory.
-  Open it from <root>\Hashslinger-Admin.cmd.
+  Open it from <root>\Hashslinger-Admin.ps1 (or its shortcut).
 #>
 param([string]$ConfigPath = (Join-Path $PSScriptRoot '..\..\config\hashslinger.json'))
 $ErrorActionPreference = 'Stop'

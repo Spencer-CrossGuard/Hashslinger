@@ -7,7 +7,7 @@
   scan. Your EDIPI, the reason and your Windows account go into the audit log.
   The window also shows the current or last scan (step, progress, who started it) and opens the newest report.
   It cannot change any setting, and it never touches Active Directory or hashes.
-  Open it from <install folder>\Hashslinger-Run.cmd. Settings are changed in the Admin tool by an administrator.
+  Open it from <install folder>\Hashslinger-Run.lnk (or Hashslinger-Run.ps1). Settings are changed in the Admin tool by an administrator.
 #>
 param([string]$ConfigPath = (Join-Path $PSScriptRoot '..\..\config\hashslinger.json'))
 Add-Type -AssemblyName System.Windows.Forms

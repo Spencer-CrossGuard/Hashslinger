@@ -144,7 +144,7 @@ if ($RemoveLogs) {
 if ($RemoveDsInternals) { Remove-Tree "$env:ProgramFiles\WindowsPowerShell\Modules\DSInternals" }
 if ($RemoveApp -and -not $RemoveAll) {
   Remove-Tree "$root\extras"; Remove-Tree "$root\app-backups"
-  foreach ($f in 'Hashslinger-Admin.cmd', 'Hashslinger-Run.cmd', 'Hashslinger-Uninstall.cmd') { Remove-Item "$root\$f" -Force -ErrorAction SilentlyContinue }
+  foreach ($n in 'Hashslinger-Admin', 'Hashslinger-Run', 'Hashslinger-Uninstall') { foreach ($e in '.ps1', '.lnk', '.cmd') { Remove-Item "$root\$n$e" -Force -ErrorAction SilentlyContinue } }
   Remove-Tree "$root\app"
 }
 if ($RemoveAll) {

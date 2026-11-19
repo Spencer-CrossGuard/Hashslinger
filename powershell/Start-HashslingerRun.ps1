@@ -6,7 +6,7 @@
   not stop it and anyone can watch it with Show-HashslingerProgress.ps1. It runs under the account that
   started the launcher (needs replication rights; a Domain Admin in a dev lab) and ends if that user
   logs off. For runs that must survive logoff or run unattended, use the scheduled tasks created by
-  Setup-Hashslinger.cmd -Phase Finish (service account checks, after you created the gMSA by hand). Setup steps: create folders, copy engine and rules, build the exe
+  Setup-Hashslinger.ps1 -Phase Finish (service account checks, after you created the gMSA by hand). Setup steps: create folders, copy engine and rules, build the exe
   if missing, install DSInternals if missing, unblock files, write config (rewritten every run).
 #>
 Add-Type -AssemblyName System.Windows.Forms

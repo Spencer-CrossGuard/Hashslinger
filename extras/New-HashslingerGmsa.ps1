@@ -115,4 +115,4 @@ if ($GrantReplicationRights) {
 }
 
 Write-Host ''
-Say 'INFO' "Next: give the task 'Log on as a batch job' if it fails to start (local policy or GPO), then tell the server operator to click Finish (or run Setup-Hashslinger.cmd -Phase Finish)."
+Say 'INFO' "Next: give the task 'Log on as a batch job' if it fails to start (local policy or GPO), then tell the server operator to click Finish (or run Setup-Hashslinger.ps1 -Phase Finish)."

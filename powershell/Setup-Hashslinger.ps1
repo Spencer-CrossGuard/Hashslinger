@@ -52,7 +52,7 @@ function Step([string]$m) { Write-Host ''; Write-Host "== $m" -ForegroundColor C
 
 # ---------------------------------------------------------------- settings (ONE file: <root>\config\hashslinger.json)
 if (-not $Config -or -not (Test-Path $Config)) {
-  Write-Host 'No settings file found. Run Setup-Hashslinger.cmd (the wizard) first, or pass -Config <path to hashslinger.json>.' -ForegroundColor Red
+  Write-Host 'No settings file found. Run Setup-Hashslinger.ps1 (the wizard) first, or pass -Config <path to hashslinger.json>.' -ForegroundColor Red
   exit 1
 }
 $Config = (Resolve-Path $Config).Path
@@ -176,27 +176,36 @@ function Do-Local {
     Copy-Item "$srcRoot\powershell\*.ps1" "$($Dir.bin)\powershell" -Force
     Copy-Item "$srcRoot\config\*" "$($Dir.bin)\config" -Force
     Copy-Item "$srcRoot\docs\*" "$($Dir.bin)\docs" -Force -ErrorAction SilentlyContinue
-    Copy-Item "$srcRoot\*.cmd", "$srcRoot\README.md" $Dir.bin -Force -ErrorAction SilentlyContinue
+    Copy-Item "$srcRoot\README.md" $Dir.bin -Force -ErrorAction SilentlyContinue
   }
   Result 'Installed to app' 'PASS' $Dir.bin
-  Set-Content (Join-Path $Dir.root 'Hashslinger-Admin.cmd') @'
-@echo off
-rem Hashslinger Admin: change any setting, run scans, manage wordlists.
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0app\powershell\Hashslinger-Admin.ps1" -ConfigPath "%~dp0config\hashslinger.json"
-'@ -Encoding ASCII
-  Result 'Admin tool shortcut' 'PASS' (Join-Path $Dir.root 'Hashslinger-Admin.cmd')
-  Set-Content (Join-Path $Dir.root 'Hashslinger-Run.cmd') @'
-@echo off
-rem Hashslinger Running Tool: start a scan (asks for your EDIPI and a reason) and watch it. There are no settings here.
-powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0app\powershell\Hashslinger-Run.ps1" -ConfigPath "%~dp0config\hashslinger.json"
-'@ -Encoding ASCII
-  Result 'Running tool shortcut' 'PASS' (Join-Path $Dir.root 'Hashslinger-Run.cmd')
-  Set-Content (Join-Path $Dir.root 'Hashslinger-Uninstall.cmd') @'
-@echo off
-rem Hashslinger uninstall. No switches = remove scheduled tasks only (files stay). See the SOP for the switches.
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0app\powershell\Uninstall-Hashslinger.ps1" -Config "%~dp0config\hashslinger.json" %*
-pause
-'@ -Encoding ASCII
+  # Launchers in the install folder: a small .ps1 for each tool plus a double-click shortcut (.lnk) that runs it with the
+  # execution policy bypassed for that one process. (A .ps1 opens in Notepad when double-clicked; the shortcut does not.)
+  function New-Launcher([string]$Name, [string]$Script, [string]$ParamName, [string]$Note, [bool]$Hidden, [bool]$Pause) {
+    $tpl = @'
+# __NOTE__
+# Start it with the shortcut of the same name, or: powershell -NoProfile -ExecutionPolicy Bypass -File .\__NAME__.ps1
+$here = Split-Path -Parent $PSCommandPath
+& powershell.exe -NoProfile -ExecutionPolicy Bypass __HIDE__-File (Join-Path $here 'app\powershell\__SCRIPT__') __PARAM__ (Join-Path $here 'config\hashslinger.json') @args
+__PAUSE__
+'@
+    $body = $tpl.Replace('__NOTE__', $Note).Replace('__NAME__', $Name).Replace('__SCRIPT__', $Script).Replace('__PARAM__', $ParamName)
+    $body = $body.Replace('__HIDE__', $(if ($Hidden) { '-WindowStyle Hidden ' } else { '' })).Replace('__PAUSE__', $(if ($Pause) { "Read-Host 'Press Enter to close'" } else { '' }))
+    $ps1 = Join-Path $Dir.root "$Name.ps1"
+    [IO.File]::WriteAllText($ps1, $body, (New-Object Text.ASCIIEncoding))
+    try {
+      $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $Dir.root "$Name.lnk"))
+      $lnk.TargetPath = "$env:windir\System32\WindowsPowerShell\v1.0\powershell.exe"
+      $lnk.Arguments = '-NoProfile -ExecutionPolicy Bypass ' + $(if ($Hidden) { '-WindowStyle Hidden ' } else { '' }) + "-File `"$ps1`""
+      $lnk.WorkingDirectory = $Dir.root
+      $lnk.Save()
+    } catch { Result "Shortcut for $Name" 'WARN' "could not create the .lnk shortcut ($($_.Exception.Message)); use the .ps1 directly" }
+    Result "$Name launcher" 'PASS' "$ps1 (and a shortcut of the same name)"
+  }
+  foreach ($old in 'Hashslinger-Admin.cmd', 'Hashslinger-Run.cmd', 'Hashslinger-Uninstall.cmd') { Remove-Item (Join-Path $Dir.root $old) -Force -ErrorAction SilentlyContinue }   # earlier versions
+  New-Launcher 'Hashslinger-Admin' 'Hashslinger-Admin.ps1' '-ConfigPath' 'Hashslinger Admin: change any setting, manage wordlists, run scans. For administrators.' $false $false
+  New-Launcher 'Hashslinger-Run' 'Hashslinger-Run.ps1' '-ConfigPath' 'Hashslinger Running Tool: start a scan (asks for your EDIPI and a reason) and watch it. There are no settings here.' $true $false
+  New-Launcher 'Hashslinger-Uninstall' 'Uninstall-Hashslinger.ps1' '-Config' 'Hashslinger uninstall. No switches = remove the scheduled tasks only (files stay). See the SOP for the switches.' $false $true
   if (-not (Test-Path "$($Dir.config)\pattern_rules.json")) { Copy-Item "$srcRoot\config\pattern_rules.json" $Dir.config }
   Get-ChildItem $Dir.root, $srcRoot -Recurse -File -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue
   Result 'Files unblocked' 'PASS'
@@ -237,7 +246,7 @@ pause
   }
 
   Step 'Settings'
-  Result 'Settings file' 'PASS' "$Config (change any setting in the Admin tool: $($Dir.root)\Hashslinger-Admin.cmd)"
+  Result 'Settings file' 'PASS' "$Config (change any setting in the Admin tool: $($Dir.root)\Hashslinger-Admin.ps1)"
 }
 
 # ---------------------------------------------------------------- verification
@@ -579,7 +588,7 @@ Install folder: $($Dir.root)
   reports:  $($Dir.output)
   logs:     $($Dir.logs)    status: $($Dir.status)
   extras:   not installed here (the gMSA helper scripts stay in the package you installed from)
-Admin tool: $($Dir.root)\Hashslinger-Admin.cmd
+Admin tool: $($Dir.root)\Hashslinger-Admin.ps1 (or the shortcut of the same name)
 Progress:   powershell -File "$($Dir.bin)\powershell\Show-HashslingerProgress.ps1" -ConfigPath "$Config"
 Setup log:  $transcript
 Result:     $fail FAIL, $warn WARN

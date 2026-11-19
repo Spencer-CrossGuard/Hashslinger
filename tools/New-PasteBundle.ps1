@@ -27,7 +27,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $Source 'powershell\Setup-Hashslinge
 }
 
 # ---------------------------------------------------------------- which files
-$include = @('README.md', 'TEST-PLAN.md', '*.cmd', 'cs\*.cs', 'cs\*.csproj', 'config\*.json',
+$include = @('README.md', 'TEST-PLAN.md', '*.ps1', 'cs\*.cs', 'cs\*.csproj', 'config\*.json',
   'docs\*.html', 'docs\*.md', 'powershell\*.ps1', 'extras\*', 'tools\*.ps1')
 $found = New-Object System.Collections.Generic.List[string]
 foreach ($pat in $include) {
@@ -177,10 +177,10 @@ if ($ok) {
   if (-not $VerifyOnly) {
     Write-Host ''
     Write-Host 'NEXT STEPS (in an elevated Command Prompt or PowerShell on this server):'
-    Write-Host ("  1. cd /d `"{0}`"" -f $dest)
-    Write-Host '  2. build.cmd                      compiles Hashslinger.exe with the compiler that ships with Windows'
-    Write-Host '  3. Hashslinger.exe selftest       must end with: N passed, 0 failed'
-    Write-Host '  4. Setup-Hashslinger.cmd          the setup wizard (create the service account by hand first: docs\Hashslinger-SOP.html, section 3)'
+    Write-Host ("  1. cd `"{0}`"" -f $dest)
+    Write-Host '  2. powershell -NoProfile -ExecutionPolicy Bypass -File .\Build-Hashslinger.ps1     compiles Hashslinger.exe with the compiler that ships with Windows'
+    Write-Host '  3. .\Hashslinger.exe selftest       must end with: N passed, 0 failed'
+    Write-Host '  4. powershell -NoProfile -ExecutionPolicy Bypass -File .\Setup-Hashslinger.ps1     the setup wizard (create the service account by hand first: docs\Hashslinger-SOP.html, section 3)'
   }
 }
 else { Write-Host ("RESULT: FAIL. {0} of {1} files do not match. Re-copy the bundle and run it again." -f $failed.Count, $Manifest.Count) -ForegroundColor Red }

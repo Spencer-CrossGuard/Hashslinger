@@ -1,6 +1,6 @@
 # Smoke test without AD (about 5 minutes)
 
-1. `build.cmd`, then `Hashslinger.exe selftest` (expect all PASS).
+1. `Build-Hashslinger.ps1`, then `Hashslinger.exe selftest` (expect all PASS).
 2. Make `C:\HashslingerTest\` with subfolders `config`, `staging\rockyou`, `staging\custom`.
 3. Copy in: `config\pattern_rules.json` -> `C:\HashslingerTest\config\`, `powershell\Fake-Engine.ps1` ->
    `C:\HashslingerTest\`, and `config\test.example.json` -> `C:\HashslingerTest\config\test.json`.

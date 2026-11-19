@@ -66,11 +66,11 @@ is created inside it:
   requests\   analyst request drop box (only if you use an analyst group)
   app-backups\  last 3 copies of app\, taken automatically before an upgrade or reinstall
   extras\     (package folder only, NOT installed on the scan server) optional gMSA helper scripts for a Domain Admin
-  Hashslinger-Admin.cmd, Hashslinger-Uninstall.cmd
-  Hashslinger-Admin.cmd   opens the Admin tool
+  Hashslinger-Admin.ps1, Hashslinger-Uninstall.ps1
+  Hashslinger-Admin.ps1   opens the Admin tool
 ```
 
-**1. Setup wizard** (`Setup-Hashslinger.cmd`, double-click, local administrator is enough): pick the install folder, the
+**1. Setup wizard** (`powershell -NoProfile -ExecutionPolicy Bypass -File .\Setup-Hashslinger.ps1`, local administrator is enough): pick the install folder, the
 domain controller, the service account name, and tick what to scan in a **nested tree that looks like AD** (search keeps the
 parents visible; ticking an OU includes everything underneath). *Check readiness* tells you in plain language what would fail.
 **You create the service account (gMSA) by hand first** (SOP section 4); the wizard does not create it and there is no
@@ -82,10 +82,10 @@ In the wizard you also choose what runs scans: a **scheduled scan** (daily, week
 (every scan started by a person asks for an EDIPI and a reason / CTO number), or both. Setup does not start a scan: run the first one from
 the Admin tool (*Run and logs*, *Start a scan now*), exactly like every later manual scan.
 
-**Running tool** (`<folder>\Hashslinger-Run.cmd`): for analysts. Pick the scope, enter your EDIPI and the reason / CTO number, Start scan; it
+**Running tool** (`<folder>\Hashslinger-Run.ps1`): for analysts. Pick the scope, enter your EDIPI and the reason / CTO number, Start scan; it
 shows the live progress of the current or last scan and opens the newest report. It has no settings, so nothing can be changed by mistake.
 
-**2. Admin tool** (`<folder>\Hashslinger-Admin.cmd`): change **any** setting, with an explanation under each one:
+**2. Admin tool** (`<folder>\Hashslinger-Admin.ps1`): change **any** setting, with an explanation under each one:
 where files live, the domain controller, mode, replication, account types, UAC flags, the nested scope tree, duplicate
 checking, schedule (day, time, how often), retention, timeouts, service account, analyst group, EDIPIs, BitLocker
 requirement. Also: add wordlists, merge them, start and watch scans, open the newest report, last-scan timings, readiness
@@ -96,8 +96,8 @@ kept on every save. Changes apply to the next scan.
 scripts are in `extras\`. The full procedure is the **SOP**: `docs\Hashslinger-SOP.html` (opens in any browser; also reachable
 from the Admin tool, *Run and logs*, *Open the SOP*).
 
-**Upgrade / reinstall / uninstall:** see the SOP. Short version: run the new package's `Setup-Hashslinger.cmd` against the same folder
-(settings and data are kept, the old `app\` is backed up); `Hashslinger-Uninstall.cmd` removes the scheduled tasks (files stay),
+**Upgrade / reinstall / uninstall:** see the SOP. Short version: run the new package's `Setup-Hashslinger.ps1` against the same folder
+(settings and data are kept, the old `app\` is backed up); `Hashslinger-Uninstall.ps1` removes the scheduled tasks (files stay),
 with switches `-RemoveData -RemoveReports -RemoveLogs -RemoveApp -RemoveAll -SecureWipe` to delete things.
 
 **Results file:** column 1 is `sAMAccountName` (the engine falls back to a read-only LDAP lookup if DSInternals returns it
@@ -106,13 +106,13 @@ empty, and the report falls back to the CN, so it is never blank).
 ## Build (no SDK, no install)
 
 ```
-build.cmd            :: uses the csc.exe that ships with Windows (.NET Framework 4.x, C# 5)
+Build-Hashslinger.ps1            :: uses the csc.exe that ships with Windows (.NET Framework 4.x, C# 5)
 Hashslinger.exe selftest
 ```
 
 `selftest` needs no AD. It checks NT/MD4 vectors, store merge and lookup, patterns, the full
 pipeline with a fake account source, audit logging, wipe, and request validation. **Verified: built with
-`build.cmd` on the author's Windows PC, 38/38 checks pass.
+`Build-Hashslinger.ps1` on the author's Windows PC, 38/38 checks pass.
 `cs/Hashslinger.csproj` is an optional SDK-style build if you prefer one.
 
 ## Layout
@@ -144,9 +144,9 @@ Every run writes `status\status.json` (stage, detail, accounts received, who sta
 ~5s). `powershell\Show-HashslingerProgress.ps1` is a read-only live viewer for it, so progress does not
 depend on who started the scan: anyone with read access to the status folder can open it at any time.
 Only one scan runs at a time (a second start is refused and logged). `Start-HashslingerRun.ps1`
-(or `Start-HashslingerRun.cmd`) is the one-window admin/dev launcher: setup, start, then the viewer.
+(or `Start-HashslingerRun.ps1`) is the one-window admin/dev launcher: setup, start, then the viewer.
 It runs under the launching user and ends at logoff. Unattended or logoff-proof runs use the GMSA
-scheduled tasks from `Setup-Hashslinger.cmd -Phase Finish`.
+scheduled tasks from `Setup-Hashslinger.ps1 -Phase Finish`.
 
 ## Table files in `custom\` (hash column + password column)
 

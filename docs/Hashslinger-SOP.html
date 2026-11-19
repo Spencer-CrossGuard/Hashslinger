@@ -204,7 +204,7 @@
   logs\           audit.jsonl, setup-*.log, SETUP-SUMMARY.txt
   status\         status.json (live progress)
   requests\       analyst request drop box (only if an analyst group is used)
-  Hashslinger-Admin.cmd   Hashslinger-Run.cmd   Hashslinger-Uninstall.cmd</code></pre>
+  Hashslinger-Admin.ps1   Hashslinger-Run.ps1   Hashslinger-Uninstall.ps1</code></pre>
   <div class="callout note"><b>Outside the folder</b>Two scheduled tasks (<code>Hashslinger-Scheduled</code>, <code>Hashslinger-OnDemand</code>), the DSInternals module (<code>%ProgramFiles%\WindowsPowerShell\Modules</code>), the RSAT AD tools feature, support bundles you create (Desktop), and the service account in AD.</div>
 </section>
 
@@ -237,11 +237,11 @@ Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
   <h2><span class="num">4</span>Install<a class="anchor" href="#install">#</a></h2>
   <ol class="steps">
     <li>Create the service account (section 3).</li>
-    <li>Copy the package to the scan server and double-click <code>Setup-Hashslinger.cmd</code> (local administrator).</li>
+    <li>Copy the package to the scan server and start the wizard from PowerShell as a local administrator: <code>powershell -NoProfile -ExecutionPolicy Bypass -File .\Setup-Hashslinger.ps1</code>. (There are no .cmd files. A .ps1 opens in Notepad when double-clicked; right-click, Run with PowerShell works only when the execution policy allows it, so the command above is the reliable way. After install, each tool also has a double-click shortcut in the install folder.)</li>
     <li>Pick the install folder, the DC and the service account name. Tick the scope in the tree: ticking an OU includes everything below it, and search keeps parents visible. Optional: rockyou and HIBP files, an offline DSInternals folder.</li>
     <li>Choose how scans run (step 4 in the wizard): a scheduled scan (how often, day, start time), on-demand scans for analysts (optional analyst group), or both.</li>
     <li>Click <b>Check readiness</b> (changes nothing), then <b>Install</b>. Install is the local install followed by the service account checks.</li>
-    <li>Setup does <b>not</b> start a scan. Run the first one like every manual scan: open the <b>Running tool</b> (<code>Hashslinger-Run.cmd</code> in the install folder), enter your EDIPI and a reason or CTO number, and click Start scan. It runs the scan as the service account and shows its progress in the same window.</li>
+    <li>Setup does <b>not</b> start a scan. Run the first one like every manual scan: open the <b>Running tool</b> (<code>Hashslinger-Run.ps1</code> in the install folder), enter your EDIPI and a reason or CTO number, and click Start scan. It runs the scan as the service account and shows its progress in the same window.</li>
   </ol>
   <h3>Hardening the scan server</h3>
   <ul>
@@ -252,7 +252,7 @@ Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
     <li><b>Domain Admin scripts</b> (<code>extras\</code>, <code>diagnostics\</code>) are not installed on the scan server. They stay in the package folder.</li>
   </ul>
   <h3>Setup phases</h3>
-  <p>The wizard runs these; you can run them yourself: <code>Setup-Hashslinger.cmd -Phase Check|Local|Finish|All -Config &lt;folder&gt;\config\hashslinger.json [-WhatIf]</code></p>
+  <p>The wizard runs these; you can run them yourself: <code>Setup-Hashslinger.ps1 -Phase Check|Local|Finish|All -Config &lt;folder&gt;\config\hashslinger.json [-WhatIf]</code></p>
   <div class="tw"><table>
     <thead><tr><th>Phase</th><th>Does</th></tr></thead>
     <tbody>
@@ -306,14 +306,14 @@ Test-ADServiceAccount svc-hashslinger         # must print True</code></pre>
 <!-- 6 -->
 <section id="tools">
   <h2><span class="num">6</span>Functions<a class="anchor" href="#tools">#</a></h2>
-  <h3>Running tool (<code>Hashslinger-Run.cmd</code>), for analysts</h3>
+  <h3>Running tool (<code>Hashslinger-Run.ps1</code>), for analysts</h3>
   <p>A small window with no settings in it, so an analyst cannot change anything by mistake. It has two parts:</p>
   <ul>
     <li><b>Start a scan:</b> pick the scope (only the ones the administrator configured), enter your 10-digit EDIPI and the reason or CTO number (at least 10 characters), and click Start scan. The request goes to the on-demand task, which runs as the service account and logs the EDIPI, the reason and your Windows account.</li>
     <li><b>Current or last scan:</b> live step, progress bar, time, who started it, a short log, and buttons to open the newest report and the reports folder. If a scan is already running, a new request waits and starts when it finishes.</li>
   </ul>
   <p>For people other than administrators to use it, put them in the analyst group (Admin tool, Security and accounts) and re-apply permissions. That gives the group read access to the program, settings, status and reports, and permission to create requests and start the on-demand task, and nothing else. The Admin tool is for administrators only.</p>
-  <h3>Admin tool (<code>Hashslinger-Admin.cmd</code>)</h3>
+  <h3>Admin tool (<code>Hashslinger-Admin.ps1</code>)</h3>
   <p>Edits <code>config\hashslinger.json</code>. A backup is kept on every save and changes apply to the next scan.</p>
   <div class="tw"><table>
     <thead><tr><th>Tab</th><th>Does</th></tr></thead>
@@ -451,7 +451,7 @@ Exit codes: 0 ok, 1 usage, 2 failed (also logged)</code></pre>
   <ol class="steps">
     <li>Wait for any running scan to finish, or stop it. Setup refuses to run during a scan.</li>
     <li>Unzip the new package somewhere else, not inside the install folder. If it has no <code>Hashslinger.exe</code>, or the exe is older than the source in <code>cs\</code>, setup rebuilds it with the in-box compiler (an old build left in the folder is never installed over newer scripts).</li>
-    <li>Run its <code>Setup-Hashslinger.cmd</code>, pick the <b>same install folder</b> (settings load automatically), and click Install.</li>
+    <li>Run its <code>Setup-Hashslinger.ps1</code>, pick the <b>same install folder</b> (settings load automatically), and click Install.</li>
   </ol>
   <div class="two">
     <div class="card"><h3>What it does</h3>Backs up the current <code>app\</code> to <code>app-backups\app-&lt;stamp&gt;</code> (last 3 kept), copies the new exe, scripts, docs and extras, and re-runs verification and Finish (tasks are re-registered).</div>
@@ -477,7 +477,7 @@ Exit codes: 0 ok, 1 usage, 2 failed (also logged)</code></pre>
 <!-- 13 -->
 <section id="uninstall">
   <h2><span class="num">13</span>Uninstall<a class="anchor" href="#uninstall">#</a></h2>
-  <p><code>Hashslinger-Uninstall.cmd</code> in the install folder, or <code>app\powershell\Uninstall-Hashslinger.ps1 -Config &lt;json&gt;</code>. It is local only.</p>
+  <p><code>Hashslinger-Uninstall.ps1</code> in the install folder, or <code>app\powershell\Uninstall-Hashslinger.ps1 -Config &lt;json&gt;</code>. It is local only.</p>
   <div class="tw"><table>
     <thead><tr><th>Switch</th><th>Removes</th></tr></thead>
     <tbody>
@@ -492,8 +492,8 @@ Exit codes: 0 ok, 1 usage, 2 failed (also logged)</code></pre>
       <tr><td class="k">-Force</td><td>No confirmation prompt (otherwise you type YES).</td></tr>
     </tbody>
   </table></div>
-<pre><code>Hashslinger-Uninstall.cmd                           tasks only
-Hashslinger-Uninstall.cmd -RemoveAll -SecureWipe    everything</code></pre>
+<pre><code>Hashslinger-Uninstall.ps1                           tasks only
+Hashslinger-Uninstall.ps1 -RemoveAll -SecureWipe    everything</code></pre>
   <div class="callout warn"><b>AD cleanup is by hand</b>The tool does not touch AD. Afterward, remove the service account and delete its two replication rights from the domain root.</div>
 <pre><code>Remove-ADServiceAccount svc-hashslinger
 # domain root ACL (ADSI Edit): delete the two Replicating Directory Changes entries for that account
@@ -530,7 +530,7 @@ Hashslinger-Uninstall.cmd -RemoveAll -SecureWipe    everything</code></pre>
       <tr><td class="k">Access denied on a wordlist</td><td>The file kept its old permissions. Copy it in (do not move it), or run <code>icacls &lt;folder&gt; /T /reset</code>. Finish also repairs this.</td></tr>
       <tr><td class="k">Step 4 quiet for a long time</td><td>Scope search, then a bulk pull of the whole directory; progress lines show counts. Small scopes switch to per-account on their own.</td></tr>
       <tr><td class="k">Task will not start</td><td>Grant the service account "Log on as a batch job".</td></tr>
-      <tr><td class="k">Scripts blocked or ask to confirm</td><td>Start from <code>Setup-Hashslinger.cmd</code> (it unblocks), or <code>Get-ChildItem &lt;folder&gt; -Recurse | Unblock-File</code>.</td></tr>
+      <tr><td class="k">Scripts blocked or ask to confirm</td><td>Start from <code>Setup-Hashslinger.ps1</code> (it unblocks), or <code>Get-ChildItem &lt;folder&gt; -Recurse | Unblock-File</code>.</td></tr>
       <tr><td class="k">Search base not found</td><td>The Users container is <code>CN=Users</code>, not an OU. Pick it from the tree.</td></tr>
       <tr><td class="k">Setup says a scan is running</td><td>Wait, or <code>Stop-Process -Name Hashslinger</code>.</td></tr>
       <tr><td class="k">Need to send diagnostics</td><td>Admin tool, Run and logs, Create support bundle (settings, logs and versions; no reports or hashes).</td></tr>
