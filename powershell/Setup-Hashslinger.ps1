@@ -249,25 +249,29 @@ __PAUSE__
   New-ProgramShortcut 'Hashslinger Running Tool' 'Hashslinger-Run.ps1' '-ConfigPath' $true $true
   New-ProgramShortcut 'Hashslinger Admin' 'Hashslinger-Admin.ps1' '-ConfigPath' $false $false
   New-ProgramShortcut 'Hashslinger Uninstall' 'Uninstall-Hashslinger.ps1' '-Config' $false $false
-  # The manual (SOP) for everyone: a copy in ProgramData, which every user can read (the install folder is locked down),
-  # with a shortcut in the Start menu and on the public desktop. It is documentation only and holds no settings or secrets.
+  # The ANALYST guide for everyone: a copy in ProgramData, which every user can read (the install folder is locked down),
+  # with a shortcut in the Start menu and on the public desktop. The administrator SOP stays in app\docs (Admin tool, Run and
+  # logs, Open the SOP). Both are documentation only and hold no settings or secrets.
   try {
-    $docSrc = Join-Path $Dir.bin 'docs\Hashslinger-SOP.html'
-    if (Test-Path $docSrc) {
+    $guideSrc = Join-Path $Dir.bin 'docs\Hashslinger-Analyst-Guide.html'
+    $menu = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'Hashslinger'
+    $desk = [Environment]::GetFolderPath('CommonDesktopDirectory')
+    # earlier versions put the administrator SOP on every desktop: take it off
+    Remove-Item (Join-Path $desk 'Hashslinger SOP.lnk'), (Join-Path $menu 'Hashslinger SOP.lnk'), (Join-Path (Join-Path $env:ProgramData 'Hashslinger') 'Hashslinger-SOP.html') -Force -ErrorAction SilentlyContinue
+    if (Test-Path $guideSrc) {
       $pubDir = Join-Path $env:ProgramData 'Hashslinger'
       New-Item -ItemType Directory -Force $pubDir | Out-Null
-      $pubDoc = Join-Path $pubDir 'Hashslinger-SOP.html'
-      Copy-Item $docSrc $pubDoc -Force
-      $menu = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'Hashslinger'
+      $pubGuide = Join-Path $pubDir 'Hashslinger-Analyst-Guide.html'
+      Copy-Item $guideSrc $pubGuide -Force
       New-Item -ItemType Directory -Force $menu | Out-Null
-      foreach ($place in (Join-Path $menu 'Hashslinger SOP.lnk'), (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'Hashslinger SOP.lnk')) {
+      foreach ($place in (Join-Path $menu 'Hashslinger Analyst Guide.lnk'), (Join-Path $desk 'Hashslinger Analyst Guide.lnk')) {
         $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut($place)
-        $lnk.TargetPath = $pubDoc
+        $lnk.TargetPath = $pubGuide
         $lnk.Save()
       }
-      Result 'SOP shortcut for everyone' 'PASS' "$pubDoc (Start menu and public desktop)"
-    } else { Result 'SOP shortcut for everyone' 'WARN' "$docSrc not found" }
-  } catch { Result 'SOP shortcut for everyone' 'WARN' $_.Exception.Message }
+      Result 'Analyst guide for everyone' 'PASS' "$pubGuide (Start menu and public desktop)"
+    } else { Result 'Analyst guide for everyone' 'WARN' "$guideSrc not found" }
+  } catch { Result 'Analyst guide for everyone' 'WARN' $_.Exception.Message }
   New-Launcher 'Hashslinger-Uninstall' 'Uninstall-Hashslinger.ps1' '-Config' 'Hashslinger uninstall. No switches = remove the scheduled tasks only (files stay). See the SOP for the switches.' $false $true
   if (-not (Test-Path "$($Dir.config)\pattern_rules.json")) { Copy-Item "$srcRoot\config\pattern_rules.json" $Dir.config }
   Get-ChildItem $Dir.root, $srcRoot -Recurse -File -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue

@@ -63,7 +63,8 @@ $lblNote.ForeColor = [Drawing.Color]::Firebrick
 $txtLog = New-Object Windows.Forms.TextBox -Property @{ Left = 15; Top = 402; Width = 615; Height = 170; Multiline = $true; ReadOnly = $true; ScrollBars = 'Vertical'; Font = New-Object Drawing.Font('Consolas', 9) }
 $btnReport = New-Object Windows.Forms.Button -Property @{ Text = 'Open newest report'; Left = 15; Top = 586; Width = 170; Height = 32 }
 $btnFolder = New-Object Windows.Forms.Button -Property @{ Text = 'Open reports folder'; Left = 195; Top = 586; Width = 170; Height = 32 }
-$form.Controls.AddRange(@($bar, $txtLog, $btnReport, $btnFolder))
+$btnGuide = New-Object Windows.Forms.Button -Property @{ Text = 'Open the guide'; Left = 375; Top = 586; Width = 150; Height = 32 }
+$form.Controls.AddRange(@($bar, $txtLog, $btnReport, $btnFolder, $btnGuide))
 
 function Test-Ready {
   $ok = ($cmbOu.SelectedItem -and $txtEdipi.Text -match ('^[0-9A-Za-z]{' + $edipiLen + '}$') -and $txtReason.Text.Trim().Length -ge $reasonMin)
@@ -98,6 +99,11 @@ $btnReport.Add_Click({
   } catch { [void][Windows.Forms.MessageBox]::Show('Cannot open the reports: ' + $_.Exception.Message, 'Hashslinger') }
 })
 $btnFolder.Add_Click({ if (Test-Path -LiteralPath $outputPath) { Start-Process explorer.exe -ArgumentList "`"$outputPath`"" } else { [void][Windows.Forms.MessageBox]::Show("Not found: $outputPath", 'Hashslinger') } })
+
+$btnGuide.Add_Click({
+  $g = Join-Path $env:ProgramData 'Hashslinger\Hashslinger-Analyst-Guide.html'
+  if (Test-Path -LiteralPath $g) { Start-Process -FilePath $g } else { [void][Windows.Forms.MessageBox]::Show('The guide has not been installed on this server yet. Ask your administrator.', 'Hashslinger') }
+})
 
 function Parse-Utc([string]$s) { [DateTime]::Parse($s, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind) }
 

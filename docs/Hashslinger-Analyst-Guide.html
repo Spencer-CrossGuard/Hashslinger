@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hashslinger Analyst Guide</title>
+<style>
+  :root {
+    --bg:#ffffff; --panel:#f5f7fb; --panel2:#eef2f9; --fg:#1b2230; --muted:#5d687c; --line:#dbe1ec;
+    --accent:#1f4e9c; --accent-fg:#ffffff; --accent-soft:#e6eefb; --code-bg:#f3f5fa;
+    --note:#e6eefb; --note-line:#b8cdef; --warn:#fff3d6; --warn-line:#ecc979; --bad:#fdeaea; --bad-line:#eba9a9;
+    --ok:#e4f4ea; --ok-line:#a9d8bb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#0f131b; --panel:#161c27; --panel2:#1c2432; --fg:#e5e9f1; --muted:#9aa5b8; --line:#2a3345;
+      --accent:#7fa8ee; --accent-fg:#0f131b; --accent-soft:#1a2740; --code-bg:#151b26;
+      --note:#18263d; --note-line:#2d4a78; --warn:#2b2412; --warn-line:#6b5420; --bad:#2d1717; --bad-line:#6a3030;
+      --ok:#12281b; --ok-line:#2c6a46;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#0f131b; --panel:#161c27; --panel2:#1c2432; --fg:#e5e9f1; --muted:#9aa5b8; --line:#2a3345;
+    --accent:#7fa8ee; --accent-fg:#0f131b; --accent-soft:#1a2740; --code-bg:#151b26;
+    --note:#18263d; --note-line:#2d4a78; --warn:#2b2412; --warn-line:#6b5420; --bad:#2d1717; --bad-line:#6a3030;
+    --ok:#12281b; --ok-line:#2c6a46;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; scroll-padding-top:70px; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.6 "Segoe UI", system-ui, -apple-system, Arial, sans-serif; }
+  a { color:var(--accent); }
+  .bar { position:sticky; top:0; z-index:5; background:var(--panel); border-bottom:1px solid var(--line); }
+  .bar .in { max-width:900px; margin:0 auto; padding:9px 20px; display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center; }
+  .bar b { margin-right:8px; }
+  .bar a { text-decoration:none; font-size:.92rem; padding:3px 9px; border-radius:7px; color:var(--fg); }
+  .bar a:hover { background:var(--panel2); }
+  .bar .sp { margin-left:auto; display:flex; gap:6px; }
+  .btn { border:1px solid var(--line); background:var(--bg); color:var(--fg); border-radius:7px; padding:5px 10px; font:inherit; font-size:.84rem; cursor:pointer; }
+  .btn:hover { background:var(--panel2); }
+  main { max-width:900px; margin:0 auto; padding:0 20px 70px; }
+  h1 { margin:30px 0 6px; font-size:2rem; letter-spacing:-.01em; }
+  .lead { color:var(--muted); font-size:1.05rem; margin:0 0 6px; }
+  section { padding-top:30px; }
+  h2 { margin:0 0 10px; padding-bottom:8px; border-bottom:2px solid var(--line); font-size:1.4rem; }
+  h3 { margin:20px 0 6px; font-size:1.08rem; }
+  p { margin:9px 0; }
+  ul, ol { margin:8px 0; padding-left:24px; } li { margin:4px 0; }
+  code { font-family:Consolas,"Cascadia Mono",Menlo,monospace; font-size:.9em; background:var(--code-bg); border:1px solid var(--line); border-radius:5px; padding:1px 6px; }
+  .card { background:var(--accent-soft); border:1px solid var(--note-line); border-radius:12px; padding:14px 18px; margin:20px 0 4px; }
+  .card h2 { border:0; padding:0; margin:0 0 6px; font-size:1.2rem; }
+  ol.steps { list-style:none; counter-reset:s; padding:0; margin:10px 0 4px; }
+  ol.steps > li { counter-increment:s; position:relative; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 14px 10px 52px; margin:8px 0; }
+  ol.steps > li::before { content:counter(s); position:absolute; left:13px; top:9px; width:28px; height:28px; border-radius:50%; background:var(--accent); color:var(--accent-fg); display:grid; place-items:center; font-weight:700; font-size:.9rem; }
+  .tw { overflow-x:auto; margin:12px 0; border:1px solid var(--line); border-radius:9px; }
+  table { width:100%; border-collapse:collapse; font-size:.94rem; }
+  th, td { padding:8px 12px; text-align:left; vertical-align:top; border-bottom:1px solid var(--line); }
+  th { background:var(--panel2); font-weight:600; white-space:nowrap; }
+  tr:last-child td { border-bottom:0; }
+  td.k { font-weight:600; width:1%; white-space:nowrap; }
+  .callout { border:1px solid var(--line); border-left-width:4px; border-radius:9px; padding:10px 14px; margin:14px 0; }
+  .callout b:first-child { display:block; margin-bottom:1px; }
+  .callout.note { background:var(--note); border-color:var(--note-line); }
+  .callout.warn { background:var(--warn); border-color:var(--warn-line); }
+  .pill { display:inline-block; font-size:.76rem; font-weight:600; padding:1px 9px; border-radius:999px; border:1px solid var(--line); background:var(--panel2); vertical-align:1px; }
+  .pill.high { background:var(--bad); border-color:var(--bad-line); }
+  .pill.med { background:var(--warn); border-color:var(--warn-line); }
+  footer { color:var(--muted); font-size:.88rem; padding:30px 0 0; border-top:1px solid var(--line); margin-top:40px; }
+  @media print { .bar { display:none; } main { padding:0; } section { padding-top:16px; } a { color:inherit; text-decoration:none; } }
+</style>
+</head>
+<body>
+<div class="bar"><div class="in">
+  <b>Hashslinger</b>
+  <a href="#start">Start a scan</a><a href="#watch">Watch it</a><a href="#report">Read the report</a><a href="#problems">Problems</a><a href="#rules">Ground rules</a>
+  <span class="sp"><button id="themeBtn" class="btn" type="button">Light / dark</button><button id="printBtn" class="btn" type="button">Print</button></span>
+</div></div>
+
+<main>
+<h1>Hashslinger Analyst Guide</h1>
+<p class="lead">How to run a password exposure scan and read the results. Everything here is done from the <b>Hashslinger Running Tool</b>. There are no settings to change.</p>
+
+<div class="card">
+  <h2>In four steps</h2>
+  <ol class="steps">
+    <li>Open <b>Hashslinger Running Tool</b> from the desktop (or Start menu, Hashslinger folder).</li>
+    <li>Pick <b>what to scan</b>, enter your <b>EDIPI</b> and the <b>reason or CTO number</b>.</li>
+    <li>Click <b>Start scan</b> and watch the progress in the same window.</li>
+    <li>When it says <b>SUCCESS</b>, click <b>Open newest report</b>.</li>
+  </ol>
+</div>
+
+<section id="about">
+  <h2>What this does</h2>
+  <p>Hashslinger checks the passwords of Active Directory accounts against lists of known breached and weak passwords, and against common patterns such as <code>Summer2026!</code> or keyboard runs like <code>1qaz2wsx</code>. It produces a spreadsheet of the accounts that need attention.</p>
+  <ul>
+    <li><b>It never shows or stores anyone's password.</b> The report lists the account and why it was flagged. It does not contain passwords or hashes.</li>
+    <li><b>It changes nothing in Active Directory.</b> It only reads. Resetting a password or contacting the owner is a separate step that you do under your normal procedure.</li>
+    <li><b>The scan runs on the server,</b> as a protected service account, not as you. Closing the Running Tool does not stop a scan that has started.</li>
+  </ul>
+</section>
+
+<section id="start">
+  <h2>Start a scan</h2>
+  <div class="tw"><table>
+    <thead><tr><th>Field</th><th>What to enter</th></tr></thead>
+    <tbody>
+      <tr><td class="k">What to scan</td><td>Choose from the list. You can only pick the scopes your administrator set up. Each includes everything underneath it.</td></tr>
+      <tr><td class="k">EDIPI</td><td>Your own EDIPI, exactly as issued (letters and digits, no spaces). The box shows how many characters are expected. It is checked, and an invalid or unauthorized EDIPI is refused.</td></tr>
+      <tr><td class="k">Reason or CTO number</td><td>Why you are running this scan, or the CTO / ticket number it belongs to. A few words are enough, but make them mean something to whoever reads the log later.</td></tr>
+    </tbody>
+  </table></div>
+  <p>Click <b>Start scan</b>. The message "Request sent" means the server accepted it.</p>
+  <div class="callout note"><b>Everything you enter is recorded</b>Your EDIPI, the reason, your Windows account and the time are written to a protected audit log for every scan. Use your own EDIPI only and give an honest reason.</div>
+  <p>If someone else's scan is already running, yours is kept and starts as soon as theirs finishes. You do not need to resubmit.</p>
+</section>
+
+<section id="watch">
+  <h2>Watch it run</h2>
+  <p>The lower half of the window shows the current or last scan: the step it is on (1 to 7), a progress bar, how long it has been running, who started it, and a short log.</p>
+  <div class="tw"><table>
+    <thead><tr><th>State</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td class="k">RUNNING</td><td>In progress. Most scans of tens of thousands of accounts take about a minute. A very large directory takes longer. The first scan after a new wordlist is added takes a few extra minutes while the lists are merged.</td></tr>
+      <tr><td class="k">SUCCESS</td><td>Finished. The report is ready.</td></tr>
+      <tr><td class="k">FAILED</td><td>It stopped. The window shows the reason. See <a href="#problems">Problems</a>.</td></tr>
+    </tbody>
+  </table></div>
+  <p>If the window says "No update for over 90 seconds", tell your administrator. The scan may have stopped.</p>
+</section>
+
+<section id="report">
+  <h2>Read the report</h2>
+  <p>Click <b>Open newest report</b> (it opens in Excel or your spreadsheet program), or <b>Open reports folder</b> to see earlier ones. Each row is one account that needs attention. Accounts that are fine do not appear.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Column</th><th>What it tells you</th></tr></thead>
+    <tbody>
+      <tr><td class="k">sAMAccountName</td><td>The account's logon name.</td></tr>
+      <tr><td class="k">OU / Distinguished Name</td><td>Where the account lives in the directory. Use it to find the owner or the team responsible.</td></tr>
+      <tr><td class="k">Account Type</td><td>User, Service (an account with a service name) or Computer.</td></tr>
+      <tr><td class="k">Flag Reason</td><td>Why it was flagged. Several reasons are separated by semicolons.</td></tr>
+      <tr><td class="k">Severity</td><td>High or Medium (below).</td></tr>
+      <tr><td class="k">Scan Run ID / Date</td><td>Which scan produced the row. Quote this when you refer to the finding.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>What the flags mean</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Flag reason</th><th>Severity</th><th>In plain words</th></tr></thead>
+    <tbody>
+      <tr><td>Found in HIBP breach corpus</td><td><span class="pill high">High</span></td><td>The account's password appears in a list of passwords exposed in public breaches.</td></tr>
+      <tr><td>Found in rockyou list</td><td><span class="pill high">High</span></td><td>It is on a well-known list of commonly used passwords.</td></tr>
+      <tr><td>Found in custom/organization term list</td><td><span class="pill high">High</span></td><td>It matches a word or phrase on your organization's own list.</td></tr>
+      <tr><td>No password set</td><td><span class="pill high">High</span></td><td>The account has no password, or is allowed to have none.</td></tr>
+      <tr><td>Reversible encryption enabled</td><td><span class="pill high">High</span></td><td>The account is set so that its password can be recovered from the directory. That is a weaker setting.</td></tr>
+      <tr><td>Matched common-pattern rule</td><td><span class="pill med">Medium</span></td><td>The password follows a predictable pattern (a season and year, a common word with a number, a keyboard run).</td></tr>
+      <tr><td>Duplicate password shared with another account</td><td><span class="pill med">Medium</span></td><td>Several accounts have the same password. This check is only on when your administrator turned it on.</td></tr>
+      <tr><td>LM hash present</td><td><span class="pill med">Medium</span></td><td>The account still stores an old, weak form of its password.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>What to do with the findings</h3>
+  <p>Follow your organization's procedure for exposed or weak credentials. In general that means working the High rows first, getting the password changed for each flagged account, and passing service accounts to the team that owns them, since changing a service account's password can break the system that uses it. Re-run the scan afterwards to confirm the rows are gone.</p>
+  <div class="callout warn"><b>Handle the report as sensitive</b>It lists the accounts with weak or exposed passwords. Keep it in the approved location, share it only with people who need it, and do not email it or copy it to shared drives. Do not try to guess or test any account's password yourself.</div>
+</section>
+
+<section id="problems">
+  <h2>If something goes wrong</h2>
+  <div class="tw"><table>
+    <thead><tr><th>What you see</th><th>What to do</th></tr></thead>
+    <tbody>
+      <tr><td class="k">The Start scan button stays grey</td><td>The EDIPI or the reason is not complete yet. Check the EDIPI has the expected number of characters and the reason has a few words.</td></tr>
+      <tr><td class="k">"Could not send the request"</td><td>The request could not be saved or the scan task could not be started. Check you are in the analyst group, and tell your administrator that manual scans may be turned off.</td></tr>
+      <tr><td class="k">FAILED: EDIPI is not authorized, or the wrong length</td><td>Re-enter your EDIPI. If it is correct and still refused, your administrator may need to add it to the allowed list.</td></tr>
+      <tr><td class="k">FAILED with another message</td><td>Note the message and the Run ID shown, and send both to your administrator.</td></tr>
+      <tr><td class="k">"No scan has run yet"</td><td>Nothing has been scanned on this server so far. Start one.</td></tr>
+      <tr><td class="k">Cannot open a report</td><td>There may be no report yet, or you may not have access to the reports folder. Ask your administrator.</td></tr>
+      <tr><td class="k">The window will not open</td><td>Ask your administrator whether you are in the analyst group and whether the tool has been set up on this server.</td></tr>
+    </tbody>
+  </table></div>
+  <p>Contact: your Hashslinger administrator.</p>
+</section>
+
+<section id="rules">
+  <h2>Ground rules</h2>
+  <ul>
+    <li>Run scans only for work you are authorized to do, with your own EDIPI and a genuine reason or CTO number.</li>
+    <li>Do not run scans back to back "to see what happens". Each one is logged and each one asks the domain controller for a large amount of data.</li>
+    <li>Treat reports as sensitive. They are not to be forwarded, posted or stored outside the approved location.</li>
+    <li>The tool reads only. If you think an account needs to be changed, raise it through your normal process.</li>
+    <li>The full administrator manual (setup, settings, upgrade, uninstall) is separate and is for administrators.</li>
+  </ul>
+</section>
+
+<footer>Hashslinger Analyst Guide, last updated 2026-11-19.</footer>
+</main>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  try { var t = localStorage.getItem('hs-theme'); if (t) root.setAttribute('data-theme', t); } catch (e) {}
+  document.getElementById('themeBtn').addEventListener('click', function () {
+    var cur = root.getAttribute('data-theme');
+    if (!cur) cur = (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+    var next = cur === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('hs-theme', next); } catch (e) {}
+  });
+  document.getElementById('printBtn').addEventListener('click', function () { window.print(); });
+})();
+</script>
+</body>
+</html>

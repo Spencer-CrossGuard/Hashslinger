@@ -82,6 +82,9 @@ In the wizard you also choose what runs scans: a **scheduled scan** (daily, week
 (every scan started by a person asks for an EDIPI and a reason / CTO number), or both. Setup does not start a scan: run the first one from
 the Admin tool (*Run and logs*, *Start a scan now*), exactly like every later manual scan.
 
+**Analyst guide** (`docs\Hashslinger-Analyst-Guide.html`): a short HTML guide for the people running scans. Setup puts a shortcut to it on every
+desktop and in the Start menu; the administrator SOP stays in `docs\`.
+
 **Running tool** (`<folder>\Hashslinger-Run.ps1`): for analysts. Pick the scope, enter your EDIPI and the reason / CTO number, Start scan; it
 shows the live progress of the current or last scan and opens the newest report. It has no settings, so nothing can be changed by mistake.
 
