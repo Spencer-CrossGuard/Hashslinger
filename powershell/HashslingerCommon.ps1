@@ -92,7 +92,9 @@ function Read-HsConfig([string]$Path) {
   $def = Get-HsDefaultConfig (Get-HsRootFromConfigPath $Path)
   if (-not (Test-Path $Path)) { return $def }
   $cfg = ConvertTo-HsHashtable (Get-Content $Path -Raw | ConvertFrom-Json)
-  return (Merge-HsDefaults $cfg $def)
+  $cfg = Merge-HsDefaults $cfg $def
+  if ([int]$cfg['edipi_length'] -eq 12) { $cfg['edipi_length'] = 11 }   # 12 was a short-lived wrong default; an EDIPI is 11 characters
+  return $cfg
 }
 
 function Save-HsConfig($cfg, [string]$Path) {
