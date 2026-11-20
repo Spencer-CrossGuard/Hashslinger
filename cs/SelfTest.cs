@@ -235,7 +235,7 @@ namespace Hashslinger
             Dictionary<Hash128, string> m = Patterns.Build(p, new DateTime(2026, 11, 16));
             foreach (string pw in new[] { "Summer2026", "P@ssw0rd1", "Waterfall123", "qwerty1" })
                 Check("pattern hits " + pw, m.ContainsKey(Ntlm.Hash(pw)));
-            foreach (string wf in new[] { "1qaz2wsx", "1qaz2wsx3edc", "1qaz@WSX", "!QAZ2wsx", "zaq12wsx", "zaq1xsw2", "1q2w3e4r5t", "qazwsxedc", "1QAZ2WSX!", "!QAZ@WSX#EDC", "1qazxsw23edc", "147258369" })
+            foreach (string wf in new[] { "1qaz2wsx", "1qaz2wsx3edc", "1qaz@WSX", "!QAZ2wsx", "zaq12wsx", "zaq1xsw2", "1q2w3e4r5t", "qazwsxedc", "1QAZ2WSX!", "!QAZ@WSX#EDC", "1qazxsw23edc", "147258369", "1qaz2wsx3edc4rfv5tgb6yhn7ujm", "1qaz3edc5tgb", "zse4xdr5cft6", "1qaz2wsx12345", "Zaq12wsx!!", "789123456", "159357" })
                 Check("waterfall hits " + wf, m.ContainsKey(Ntlm.Hash(wf)));
             Check("pattern misses unique", !m.ContainsKey(Ntlm.Hash("Tr0ub4dor&3xyzzy-unique")));
         }
